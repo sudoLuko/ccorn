@@ -53,6 +53,27 @@ import Testing
         #expect(TmuxController.sanitize("") == "session")
     }
 
+    // MARK: Shell single-quoting for send-keys payloads (injection defense)
+
+    @Test func shellQuoteNeutralizesShellExpansion() {
+        // The quoted result is what the pane's interactive shell receives. Single
+        // quotes make command substitution, backticks, and parameter expansion
+        // inert — so a crafted title/uuid cannot execute commands at session start.
+        #expect(TmuxController.shellQuote("plain") == "'plain'")
+        #expect(TmuxController.shellQuote("My Project") == "'My Project'")
+        #expect(TmuxController.shellQuote("$(rm -rf ~)") == "'$(rm -rf ~)'")
+        #expect(TmuxController.shellQuote("a`whoami`b") == "'a`whoami`b'")
+        #expect(TmuxController.shellQuote("$HOME") == "'$HOME'")
+        // A double quote is harmless inside single quotes (no special-casing).
+        #expect(TmuxController.shellQuote("a\"b") == "'a\"b'")
+    }
+
+    @Test func shellQuoteEscapesEmbeddedSingleQuotes() {
+        // A literal single quote is closed, escaped, and reopened: '\''
+        #expect(TmuxController.shellQuote("it's") == "'it'\\''s'")
+        #expect(TmuxController.shellQuote("'") == "''\\'''")
+    }
+
     // MARK: Aggregate-dot severity ordering
 
     @Test func aggregatePicksWorstActiveState() {

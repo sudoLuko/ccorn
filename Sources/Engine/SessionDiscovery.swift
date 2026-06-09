@@ -112,7 +112,14 @@ struct SessionDiscovery {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
         let head = handle.readData(ofLength: 256 * 1024)
-        if let cwd = cwd(inJSONLData: head, allowPartialLastLine: true) { return cwd }
+        // Only drop a partial trailing line when the head was actually truncated
+        // at the 256 KB boundary. A small transcript that fit entirely in the head
+        // keeps its complete final line — otherwise a freshly-created,
+        // newline-less transcript whose only cwd is on the last written line would
+        // be missed here, and the fallback read below returns empty (the whole
+        // file was already consumed), yielding a spurious nil.
+        let headTruncated = head.count >= 256 * 1024
+        if let cwd = cwd(inJSONLData: head, allowPartialLastLine: headTruncated) { return cwd }
 
         // Rare: cwd beyond the first 256 KB. Read the rest.
         let rest = handle.readDataToEndOfFile()

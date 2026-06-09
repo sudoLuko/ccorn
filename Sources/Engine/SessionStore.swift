@@ -27,33 +27,42 @@ final class SessionStore {
 
     // MARK: - Session records
 
-    func loadRecords() -> [SessionRecord] {
-        queue.sync {
-            guard let data = try? Data(contentsOf: sessionsURL) else { return [] }
-            return (try? JSONDecoder().decode([SessionRecord].self, from: data)) ?? []
+    /// Non-locking core reads/writes; callers must already hold `queue`.
+    private func loadRecordsLocked() -> [SessionRecord] {
+        guard let data = try? Data(contentsOf: sessionsURL) else { return [] }
+        return (try? JSONDecoder().decode([SessionRecord].self, from: data)) ?? []
+    }
+
+    private func saveRecordsLocked(_ records: [SessionRecord]) {
+        ensureDir()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? encoder.encode(records) {
+            try? data.write(to: sessionsURL, options: .atomic)
         }
+    }
+
+    func loadRecords() -> [SessionRecord] {
+        queue.sync { loadRecordsLocked() }
     }
 
     func saveRecords(_ records: [SessionRecord]) {
-        queue.sync {
-            ensureDir()
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            if let data = try? encoder.encode(records) {
-                try? data.write(to: sessionsURL, options: .atomic)
-            }
-        }
+        queue.sync { saveRecordsLocked(records) }
     }
 
-    /// Insert or update a record by UUID identity.
+    /// Insert or update a record by UUID identity. The whole read-modify-write
+    /// runs inside ONE critical section so concurrent upserts can't lose an update
+    /// in the gap between separate `loadRecords`/`saveRecords` lock acquisitions.
     func upsert(_ record: SessionRecord) {
-        var records = loadRecords()
-        if let idx = records.firstIndex(where: { $0.uuid == record.uuid }) {
-            records[idx] = record
-        } else {
-            records.append(record)
+        queue.sync {
+            var records = loadRecordsLocked()
+            if let idx = records.firstIndex(where: { $0.uuid == record.uuid }) {
+                records[idx] = record
+            } else {
+                records.append(record)
+            }
+            saveRecordsLocked(records)
         }
-        saveRecords(records)
     }
 
     // MARK: - Settings

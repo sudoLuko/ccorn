@@ -1,0 +1,68 @@
+import Foundation
+import Testing
+
+/// ProcessControl: the claude-match predicate (pure) and the KERN_PROCARGS2
+/// argv/exec-path parser. The parser is the most syscall-fragile engine code and
+/// previously had no coverage; these tests pin its contract by parsing the
+/// running test process — a guaranteed-live pid whose argv we can cross-check.
+@Suite struct ProcessControlTests {
+
+    // MARK: looksLikeClaude — match by argv / exec-path basename, NEVER proc_name
+
+    /// Native install: the binary is version-named, so argv[0] and the exec path
+    /// basename are the version (e.g. `2.1.169`) — we must still match via the
+    /// `/claude/versions/` exec path and the `--rc` argument (RUNTIME_FINDINGS C3).
+    @Test func matchesNativeVersionNamedBinary() {
+        #expect(ProcessControl.looksLikeClaude(
+            execPath: "/Users/x/.local/share/claude/versions/2.1.169",
+            argv: ["2.1.169", "--rc"]))
+    }
+
+    @Test func matchesClaudeArgv0AndExecBasename() {
+        #expect(ProcessControl.looksLikeClaude(execPath: "/usr/local/bin/claude", argv: ["claude", "--rc"]))
+        #expect(ProcessControl.looksLikeClaude(execPath: "/opt/homebrew/bin/claude", argv: ["claude"]))
+    }
+
+    /// Node-wrapped install shape: `node .../cli.js`.
+    @Test func matchesNodeWrappedCliJs() {
+        #expect(ProcessControl.looksLikeClaude(
+            execPath: "/usr/local/bin/node",
+            argv: ["node", "/Users/x/.npm/claude/cli.js", "--rc"]))
+    }
+
+    @Test func matchesBareRcFlag() {
+        // The `--rc` heuristic is intentionally broad; it is safe only because
+        // callers constrain the search to the spawned shell's descendants.
+        #expect(ProcessControl.looksLikeClaude(execPath: "/bin/zsh", argv: ["zsh", "--rc"]))
+    }
+
+    @Test func rejectsUnrelatedProcesses() {
+        #expect(!ProcessControl.looksLikeClaude(execPath: "/bin/zsh", argv: ["zsh", "-l"]))
+        #expect(!ProcessControl.looksLikeClaude(execPath: "/usr/bin/vim", argv: ["vim", "file.txt"]))
+        // An empty argv + unrelated exec path is not claude (and the truncated
+        // proc_name `2.1.169` is deliberately NOT part of the match set).
+        #expect(!ProcessControl.looksLikeClaude(execPath: "/usr/bin/top", argv: []))
+    }
+
+    // MARK: KERN_PROCARGS2 parser
+
+    /// The test process is a guaranteed-live pid: parsing it must yield a
+    /// non-empty exec path and a non-empty argv with a non-empty argv[0]. This
+    /// exercises the full walk (argc, exec_path + alignment padding, single-NUL
+    /// argv terminators) and proves the empty-element fix didn't break normal args.
+    @Test func parsesArgvOfRunningProcess() throws {
+        let info = try #require(ProcessControl.processInfo(pid: getpid()))
+        #expect(!info.execPath.isEmpty)
+        #expect(!info.argv.isEmpty)
+        #expect(!(info.argv.first ?? "").isEmpty)
+    }
+
+    /// A reaped pid has no args to read -> nil (no crash, no garbage).
+    @Test func returnsNilForReapedPid() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try? p.run()
+        p.waitUntilExit()
+        #expect(ProcessControl.processInfo(pid: p.processIdentifier) == nil)
+    }
+}

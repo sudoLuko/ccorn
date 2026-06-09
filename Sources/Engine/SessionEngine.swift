@@ -62,10 +62,13 @@ final class SessionEngine {
             return .failed("could not create tmux window")
         }
         // Title is the only remote handle (no per-session URL exists), so set it
-        // at launch via the name argument.
-        let escapedTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
-        tmux.sendCommand(windowId: windowId, "claude --rc \"\(escapedTitle)\"")
-        return finishStart(windowId: windowId)
+        // at launch. `tmux send-keys` TYPES this string into the pane's
+        // interactive shell, which then evaluates it — so the title must be POSIX
+        // single-quoted. Double-quote escaping is insufficient: inside double
+        // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
+        // title like `$(rm -rf ~)` would execute. Single quotes make it inert.
+        tmux.sendCommand(windowId: windowId, "claude --rc \(TmuxController.shellQuote(title))")
+        return finishStart(windowId: windowId, title: title, path: directory)
     }
 
     /// Resume an existing session by UUID in its project directory.
@@ -76,8 +79,10 @@ final class SessionEngine {
             return .failed("could not create tmux window")
         }
         tmux.setCcornId(windowId: windowId, uuid: uuid)
-        tmux.sendCommand(windowId: windowId, "claude --resume \(uuid) --rc")
-        let result = finishStart(windowId: windowId)
+        // Single-quoted for the same reason as the title in startNewSession: this
+        // command is typed into and evaluated by the pane's interactive shell.
+        tmux.sendCommand(windowId: windowId, "claude --resume \(TmuxController.shellQuote(uuid)) --rc")
+        let result = finishStart(windowId: windowId, title: title ?? uuid, path: directory)
         if case .started = result {
             let record = SessionRecord(uuid: uuid, path: directory, title: title ?? uuid)
             store.upsert(record)
@@ -87,14 +92,18 @@ final class SessionEngine {
 
     /// Poll for the claude child of the window's pane shell (up to 5s) and bind a
     /// LiveSession on success.
-    private func finishStart(windowId: String) -> StartResult {
+    private func finishStart(windowId: String, title: String, path: String) -> StartResult {
         // Poll up to 5s; node installs can be slow to spawn.
         for _ in 0..<25 {
             usleep(200_000) // 200ms
             guard let shellPID = tmux.panePID(windowId: windowId) else { continue }
             if let claudePID = ProcessControl.findClaude(belowShell: shellPID) {
+                // uuid stays "" — it is unknown until Claude lazily writes its
+                // transcript, and is bound later via the @ccorn_id tag during
+                // discovery/reconciliation. Title and path are known now, so keep
+                // them on the live record rather than discarding them.
                 let live = LiveSession(
-                    record: SessionRecord(uuid: "", path: "", title: ""),
+                    record: SessionRecord(uuid: "", path: path, title: title),
                     windowId: windowId,
                     pid: claudePID,
                     state: .running

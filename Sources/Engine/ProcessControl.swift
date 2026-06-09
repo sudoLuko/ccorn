@@ -31,19 +31,28 @@ enum ProcessControl {
         let argc = buffer.withUnsafeBytes { $0.load(as: Int32.self) }
         var i = MemoryLayout<Int32>.size
 
-        func readCString() -> String {
+        // After the exec_path string the kernel inserts a run of NUL padding for
+        // alignment, so skip the whole run there. Within argv, elements are
+        // separated by a single NUL — skipping a run would swallow an empty
+        // argument (e.g. `claude --rc ""`) and shift later reads into the env
+        // block, so advance past exactly one terminator.
+        func readCString(skipPadding: Bool) -> String {
             let start = i
             while i < size && buffer[i] != 0 { i += 1 }
             let s = String(decoding: buffer[start..<i], as: UTF8.self)
-            while i < size && buffer[i] == 0 { i += 1 } // skip NUL + any alignment padding
+            if skipPadding {
+                while i < size && buffer[i] == 0 { i += 1 }
+            } else if i < size && buffer[i] == 0 {
+                i += 1
+            }
             return s
         }
 
-        let execPath = readCString()
+        let execPath = readCString(skipPadding: true)
         var argv: [String] = []
         var n: Int32 = 0
         while n < argc && i < size {
-            argv.append(readCString())
+            argv.append(readCString(skipPadding: false))
             n += 1
         }
         return (execPath, argv)

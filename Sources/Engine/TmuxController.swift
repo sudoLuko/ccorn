@@ -125,6 +125,16 @@ struct TmuxController {
         return trimmed.isEmpty ? "session" : trimmed
     }
 
+    /// POSIX single-quote a value for embedding in a command line that the pane's
+    /// interactive shell evaluates (a `send-keys` payload). Wrapping in single
+    /// quotes makes `$(...)`, backticks, `$VAR`, and every other shell
+    /// metacharacter inert; an embedded single quote is closed, escaped, and
+    /// reopened (`'\''`). Use this for any user/data-controlled value (titles,
+    /// uuids) that flows into `sendCommand`.
+    static func shellQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// A sanitized name unique against the current window names; appends -2, -3 on collision.
     func uniqueWindowName(from raw: String) -> String {
         let base = Self.sanitize(raw)

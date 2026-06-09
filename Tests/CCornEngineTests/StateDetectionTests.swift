@@ -124,4 +124,21 @@ import Testing
         #expect(live.state == .dead)
         #expect(live.remoteControlActive == false)
     }
+
+    /// The case `reconcile` produces for an existing window whose `claude` has
+    /// exited: pid==nil (findClaude found no child) but a live windowId. detect()
+    /// must report Dead from PID/window presence and must NOT read the pane (which
+    /// still shows stale Working/RC markers, RUNTIME_FINDINGS T2). Pre-fix, detect
+    /// skipped the PID branch and re-classified from pane content -> Working.
+    @Test func goneClaudeWithLiveWindowIsDeadNotPaneClassified() {
+        let live = makeLive(pid: nil, windowId: "@1")
+        live.remoteControlActive = true // a stale value the dead path must clear
+        detector.detect(live: live,
+                        tmux: TmuxController(),
+                        transcriptPath: nil,
+                        staleThreshold: 600,
+                        now: t0)
+        #expect(live.state == .dead)
+        #expect(live.remoteControlActive == false)
+    }
 }

@@ -77,6 +77,18 @@ struct StateDetector {
             live.remoteControlActive = false
             return
         }
+        // Dead: a tracked window whose claude pid is gone. This is exactly the
+        // state `reconcile` produces for an existing window whose `claude` has
+        // exited — the pane shell (and thus the tmux window) is still alive, so
+        // there is a windowId, but findClaude returned no pid. Decide it from
+        // PID/window presence, never from the pane: an exited window keeps stale
+        // `Bash(` / `Remote Control active` markers that would otherwise be read
+        // as Working (RUNTIME_FINDINGS T2).
+        if live.pid == nil, live.windowId != nil {
+            live.state = .dead
+            live.remoteControlActive = false
+            return
+        }
         // No window / no pid and never started -> Stopped (caller decides; default).
         guard let windowId = live.windowId else {
             live.state = .stopped
