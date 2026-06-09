@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// Persisted record for one known session. Identity is the Claude session UUID
@@ -26,20 +27,30 @@ struct SessionRecord: Codable, Identifiable, Equatable {
 
 /// Runtime, never-persisted state for a session. Rebuilt on every launch from
 /// tmux windows + process inspection + pane capture.
-final class LiveSession {
+///
+/// Main-actor isolated and observable: this is the store SwiftUI reads from in
+/// milestone 2, and the poll timer / start / terminate / reconcile paths all
+/// mutate it — isolation to the main actor is what makes those writes and the
+/// UI reads race-free. (A bare `actor` was rejected deliberately: every SwiftUI
+/// read would have to await, which in practice forces mirroring onto a
+/// main-actor type anyway.) Detection I/O runs off-main on value snapshots —
+/// see `detectionInput()` / `apply(_:)`.
+@MainActor
+final class LiveSession: ObservableObject {
     let record: SessionRecord
 
-    var windowId: String?
-    var ccornTag: String?
-    var pid: Int32?
-    var state: SessionState
+    @Published var windowId: String?
+    @Published var ccornTag: String?
+    @Published var pid: Int32?
+    @Published var state: SessionState
     /// True when the `Remote Control active` footer or a `bridge-session` record
     /// indicates remote control is live. Drives the row's warning indicator.
-    var remoteControlActive: Bool
+    @Published var remoteControlActive: Bool
 
-    // Stale tracking.
+    // Detection bookkeeping (not UI-facing, so not published).
     var lastPaneHash: String?
     var lastHashChange: Date?
+    var rcCache = BridgeSessionCache()
 
     init(record: SessionRecord,
          windowId: String? = nil,
@@ -53,5 +64,29 @@ final class LiveSession {
         self.pid = pid
         self.state = state
         self.remoteControlActive = remoteControlActive
+    }
+
+    /// The session UUID detection should resolve the transcript by: the tmux
+    /// @ccorn_id tag when bound, else the persisted record's UUID ("" for a
+    /// brand-new session whose transcript hasn't been written yet).
+    var sessionUUID: String { ccornTag ?? record.uuid }
+
+    /// Value snapshot for an off-main detection pass.
+    func detectionInput() -> DetectionInput {
+        DetectionInput(windowId: windowId,
+                       pid: pid,
+                       lastPaneHash: lastPaneHash,
+                       lastHashChange: lastHashChange,
+                       rcCache: rcCache)
+    }
+
+    /// Apply a detection result computed off-main back onto main-actor state.
+    func apply(_ result: DetectionResult) {
+        state = result.state
+        pid = result.pid
+        remoteControlActive = result.remoteControlActive
+        lastPaneHash = result.lastPaneHash
+        lastHashChange = result.lastHashChange
+        rcCache = result.rcCache
     }
 }

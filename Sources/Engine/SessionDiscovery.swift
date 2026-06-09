@@ -12,8 +12,10 @@ import Foundation
 ///   sibling (we only read `*.jsonl`, so it's excluded naturally).
 /// - Transcripts are created lazily, so a brand-new project may have no `cwd` yet.
 /// - Keep only projects whose resolved `cwd` is inside a (symlink-resolved) watch dir.
-struct SessionDiscovery {
-    let fileManager = FileManager.default
+struct SessionDiscovery: Sendable {
+    /// Computed, not stored: FileManager is thread-safe in practice but not
+    /// `Sendable`, and storing it would break this struct's conformance.
+    var fileManager: FileManager { .default }
 
     /// Override for the projects root. Defaults to `~/.claude/projects`; tests
     /// point it at a fixture tree. Nil in normal app use.
@@ -31,38 +33,48 @@ struct SessionDiscovery {
             .appendingPathComponent("projects")
     }
 
-    /// Enumerate all projects (unfiltered). `resolvedPath` is nil where no
-    /// transcript has surfaced a `cwd` yet.
-    func discoverAll() -> [DiscoveredProject] {
+    /// The project subdirectories of the projects root, sorted by encoded name so
+    /// every enumeration-based API below is deterministic (directory listing
+    /// order is not).
+    private func projectDirs() -> [URL] {
         guard let entries = try? fileManager.contentsOfDirectory(
             at: projectsRoot,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
+        return entries
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
 
-        var projects: [DiscoveredProject] = []
-        for dir in entries {
-            var isDir: ObjCBool = false
-            guard fileManager.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
-                continue
-            }
-            let encodedKey = dir.lastPathComponent
+    /// The transcripts directly inside one project dir, newest first. Flat
+    /// `*.jsonl` only — this excludes the sibling `memory/` directory. Reads
+    /// directory metadata only, never file contents.
+    private func sessions(inProjectDir dir: URL) -> [DiscoveredSession] {
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
 
-            // Flat *.jsonl only — this excludes the sibling `memory/` directory.
-            guard let files = try? fileManager.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            ) else { continue }
+        var sessions: [DiscoveredSession] = []
+        for file in files where file.pathExtension == "jsonl" {
+            let uuid = file.deletingPathExtension().lastPathComponent
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? Date.distantPast
+            sessions.append(DiscoveredSession(uuid: uuid, transcriptPath: file.path, modified: modified))
+        }
+        sessions.sort { $0.modified > $1.modified } // newest first
+        return sessions
+    }
 
-            var sessions: [DiscoveredSession] = []
-            for file in files where file.pathExtension == "jsonl" {
-                let uuid = file.deletingPathExtension().lastPathComponent
-                let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
-                    .contentModificationDate ?? Date.distantPast
-                sessions.append(DiscoveredSession(uuid: uuid, transcriptPath: file.path, modified: modified))
-            }
-            sessions.sort { $0.modified > $1.modified } // newest first
+    /// Enumerate all projects (unfiltered). `resolvedPath` is nil where no
+    /// transcript has surfaced a `cwd` yet. Reads transcript heads to resolve
+    /// each project's real path — use `transcriptIndex()` on the refresh hot
+    /// path instead, which never opens a transcript.
+    func discoverAll() -> [DiscoveredProject] {
+        projectDirs().map { dir in
+            let sessions = sessions(inProjectDir: dir)
 
             // Resolve the real path from the newest transcript that carries a cwd.
             var resolved: String?
@@ -73,34 +85,60 @@ struct SessionDiscovery {
                 }
             }
 
-            projects.append(DiscoveredProject(
-                encodedKey: encodedKey,
+            return DiscoveredProject(
+                encodedKey: dir.lastPathComponent,
                 projectDir: dir.path,
                 resolvedPath: resolved,
                 sessions: sessions
-            ))
+            )
         }
-        return projects
+    }
+
+    /// Single-enumeration index for the refresh hot path: session UUID ->
+    /// transcript (path + mtime). Lists directories only — no transcript is
+    /// opened, so a 3s poll cycle costs one readdir per project dir and nothing
+    /// more. On a UUID collision across project dirs (should not happen; UUIDs
+    /// are unique) the most recently modified transcript wins.
+    func transcriptIndex() -> [String: DiscoveredSession] {
+        var index: [String: DiscoveredSession] = [:]
+        for dir in projectDirs() {
+            for session in sessions(inProjectDir: dir) {
+                if let existing = index[session.uuid], existing.modified >= session.modified {
+                    continue
+                }
+                index[session.uuid] = session
+            }
+        }
+        return index
     }
 
     /// Projects whose resolved path is inside one of the watch directories.
     /// Watch dirs are symlink-resolved before comparison. Non-existent watch
-    /// dirs are skipped silently. Deduplicated by resolved path.
+    /// dirs are skipped silently. Deduplicated by resolved path: on a collision
+    /// (the same project under two encoded dirs) the winner is deterministic —
+    /// the project with the most recently modified transcript.
     func discover(watchDirectories: [String]) -> [DiscoveredProject] {
         let watch = watchDirectories
             .map { Self.canonicalize(Self.expandTilde($0)) }
             .filter { fileManager.fileExists(atPath: $0) }
 
-        var seen = Set<String>()
-        var kept: [DiscoveredProject] = []
+        var keptByPath: [String: DiscoveredProject] = [:]
+        var order: [String] = []
         for project in discoverAll() {
             guard let path = project.resolvedPath else { continue }
             guard watch.contains(where: { Self.isPath(path, inside: $0) }) else { continue }
-            if seen.contains(path) { continue } // dedup by absolute path
-            seen.insert(path)
-            kept.append(project)
+            if let existing = keptByPath[path] {
+                let existingModified = existing.mostRecentSession?.modified ?? .distantPast
+                let candidateModified = project.mostRecentSession?.modified ?? .distantPast
+                if candidateModified > existingModified {
+                    keptByPath[path] = project
+                }
+            } else {
+                keptByPath[path] = project
+                order.append(path)
+            }
         }
-        return kept
+        return order.compactMap { keptByPath[$0] }
     }
 
     // MARK: - Transcript parsing
@@ -161,9 +199,23 @@ struct SessionDiscovery {
 
     /// Resolve symlinks so `/tmp/x` and `/private/tmp/x` compare equal (and match
     /// the encoded form, which is built from the resolved path).
+    ///
+    /// Foundation normalizes toward the shorter `/tmp` form, but ONLY when the
+    /// leaf exists on disk (RUNTIME_FINDINGS T3) — so without the manual strip
+    /// below, `/private/tmp/<deleted>` and `/tmp/<deleted>` would canonicalize
+    /// differently and a deleted-or-symlinked project dir would silently stop
+    /// matching its watch directory. The strip makes the mapping unconditional:
+    /// `/private/{tmp,var,etc}` are the firmlink targets of the `/{tmp,var,etc}`
+    /// symlinks on every macOS install, so rewriting is always safe.
     static func canonicalize(_ path: String) -> String {
         let std = (path as NSString).standardizingPath
-        let resolved = URL(fileURLWithPath: std).resolvingSymlinksInPath().path
+        var resolved = URL(fileURLWithPath: std).resolvingSymlinksInPath().path
+        for prefix in ["/private/tmp", "/private/var", "/private/etc"] {
+            if resolved == prefix || resolved.hasPrefix(prefix + "/") {
+                resolved.removeFirst("/private".count)
+                break
+            }
+        }
         return resolved
     }
 

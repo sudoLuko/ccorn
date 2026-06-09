@@ -21,7 +21,10 @@ struct CommandResult {
 /// name and arguments are passed as an array (no shell-quoting hazards).
 ///
 /// See docs/CCORN_SPEC.md, "Process Execution Environment".
-final class CommandRunner {
+///
+/// @unchecked Sendable: the only mutable state is `cachedPath`, and every
+/// access to it is serialized through `queue`.
+final class CommandRunner: @unchecked Sendable {
     static let shared = CommandRunner()
 
     private let queue = DispatchQueue(label: "studio.ccorn.commandrunner.path")

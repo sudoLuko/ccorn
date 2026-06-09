@@ -19,11 +19,21 @@ dev@host ccorn-fix-probe % claude --rc "CCorn Fixture Probe"
 ❯ Run this exact bash command and wait for it to finish: sleep 45; echo done. Do not explain, just run it.                                                                                              
 
 ⏺ Bash(sleep 45; echo done)                                  
-  ⎿  Running…
+  ⎿  Running in the background (↓ to manage)
 
-· Levitating… (9s · ↓ 418 tokens · thought for 4s)
+⏺ The command is running in the background (foreground sleeps are blocked in this environment). I'll report when it finishes.
+
+✻ Churned for 15s · 1 shell still running                                                                                                                                                               
+
+⏺ Background command "Sleep 45 seconds then echo done" completed (exit code 0)                                                                                                                          
+
+  Read 1 file (ctrl+o to expand)    
+
+⏺ The command finished with exit code 0 and printed done.
+
+✻ Cogitated for 7s                                                      
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-❯ 
+❯ is it done yet?                                                                                                                                                                                       
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  esc to interrupt                                                                                                                                                               Remote Control active
+  ? for shortcuts · ← for agents                                                                                                                                                 Remote Control active  

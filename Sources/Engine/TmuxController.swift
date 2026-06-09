@@ -1,7 +1,7 @@
 import Foundation
 
 /// One window inside the `ccorn` tmux session.
-struct TmuxWindow {
+struct TmuxWindow: Sendable {
     let windowId: String   // stable `@N` id — the only reliable target
     let name: String       // display/attach label only, never a key
     let ccornId: String?   // our @ccorn_id tag (the Claude session UUID), if set
@@ -13,7 +13,7 @@ struct TmuxWindow {
 /// spaces/dots that break tmux's `session:window.pane` target syntax).
 ///
 /// See docs/CCORN_SPEC.md "Window Naming and Identity" and CLAUDE.md "tmux commands".
-struct TmuxController {
+struct TmuxController: Sendable {
     static let sessionName = "ccorn"
     private let runner = CommandRunner.shared
 

@@ -15,6 +15,22 @@ import Testing
         #expect(SessionDiscovery.canonicalize("/private/tmp") == "/tmp")
     }
 
+    /// RUNTIME_FINDINGS T3 fix: Foundation strips `/private` only when the leaf
+    /// exists, which made canonicalization existence-dependent — a deleted (or
+    /// never-created) project dir under one spelling silently stopped matching
+    /// the other. Both spellings must converge for missing paths too.
+    @Test func canonicalizeIsExistenceIndependent() {
+        let missing = "ccorn-definitely-missing-\(UUID().uuidString)"
+        #expect(SessionDiscovery.canonicalize("/private/tmp/\(missing)") == "/tmp/\(missing)")
+        #expect(SessionDiscovery.canonicalize("/private/tmp/\(missing)")
+                == SessionDiscovery.canonicalize("/tmp/\(missing)"))
+        #expect(SessionDiscovery.canonicalize("/private/var/\(missing)")
+                == "/var/\(missing)")
+        // Paths not under the /private firmlinks are untouched.
+        #expect(SessionDiscovery.canonicalize("/Users/nobody/\(missing)") == "/Users/nobody/\(missing)")
+        #expect(SessionDiscovery.canonicalize("/privateer/\(missing)") == "/privateer/\(missing)")
+    }
+
     @Test func expandTildeExpandsHome() {
         #expect(SessionDiscovery.expandTilde("~/dev") == NSHomeDirectory() + "/dev")
     }

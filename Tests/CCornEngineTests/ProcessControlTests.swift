@@ -65,4 +65,24 @@ import Testing
         p.waitUntilExit()
         #expect(ProcessControl.processInfo(pid: p.processIdentifier) == nil)
     }
+
+    // MARK: startTime (drives the spawn grace window)
+
+    /// The running test process has a sane start time: non-nil and in the past.
+    @Test func startTimeOfRunningProcessIsSane() throws {
+        let start = try #require(ProcessControl.startTime(pid: getpid()))
+        #expect(start <= Date())
+        #expect(start > Date(timeIntervalSince1970: 0))
+    }
+
+    /// A reaped pid has no start time -> nil (this is what denies grace to a
+    /// vanished shell).
+    @Test func startTimeOfReapedPidIsNil() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try? p.run()
+        p.waitUntilExit()
+        #expect(ProcessControl.startTime(pid: p.processIdentifier) == nil)
+        #expect(ProcessControl.startTime(pid: -1) == nil)
+    }
 }

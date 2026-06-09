@@ -85,4 +85,63 @@ import Testing
         // A non-existent watch dir is skipped silently -> nothing kept.
         #expect(discovery.discover(watchDirectories: ["/Users/nobody/does-not-exist"]).isEmpty)
     }
+
+    /// The refresh hot path's single-enumeration index: uuid -> transcript ref,
+    /// with the right path and a real mtime, without reading any transcript.
+    @Test func transcriptIndexMapsUUIDToTranscript() throws {
+        let index = discovery.transcriptIndex()
+        #expect(index.count == 1)
+        let entry = try #require(index[Fixtures.transcriptUUID])
+        #expect(entry.transcriptPath == Fixtures.transcriptPath)
+        #expect(entry.modified > .distantPast)
+    }
+}
+
+/// Discovery behaviors that need a synthetic projects tree (path-collision
+/// dedup), built under a unique temp root per test.
+@Suite struct DiscoveryDedupTests {
+
+    /// Two encoded project dirs whose transcripts resolve to the SAME cwd: the
+    /// dedup winner must be deterministic — the most recently modified project —
+    /// regardless of directory enumeration order.
+    @Test func dedupPicksMostRecentlyModifiedProject() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("ccorn-dedup-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+
+        let cwd = "/tmp/ccorn-dedup-probe"   // need not exist: canonicalize is existence-independent now
+        func makeProject(encoded: String, uuid: String, modified: Date) throws {
+            let dir = root.appendingPathComponent(encoded)
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = dir.appendingPathComponent("\(uuid).jsonl")
+            let lines = #"{"type":"mode","sessionId":"\#(uuid)"}"# + "\n"
+                + #"{"type":"user","cwd":"\#(cwd)","sessionId":"\#(uuid)"}"#
+            try lines.write(to: file, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.modificationDate: modified], ofItemAtPath: file.path)
+        }
+
+        let older = Date(timeIntervalSince1970: 1_000_000)
+        let newer = Date(timeIntervalSince1970: 2_000_000)
+        try makeProject(encoded: "-tmp-ccorn-dedup-probe",
+                        uuid: "11111111-1111-1111-1111-111111111111", modified: newer)
+        try makeProject(encoded: "-private-tmp-ccorn-dedup-probe",
+                        uuid: "22222222-2222-2222-2222-222222222222", modified: older)
+
+        let discovery = SessionDiscovery(projectsRoot: root)
+        let kept = discovery.discover(watchDirectories: ["/tmp"])
+        #expect(kept.count == 1)
+        #expect(kept.first?.encodedKey == "-tmp-ccorn-dedup-probe") // the newer one
+
+        // Flip recency: the OTHER project must now win — proof the choice is
+        // driven by mtime, not enumeration order.
+        let newest = Date(timeIntervalSince1970: 3_000_000)
+        let otherTranscript = root
+            .appendingPathComponent("-private-tmp-ccorn-dedup-probe")
+            .appendingPathComponent("22222222-2222-2222-2222-222222222222.jsonl")
+        try fm.setAttributes([.modificationDate: newest], ofItemAtPath: otherTranscript.path)
+        let rekept = discovery.discover(watchDirectories: ["/tmp"])
+        #expect(rekept.count == 1)
+        #expect(rekept.first?.encodedKey == "-private-tmp-ccorn-dedup-probe")
+    }
 }

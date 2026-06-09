@@ -1,29 +1,28 @@
 claude --rc "CCorn Fixture Probe"
 dev@host ccorn-fix-probe % claude --rc "CCorn Fixture Probe"
-╭─── Claude Code v2.1.170 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╭─── Claude Code v2.1.169 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                    │ Tips for getting started                                                                                                                        │
 │                 Welcome back Demo!                 │ Ask Claude to create a new app or clone a repository                                                                                            │
 │                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │                       ▐▛███▜▌                      │ What's new                                                                                                                                      │
-│                      ▝▜█████▛▘                     │ Introducing Claude Fable 5: a Mythos-class model that we’ve made safe for general use. Fable’s capabilities exceed those of any model we’ve ev… │
-│                        ▘▘ ▝▝                       │ Fixed sessions not saving transcripts (and not appearing in --resume) when launched from the VS Code integrated terminal or any shell that inh… │
-│      Fable 5 with high effort · Claude Max ·       │ Added `--safe-mode` flag (and `CLAUDE_CODE_SAFE_MODE`) to start Claude Code with all customizations (CLAUDE.md, plugins, skills, hooks, MCP se… │
-│      demo-user@example.test's Organization         │ /release-notes for more                                                                                                                         │
+│                      ▝▜█████▛▘                     │ Added `--safe-mode` flag (and `CLAUDE_CODE_SAFE_MODE`) to start Claude Code with all customizations (CLAUDE.md, plugins, skills, hooks, MCP se… │
+│                        ▘▘ ▝▝                       │ Added `/cd` command to move a session to a new working directory without breaking the prompt cache mid-session                                  │
+│   Opus 4.8 (1M context) with hi… · Claude Max ·    │ Added a `disableBundledSkills` setting and `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS` environment variable to hide bundled skills, workflows, and bu… │
+│   demo-user@example.test's Organization            │ /release-notes for more                                                                                                                         │
 │            /private/tmp/ccorn-fix-probe            │                                                                                                                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
- ▎ Fable 5 is here! Our newest model for complex, long-running work                                                                                                                                     
- ▎ Included in your plan limits until Jun 22, then switch to usage credits to continue.
-   +1 more · /status                                                                                                                                                                                    
-                                                                                                                                                                                                      
-❯ Run this exact bash command and wait for it to finish: sleep 45; echo done. Do not explain, just run it.                                                                                              
 
-⏺ Bash(sleep 45; echo done)                                  
-  ⎿  Running…
+❯ Run this exact bash command and wait for it to finish: sleep 8; echo done. Do not explain, just run it.                                                                                               
 
-· Levitating… (9s · ↓ 418 tokens · thought for 4s)
+⏺ Bash(sleep 8; echo done)                                      
+  ⎿  done         
+                                                 
+⏺ done                                
+
+✻ Brewed for 13s                                                                                                                                                                                        
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-❯ 
+❯ run it again                                                                                                                                                                                          
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  esc to interrupt                                                                                                                                                               Remote Control active
+  ? for shortcuts · ← for agents                                                                                                                                                 Remote Control active

@@ -4,7 +4,11 @@ import Foundation
 /// Persists session records (identity = session UUID) and user settings.
 /// Live state (PID, current state, hashes, window id) is never persisted — it is
 /// re-derived on launch (see docs/CCORN_SPEC.md "Session Record" / "Launch Reconciliation").
-final class SessionStore {
+///
+/// @unchecked Sendable: all reads and writes are serialized through `queue`.
+// TODO(M3): retention policy — session records grow without bound (nothing is
+// ever pruned). Decide an archived/aged-out pruning rule during M3 polish.
+final class SessionStore: @unchecked Sendable {
     static let shared = SessionStore()
 
     private let fileManager = FileManager.default

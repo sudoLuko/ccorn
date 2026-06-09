@@ -113,30 +113,38 @@ enum ProcessControl {
         return errno == EPERM
     }
 
-    /// Map a pid to its current working directory via `lsof` (ps does not expose cwd).
-    static func workingDirectory(of pid: Int32) -> String? {
-        let r = CommandRunner.shared.run("/usr/sbin/lsof", ["-a", "-p", "\(pid)", "-d", "cwd", "-Fn"])
-        // Output lines: p<pid>, fcwd, n<path>
-        for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
-            if line.first == "n" { return String(line.dropFirst()) }
+    /// The process's start time via sysctl(KERN_PROC). Used for the spawn grace
+    /// window: a tmux pane shell younger than the grace period with no `claude`
+    /// child yet is "still spawning", not Dead. nil if the process is gone.
+    static func startTime(pid: Int32) -> Date? {
+        guard pid > 0 else { return nil }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        let rc = withUnsafeMutablePointer(to: &info) { ptr in
+            sysctl(&mib, UInt32(mib.count), ptr, &size, nil, 0)
         }
-        // Fallback path for lsof in /usr/bin on some setups.
-        let r2 = CommandRunner.shared.run("lsof", ["-a", "-p", "\(pid)", "-d", "cwd", "-Fn"])
-        for line in r2.stdout.split(whereSeparator: { $0 == "\n" }) {
-            if line.first == "n" { return String(line.dropFirst()) }
+        // A gone pid "succeeds" with zero bytes returned, so check size and echo
+        // the pid back from the struct before trusting it.
+        guard rc == 0, size >= MemoryLayout<kinfo_proc>.stride, info.kp_proc.p_pid == pid else {
+            return nil
         }
-        return nil
+        let tv = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: TimeInterval(tv.tv_sec) + TimeInterval(tv.tv_usec) / 1_000_000)
     }
 
     /// Canonical termination: SIGTERM, wait up to 5s, SIGKILL if still alive.
     /// Caller is responsible for killing the tmux window first (see SessionEngine).
-    /// MUST be called off the main thread (it can block up to 5 seconds).
-    static func terminate(pid: Int32) {
+    /// Suspends between liveness checks, so it is safe to await from anywhere.
+    // TODO(M3): PID-reuse race — between an isAlive() check and the kill() the
+    // pid could in principle be recycled by an unrelated process (low-probability
+    // TOCTOU). Revisit with a start-time identity check when polishing.
+    static func terminate(pid: Int32) async {
         guard isAlive(pid) else { return }
         kill(pid, SIGTERM)
         for _ in 0..<50 {            // 50 * 100ms = 5s
             if !isAlive(pid) { return }
-            usleep(100_000)
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
         if isAlive(pid) { kill(pid, SIGKILL) }
     }
