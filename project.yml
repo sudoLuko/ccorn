@@ -1,0 +1,45 @@
+name: CCorn
+options:
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"            # match the installed Xcode; bump if needed
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"         # ad-hoc ("Sign to Run Locally"); no team required
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO     # not needed locally; notarization is out of scope
+targets:
+  CCorn:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    # No CODE_SIGN_ENTITLEMENTS and no App Sandbox capability on purpose.
+    # App Sandbox OFF is required so the app can spawn tmux/claude/ps/lsof,
+    # watch arbitrary directories with FSEvents, and send AppleEvents to Terminal.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: studio.ccorn.app   # CHANGE to your preferred stable id
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: CCorn
+        LSMinimumSystemVersion: "13.0"
+        # NSAppleEventsUsageDescription is the TCC string shown the first time the
+        # app automates Terminal. Keep it even in the shell.
+        NSAppleEventsUsageDescription: "CCorn opens your Claude Code sessions in Terminal."
+        # Deliberately NO LSUIElement. The app starts as .accessory at runtime
+        # (see the build spec's activation-policy decision), which keeps the dynamic
+        # .accessory <-> .regular switch working. A brief Dock-icon flash at launch
+        # is expected and acceptable.
+schemes:
+  CCorn:
+    build:
+      targets:
+        CCorn: all
+    run:
+      config: Debug
