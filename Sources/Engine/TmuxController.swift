@@ -6,6 +6,9 @@ struct TmuxWindow: Sendable {
     let name: String       // display/attach label only, never a key
     let ccornId: String?   // our @ccorn_id tag (the Claude session UUID), if set
     let panePID: Int32?    // the pane's shell pid
+    /// The pane's working directory — the project path fallback for windows
+    /// with no persisted record (a previous run's startNewSession windows).
+    let panePath: String?
 }
 
 /// All tmux orchestration. Every programmatic command targets the stable window
@@ -89,20 +92,23 @@ struct TmuxController: Sendable {
 
     // MARK: Enumeration / reconciliation
 
-    /// All windows in the `ccorn` session, with id, name, @ccorn_id tag, and pane pid.
+    /// All windows in the `ccorn` session, with id, name, @ccorn_id tag, pane
+    /// pid, and pane working directory.
     func listWindows() -> [TmuxWindow] {
         guard hasSession() else { return [] }
         // Tab-separated so names containing spaces don't break the split.
-        let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}"
+        let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}\t#{pane_current_path}"
         let r = runner.run("tmux", ["list-windows", "-t", Self.sessionName, "-F", fmt])
         guard r.ok else { return [] }
         var windows: [TmuxWindow] = []
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
             let cols = line.components(separatedBy: "\t")
-            guard cols.count >= 4 else { continue }
+            guard cols.count >= 5 else { continue }
             let tag = cols[2].isEmpty ? nil : cols[2]
             let pid = Int32(cols[3].trimmingCharacters(in: .whitespaces))
-            windows.append(TmuxWindow(windowId: cols[0], name: cols[1], ccornId: tag, panePID: pid))
+            let path = cols[4].isEmpty ? nil : cols[4]
+            windows.append(TmuxWindow(windowId: cols[0], name: cols[1], ccornId: tag,
+                                      panePID: pid, panePath: path))
         }
         return windows
     }

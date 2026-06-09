@@ -287,8 +287,13 @@ final class SessionEngine: ObservableObject {
             let index = discovery.transcriptIndex()
             return tmux.listWindows().map { window in
                 let uuid = window.ccornId ?? ""
-                let record = persisted.first(where: { $0.uuid == uuid })
-                    ?? SessionRecord(uuid: uuid, path: "", title: window.name)
+                // No persisted record (a previous run's startNewSession window,
+                // whose uuid was never bound): fall back to the pane's working
+                // directory so the row shows its project path and discovery can
+                // match the window — otherwise the same session would surface
+                // again as an unmanaged duplicate.
+                let record = persisted.first(where: { $0.uuid == uuid && !uuid.isEmpty })
+                    ?? SessionRecord(uuid: uuid, path: window.panePath ?? "", title: window.name)
                 // Fresh-launch input: no prior pid or pane hash is trusted;
                 // detect re-derives the pid from the pane shell itself (and the
                 // spawn grace window keeps a still-spawning window out of Dead).
