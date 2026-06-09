@@ -36,10 +36,39 @@ targets:
         # (see the build spec's activation-policy decision), which keeps the dynamic
         # .accessory <-> .regular switch working. A brief Dock-icon flash at launch
         # is expected and acceptable.
+
+  # Pure-logic unit tests (Swift Testing). A hostless logic-test bundle: it does
+  # NOT host the app, so running it never sets up a status item or needs a window
+  # server. The engine's pure-logic sources are compiled directly into the test
+  # bundle; captured-frame and transcript fixtures are read at runtime via
+  # #filePath, so they need no resource plumbing.
+  CCornEngineTests:
+    type: bundle.unit-test
+    platform: macOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: studio.ccorn.app.enginetests
+        GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - path: Tests/CCornEngineTests
+        excludes:
+          - "Fixtures/**"   # read at runtime via #filePath, never compiled/bundled
+      - path: Sources/Engine/StateDetector.swift
+      - path: Sources/Engine/SessionDiscovery.swift
+      - path: Sources/Engine/ProcessControl.swift
+      - path: Sources/Engine/TmuxController.swift
+      - path: Sources/Engine/CommandRunner.swift
+      - path: Sources/Models/SessionState.swift
+      - path: Sources/Models/SessionRecord.swift
+      - path: Sources/Models/Discovery.swift
 schemes:
   CCorn:
     build:
       targets:
         CCorn: all
+        CCornEngineTests: [test]
+    test:
+      targets:
+        - CCornEngineTests
     run:
       config: Debug

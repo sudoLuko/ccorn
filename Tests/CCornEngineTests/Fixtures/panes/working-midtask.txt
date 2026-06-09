@@ -1,0 +1,28 @@
+claude --rc "CCorn Fixture Probe"
+dev@host ccorn-fix-probe % claude --rc "CCorn Fixture Probe"
+╭─── Claude Code v2.1.169 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                                                                                                        │
+│                 Welcome back Demo!                 │ Ask Claude to create a new app or clone a repository                                                                                            │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                                                                      │
+│                      ▝▜█████▛▘                     │ Added `--safe-mode` flag (and `CLAUDE_CODE_SAFE_MODE`) to start Claude Code with all customizations (CLAUDE.md, plugins, skills, hooks, MCP se… │
+│                        ▘▘ ▝▝                       │ Added `/cd` command to move a session to a new working directory without breaking the prompt cache mid-session                                  │
+│   Opus 4.8 (1M context) with hi… · Claude Max ·    │ Added a `disableBundledSkills` setting and `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS` environment variable to hide bundled skills, workflows, and bu… │
+│   demo-user@example.test's Organization            │ /release-notes for more                                                                                                                         │
+│            /private/tmp/ccorn-fix-probe            │                                                                                                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Run this exact bash command and wait for it to finish: sleep 8; echo done. Do not explain, just run it.                                                                                               
+
+⏺ Bash(sleep 8; echo done)                                      
+  ⎿  done         
+                                                 
+⏺ done                                
+
+✻ Brewed for 13s                                                                                                                                                                                        
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ run it again                                                                                                                                                                                          
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts · ← for agents                                                                                                                                                 Remote Control active

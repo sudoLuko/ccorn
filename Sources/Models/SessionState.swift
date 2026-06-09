@@ -10,3 +10,29 @@ enum SessionState: String, Codable {
     case stopped    // manually killed by the user (set by CCorn, not detected)
     case unmanaged  // discovered but not imported into CCorn
 }
+
+extension SessionState {
+    /// Severity rank for the menu-bar aggregate dot (higher = worse), per
+    /// docs/CCORN_SPEC.md section 5.2: dead > waiting > stale > working > running.
+    /// Waiting outranks Stale because a waiting session is blocked on the user.
+    /// `stopped` and `unmanaged` carry no active color and rank `nil`.
+    var aggregateSeverity: Int? {
+        switch self {
+        case .dead:      return 5
+        case .waiting:   return 4
+        case .stale:     return 3
+        case .working:   return 2
+        case .running:   return 1
+        case .stopped, .unmanaged: return nil
+        }
+    }
+
+    /// The worst (highest-severity) active state across sessions, or `nil` when no
+    /// session has an active color (all stopped/unmanaged or the list is empty) —
+    /// the caller then shows the empty/outline dot.
+    static func aggregate(_ states: [SessionState]) -> SessionState? {
+        states
+            .filter { $0.aggregateSeverity != nil }
+            .max { ($0.aggregateSeverity ?? 0) < ($1.aggregateSeverity ?? 0) }
+    }
+}

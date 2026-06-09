@@ -15,9 +15,18 @@ import Foundation
 struct SessionDiscovery {
     let fileManager = FileManager.default
 
-    /// `~/.claude/projects`
+    /// Override for the projects root. Defaults to `~/.claude/projects`; tests
+    /// point it at a fixture tree. Nil in normal app use.
+    private let projectsRootOverride: URL?
+
+    init(projectsRoot: URL? = nil) {
+        self.projectsRootOverride = projectsRoot
+    }
+
+    /// `~/.claude/projects` (or the test override).
     var projectsRoot: URL {
-        URL(fileURLWithPath: NSHomeDirectory())
+        if let projectsRootOverride { return projectsRootOverride }
+        return URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".claude")
             .appendingPathComponent("projects")
     }

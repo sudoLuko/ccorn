@@ -85,7 +85,21 @@ struct StateDetector {
 
         let pane = tmux.capturePane(windowId: windowId)
         live.remoteControlActive = remoteControlActive(pane: pane, transcriptPath: transcriptPath)
+        live.state = classifyPane(pane: pane, live: live, staleThreshold: staleThreshold, now: now)
+    }
 
+    /// Pure classification of a windowed, alive session from its captured pane.
+    /// Mutates only `live`'s stale-hash tracking; performs no process or tmux I/O,
+    /// so it is driven directly by captured-frame fixtures in tests.
+    ///
+    /// Precedence: Working > Waiting > (Stale | Running). Dead and Stopped are
+    /// decided earlier in `detect` from PID liveness / window presence, never from
+    /// pane content — a pane can still show stale Working/Running markers after the
+    /// `claude` process has exited.
+    func classifyPane(pane: String,
+                      live: LiveSession,
+                      staleThreshold: TimeInterval,
+                      now: Date) -> SessionState {
         // Stale hash bookkeeping (computed for all states; only promotes Running).
         let hash = Self.sha256(pane)
         if hash != live.lastPaneHash {
@@ -93,21 +107,11 @@ struct StateDetector {
             live.lastHashChange = now
         }
 
-        if isWorking(pane: pane) {
-            live.state = .working
-            return
-        }
-        if isWaiting(pane: pane) {
-            live.state = .waiting
-            return
-        }
+        if isWorking(pane: pane) { return .working }
+        if isWaiting(pane: pane) { return .waiting }
 
         // Idle: Running, promoted to Stale if the pane hasn't changed past threshold.
         let lastChange = live.lastHashChange ?? now
-        if now.timeIntervalSince(lastChange) >= staleThreshold {
-            live.state = .stale
-        } else {
-            live.state = .running
-        }
+        return now.timeIntervalSince(lastChange) >= staleThreshold ? .stale : .running
     }
 }
