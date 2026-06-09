@@ -6,6 +6,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popover = NSPopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // TEMPORARY milestone-1 verification hook. Inert unless CCORN_DEBUG is set,
+        // so the normal shell launch (`open CCorn.app`) is completely untouched.
+        // Run with: CCORN_DEBUG=1 ./build/Build/Products/Debug/CCorn.app/Contents/MacOS/CCorn
+        // REMOVE after milestone 1 is verified.
+        if ProcessInfo.processInfo.environment["CCORN_DEBUG"] != nil {
+            NSApp.setActivationPolicy(.accessory)
+            DispatchQueue.global(qos: .userInitiated).async {
+                EngineDebug.run() // calls exit(0) when finished
+            }
+            return // skip status-item / popover setup in debug mode
+        }
+
         // Start as an accessory (menu-bar) app. The real app will switch to
         // .regular when it opens a window, then back. See the build spec.
         NSApp.setActivationPolicy(.accessory)
