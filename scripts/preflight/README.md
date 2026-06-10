@@ -1,12 +1,29 @@
-# Preflight contract test
+# Preflight test suite
 
-Answers one question before a release: **does the installed Claude Code CLI
-still render the pane text CCorn's state detection is built on?** Every
-detection contract (docs/RUNTIME_FINDINGS.md C/T/G series) is pinned to
-specific CLI renders; this harness re-verifies them against whatever `claude`
-is installed right now.
+Pre-release verification that automated agents can run end to end. Findings
+land in docs/RUNTIME_FINDINGS.md (P-series). Run everything before a release:
 
-## Run it
+```sh
+scripts/preflight/run.sh                  # CLI pane-contract test (below)
+scripts/preflight/e2e-auth.sh             # section-8 auth pipeline in the real app
+scripts/preflight/e2e-chaos.sh            # tmux failure modes against the real app
+scripts/preflight/e2e-node.sh             # npm-installed claude lifecycle
+scripts/preflight/release-gatecheck.sh    # Release artifact vs Gatekeeper + workaround
+```
+
+The e2e scripts run a **hermetic debug app instance**: its own tmux server
+(`CCORN_DEBUG_TMUX_SOCKET`), session name, support dir, and debug channel
+(`CCORN_DEBUG_CHANNEL_DIR`) — they share nothing with the user's default
+tmux server or a normally-running CCorn, which is the only reason the chaos
+suite may run `kill-server`. They need a Debug build at
+`build/Build/Products/Debug/CCorn.app`; gatecheck builds Release itself.
+
+## The contract test (run.sh)
+
+Answers one question: **does the installed Claude Code CLI still render the
+pane text CCorn's state detection is built on?** Every detection contract
+(docs/RUNTIME_FINDINGS.md C/T/G/P series) is pinned to specific CLI renders;
+this harness re-verifies them against whatever `claude` is installed right now.
 
 ```sh
 scripts/preflight/run.sh                  # full: build + fixtures + live capture + assert
