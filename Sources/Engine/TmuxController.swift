@@ -9,6 +9,11 @@ struct TmuxWindow: Sendable {
     /// The pane's working directory — the project path fallback for windows
     /// with no persisted record (a previous run's startNewSession windows).
     let panePath: String?
+    /// True when the window carries the @ccorn_managed marker set at creation.
+    /// Durable "CCorn created this for a claude session" signal — unlike pane
+    /// content, it survives the claude text scrolling away or a `clear`, so
+    /// reconcile never drops a dead session for lack of visible evidence.
+    let managed: Bool
 }
 
 /// All tmux orchestration. Every programmatic command targets the stable window
@@ -65,6 +70,9 @@ struct TmuxController: Sendable {
         let id = r.trimmedOut
         guard !id.isEmpty else { return nil }
         disableRenaming(windowId: id)
+        // Durable marker: this window exists for a claude session, even if the
+        // claude text later scrolls out of the visible pane frame.
+        runner.run("tmux", ["set-option", "-w", "-t", id, "@ccorn_managed", "1"])
         return id
     }
 
@@ -127,18 +135,19 @@ struct TmuxController: Sendable {
     func listWindows() -> [TmuxWindow] {
         guard hasSession() else { return [] }
         // Tab-separated so names containing spaces don't break the split.
-        let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}\t#{pane_current_path}"
+        let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}\t#{pane_current_path}\t#{@ccorn_managed}"
         let r = runner.run("tmux", ["list-windows", "-t", Self.sessionName, "-F", fmt])
         guard r.ok else { return [] }
         var windows: [TmuxWindow] = []
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
             let cols = line.components(separatedBy: "\t")
-            guard cols.count >= 5 else { continue }
+            guard cols.count >= 6 else { continue }
             let tag = cols[2].isEmpty ? nil : cols[2]
             let pid = Int32(cols[3].trimmingCharacters(in: .whitespaces))
             let path = cols[4].isEmpty ? nil : cols[4]
             windows.append(TmuxWindow(windowId: cols[0], name: cols[1], ccornId: tag,
-                                      panePID: pid, panePath: path))
+                                      panePID: pid, panePath: path,
+                                      managed: cols[5] == "1"))
         }
         return windows
     }

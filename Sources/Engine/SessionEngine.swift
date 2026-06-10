@@ -66,19 +66,30 @@ final class SessionEngine: ObservableObject {
     /// project folder name — the convention for CCorn-started sessions: it is
     /// passed as a REAL session title via `--rc "<title>"`, so it syncs to
     /// claude.ai/mobile and disambiguates two sessions in the same folder
-    /// (M3's new-session UI may override it). The session UUID is not known
-    /// until Claude lazily writes its transcript, so the @ccorn_id tag is bound
-    /// later (during discovery/reconciliation). Returns the window id and the
-    /// captured claude PID.
+    /// (M3's new-session UI may override it). The session UUID is bound right
+    /// here via the claude child's registry file and the record is persisted
+    /// immediately: the `--rc` title exists nowhere locally (RUNTIME_FINDINGS
+    /// F2), so a record that survives relaunch is the only thing keeping the
+    /// displayed name in sync with what claude.ai/mobile shows. Returns the
+    /// window id and the captured claude PID.
     func startNewSession(directory: String, title: String? = nil) async -> StartResult {
         let title = title ?? URL(fileURLWithPath: directory).lastPathComponent
         let tmux = self.tmux
-        let result = await Task.detached { () -> StartResult in
+        let store = self.store
+
+        struct Launch: Sendable {
+            let result: StartResult
+            let uuid: String?
+        }
+
+        let launch = await Task.detached { () -> Launch in
             let session = tmux.ensureSession()
-            guard session.ok else { return .failed("could not create tmux session") }
+            guard session.ok else {
+                return Launch(result: .failed("could not create tmux session"), uuid: nil)
+            }
             let name = tmux.uniqueWindowName(from: title)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {
-                return .failed("could not create tmux window")
+                return Launch(result: .failed("could not create tmux window"), uuid: nil)
             }
             // A freshly created session comes with a bare default window; kill
             // it now that a real window exists, or it lingers as a never-ran-
@@ -93,23 +104,42 @@ final class SessionEngine: ObservableObject {
             // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
             // title like `$(rm -rf ~)` would execute. Single quotes make it inert.
             tmux.sendCommand(windowId: windowId, "claude --rc \(TmuxController.shellQuote(title))")
-            return await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
+            let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
+            guard case let .started(_, pid) = outcome else {
+                return Launch(result: outcome, uuid: nil)
+            }
+            // Bind + persist now. The registry file is written by the claude
+            // process itself right at session start (verified, F3), but give it
+            // a moment to appear after the spawn.
+            var uuid: String?
+            for _ in 0..<10 {
+                if let info = ClaudeSessionRegistry.info(forPid: pid) {
+                    uuid = info.sessionId
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+            }
+            if let uuid {
+                tmux.setCcornId(windowId: windowId, uuid: uuid)
+                store.upsert(SessionRecord(uuid: uuid, path: directory, title: title))
+            }
+            // No uuid (registry never appeared): fall back to the old behavior —
+            // reconcile binds it on the next launch, though the title is then
+            // only as durable as this process.
+            return Launch(result: outcome, uuid: uuid)
         }.value
 
-        if case let .started(windowId, pid) = result {
-            // uuid stays "" — it is unknown until Claude lazily writes its
-            // transcript, and is bound later via the @ccorn_id tag during
-            // discovery/reconciliation. Title and path are known now, so keep
-            // them on the live record rather than discarding them.
+        if case let .started(windowId, pid) = launch.result {
             let live = LiveSession(
-                record: SessionRecord(uuid: "", path: directory, title: title),
+                record: SessionRecord(uuid: launch.uuid ?? "", path: directory, title: title),
                 windowId: windowId,
+                ccornTag: launch.uuid,
                 pid: pid,
                 state: .running
             )
             liveSessions[windowId] = live
         }
-        return result
+        return launch.result
     }
 
     /// Resume an existing session by UUID in its project directory. When no
@@ -319,11 +349,6 @@ final class SessionEngine: ObservableObject {
             let persisted = store.loadRecords()
             let index = discovery.transcriptIndex()
             return tmux.listWindows().compactMap { window -> Reconciled? in
-                // Adopted windows get the same name-pinning as windows we
-                // create: without it automatic-rename tracks the foreground
-                // process and a dead claude pane reads as "zsh".
-                tmux.disableRenaming(windowId: window.windowId)
-
                 var uuid = window.ccornId ?? ""
                 var claudePID: Int32?
                 var registryCwd: String?
@@ -337,12 +362,22 @@ final class SessionEngine: ObservableObject {
                     tmux.setCcornId(windowId: window.windowId, uuid: uuid)
                 }
 
-                // No claude identity, no claude process, no claude trace in the
-                // pane: this window never ran claude — not a session.
-                if uuid.isEmpty, claudePID == nil,
+                // No claude identity, no claude process, no @ccorn_managed
+                // marker, no claude trace in the pane: this window never ran
+                // claude — not a session. (The marker is what keeps a dead
+                // CCorn-created session adopted even after its claude text
+                // scrolled out of the visible frame or the user ran `clear`.)
+                if uuid.isEmpty, claudePID == nil, !window.managed,
                    !detector.showsClaudeEvidence(pane: tmux.capturePane(windowId: window.windowId)) {
                     return nil
                 }
+
+                // Adopted windows get the same name-pinning as windows we
+                // create: without it automatic-rename tracks the foreground
+                // process and a dead claude pane reads as "zsh". Only for
+                // windows we actually adopt — a rejected bystander window
+                // keeps its tmux options untouched.
+                tmux.disableRenaming(windowId: window.windowId)
 
                 let known = persisted.first { !uuid.isEmpty && $0.uuid == uuid }
                 // Title stays empty for unknown records — NEVER the live tmux

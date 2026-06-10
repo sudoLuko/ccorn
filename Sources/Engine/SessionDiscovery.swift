@@ -202,7 +202,11 @@ struct SessionDiscovery: Sendable {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
         let window = 256 * 1024
-        let head = handle.readData(ofLength: window)
+        // Throwing read API, not the legacy readData(ofLength:) — that one
+        // raises an uncatchable ObjC exception on an I/O error, and this runs
+        // for every changed transcript on the discovery path. Degrade to "no
+        // title" instead.
+        let head = (try? handle.read(upToCount: window)) ?? Data()
         var title = lastAITitle(inJSONLData: head, dropLeadingPartialLine: false)
 
         // File extends past the head window: the current title lives near EOF.
