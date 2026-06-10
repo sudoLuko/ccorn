@@ -28,16 +28,33 @@ struct TmuxController: Sendable {
     /// in all other cases.
     static let sessionName =
         ProcessInfo.processInfo.environment["CCORN_DEBUG_TMUX_SESSION"] ?? "ccorn"
+    /// Hermetic e2e isolation: point every tmux command at a separate server
+    /// socket (`tmux -L <name>`), so even a kill-server in a chaos test
+    /// cannot reach the user's default server. Session-name isolation alone
+    /// still shares the server; socket isolation shares nothing.
+    static let socketName: String? =
+        ProcessInfo.processInfo.environment["CCORN_DEBUG_TMUX_SOCKET"]
     #else
     static let sessionName = "ccorn"
+    static let socketName: String? = nil
     #endif
     private let runner = CommandRunner.shared
+
+    /// Every tmux invocation funnels through here so the debug socket
+    /// override applies to all commands or none.
+    @discardableResult
+    private func tmux(_ args: [String]) -> CommandResult {
+        if let socket = Self.socketName {
+            return runner.run("tmux", ["-L", socket] + args)
+        }
+        return runner.run("tmux", args)
+    }
 
     // MARK: Session lifecycle
 
     /// True if the `ccorn` session exists.
     func hasSession() -> Bool {
-        runner.run("tmux", ["has-session", "-t", Self.sessionName]).ok
+        tmux(["has-session", "-t", Self.sessionName]).ok
     }
 
     /// Outcome of `ensureSession`. `strayDefaultWindowId` is set only when the
@@ -55,7 +72,7 @@ struct TmuxController: Sendable {
     @discardableResult
     func ensureSession() -> EnsureSessionResult {
         if hasSession() { return EnsureSessionResult(ok: true, strayDefaultWindowId: nil) }
-        let r = runner.run("tmux", [
+        let r = tmux([
             "new-session", "-d", "-s", Self.sessionName,
             "-P", "-F", "#{window_id}",
         ])
@@ -69,7 +86,7 @@ struct TmuxController: Sendable {
     /// Create a new window and return its stable `@N` id. The name is sanitized
     /// and de-duplicated against existing windows by the caller via `uniqueWindowName`.
     func newWindow(name: String, cwd: String) -> String? {
-        let r = runner.run("tmux", [
+        let r = tmux([
             "new-window", "-t", Self.sessionName,
             "-n", name, "-c", cwd,
             "-P", "-F", "#{window_id}",
@@ -80,7 +97,7 @@ struct TmuxController: Sendable {
         disableRenaming(windowId: id)
         // Durable marker: this window exists for a claude session, even if the
         // claude text later scrolls out of the visible pane frame.
-        runner.run("tmux", ["set-option", "-w", "-t", id, "@ccorn_managed", "1"])
+        tmux(["set-option", "-w", "-t", id, "@ccorn_managed", "1"])
         return id
     }
 
@@ -91,14 +108,14 @@ struct TmuxController: Sendable {
     /// (Display names come from session titles; the live tmux window name is
     /// never shown either way.)
     func disableRenaming(windowId: String) {
-        runner.run("tmux", ["set-option", "-w", "-t", windowId, "automatic-rename", "off"])
-        runner.run("tmux", ["set-option", "-w", "-t", windowId, "allow-rename", "off"])
+        tmux(["set-option", "-w", "-t", windowId, "automatic-rename", "off"])
+        tmux(["set-option", "-w", "-t", windowId, "allow-rename", "off"])
     }
 
     /// Send a command to a window's pane. The key is sent as a *separate* `Enter`
     /// argument — never an embedded `\n` in the command string (CLAUDE.md rule).
     func sendCommand(windowId: String, _ command: String) {
-        runner.run("tmux", ["send-keys", "-t", windowId, command, "Enter"])
+        tmux(["send-keys", "-t", windowId, command, "Enter"])
     }
 
     /// Capture the *visible frame* of a pane. No `-S`: Claude Code is a
@@ -106,21 +123,21 @@ struct TmuxController: Sendable {
     /// scrollback, so `-S -<n>` would read stale pre-launch output. `-J` rejoins
     /// wrapped lines so pattern matching sees whole strings.
     func capturePane(windowId: String) -> String {
-        runner.run("tmux", ["capture-pane", "-t", windowId, "-p", "-J"]).stdout
+        tmux(["capture-pane", "-t", windowId, "-p", "-J"]).stdout
     }
 
     /// Kill a window by id (sends SIGHUP to the pane's processes).
     func killWindow(windowId: String) {
-        runner.run("tmux", ["kill-window", "-t", windowId])
+        tmux(["kill-window", "-t", windowId])
     }
 
     func renameWindow(windowId: String, to name: String) {
-        runner.run("tmux", ["rename-window", "-t", windowId, name])
+        tmux(["rename-window", "-t", windowId, name])
     }
 
     /// The pane's shell pid — the parent under which the `claude` child lives.
     func panePID(windowId: String) -> Int32? {
-        let r = runner.run("tmux", ["list-panes", "-t", windowId, "-F", "#{pane_pid}"])
+        let r = tmux(["list-panes", "-t", windowId, "-F", "#{pane_pid}"])
         return r.stdout
             .split(whereSeparator: { $0 == "\n" })
             .first
@@ -133,7 +150,7 @@ struct TmuxController: Sendable {
     /// resolve windows robustly (independent of the display name). `-w` scopes the
     /// option to the window.
     func setCcornId(windowId: String, uuid: String) {
-        runner.run("tmux", ["set-option", "-w", "-t", windowId, "@ccorn_id", uuid])
+        tmux(["set-option", "-w", "-t", windowId, "@ccorn_id", uuid])
     }
 
     // MARK: Enumeration / reconciliation
@@ -144,7 +161,7 @@ struct TmuxController: Sendable {
         guard hasSession() else { return [] }
         // Tab-separated so names containing spaces don't break the split.
         let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}\t#{pane_current_path}\t#{@ccorn_managed}"
-        let r = runner.run("tmux", ["list-windows", "-t", Self.sessionName, "-F", fmt])
+        let r = tmux(["list-windows", "-t", Self.sessionName, "-F", fmt])
         guard r.ok else { return [] }
         var windows: [TmuxWindow] = []
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
