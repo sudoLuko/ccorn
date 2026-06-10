@@ -22,7 +22,15 @@ struct TmuxWindow: Sendable {
 ///
 /// See docs/CCORN_SPEC.md "Window Naming and Identity" and CLAUDE.md "tmux commands".
 struct TmuxController: Sendable {
+    #if DEBUG
+    /// Shakedown isolation: a debug run can use a scratch tmux session so
+    /// churn never touches the user's real `ccorn` windows. Production name
+    /// in all other cases.
+    static let sessionName =
+        ProcessInfo.processInfo.environment["CCORN_DEBUG_TMUX_SESSION"] ?? "ccorn"
+    #else
     static let sessionName = "ccorn"
+    #endif
     private let runner = CommandRunner.shared
 
     // MARK: Session lifecycle

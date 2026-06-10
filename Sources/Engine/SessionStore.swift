@@ -19,8 +19,24 @@ final class SessionStore: @unchecked Sendable {
     private let supportDirOverride: URL?
 
     init(supportDir: URL? = nil) {
+        #if DEBUG
+        // Shakedown isolation: a debug run can point the whole store at a
+        // scratch directory so churn never touches the real records/settings.
+        if supportDir == nil,
+           let override = ProcessInfo.processInfo.environment["CCORN_DEBUG_SUPPORT_DIR"],
+           !override.isEmpty {
+            self.supportDirOverride = URL(fileURLWithPath: override, isDirectory: true)
+            DebugLife.event("init SessionStore (override \(override))")
+            return
+        }
+        DebugLife.event("init SessionStore")
+        #endif
         self.supportDirOverride = supportDir
     }
+
+    #if DEBUG
+    deinit { DebugLife.event("deinit SessionStore") }
+    #endif
 
     /// `~/Library/Application Support/CCorn` (or the test override).
     var supportDir: URL {
@@ -42,8 +58,12 @@ final class SessionStore: @unchecked Sendable {
 
     /// Non-locking core reads/writes; callers must already hold `queue`.
     private func loadRecordsLocked() -> [SessionRecord] {
-        guard let data = try? Data(contentsOf: sessionsURL) else { return [] }
-        return (try? JSONDecoder().decode([SessionRecord].self, from: data)) ?? []
+        let records = (try? Data(contentsOf: sessionsURL))
+            .flatMap { try? JSONDecoder().decode([SessionRecord].self, from: $0) } ?? []
+        #if DEBUG
+        DebugLife.set("store-records", to: records.count)
+        #endif
+        return records
     }
 
     private func saveRecordsLocked(_ records: [SessionRecord]) {
@@ -53,6 +73,10 @@ final class SessionStore: @unchecked Sendable {
         if let data = try? encoder.encode(records) {
             try? data.write(to: sessionsURL, options: .atomic)
         }
+        #if DEBUG
+        DebugLife.set("store-records", to: records.count)
+        DebugLife.adjust("store-writes", by: 1)
+        #endif
     }
 
     func loadRecords() -> [SessionRecord] {
@@ -110,6 +134,56 @@ final class SessionStore: @unchecked Sendable {
             let kept = records.filter { transcripts.contains($0.uuid) || keep.contains($0.uuid) }
             if kept.count != records.count {
                 saveRecordsLocked(kept)
+            }
+        }
+    }
+
+    /// Default retention: an archived session untouched for 90 days is gone,
+    /// and the store never holds more than 500 records.
+    static let archivedMaxAge: TimeInterval = 90 * 24 * 3600
+    static let maxRecords = 500
+
+    /// Retention policy (launch, after the transcript-existence prune): drop
+    /// archived records whose transcript has been inactive past
+    /// `archivedMaxAge`, then cap the total at `maxRecords` — evicting
+    /// archived records before active ones, oldest transcript activity first —
+    /// so the store cannot grow unbounded. `keep` (live windows) always
+    /// survives; age comes from the transcript mtime, the same last-activity
+    /// signal the rows display, so no schema change is needed.
+    func applyRetention(transcriptMtimes: [String: Date],
+                        keeping keep: Set<String>,
+                        archivedMaxAge: TimeInterval = SessionStore.archivedMaxAge,
+                        maxRecords: Int = SessionStore.maxRecords,
+                        now: Date = Date()) {
+        queue.sync {
+            var records = loadRecordsLocked()
+            let before = records.count
+
+            records.removeAll { record in
+                guard record.archived, !keep.contains(record.uuid) else { return false }
+                let mtime = transcriptMtimes[record.uuid] ?? .distantPast
+                return now.timeIntervalSince(mtime) > archivedMaxAge
+            }
+
+            if records.count > maxRecords {
+                let evictable = records
+                    .filter { !keep.contains($0.uuid) }
+                    .sorted { a, b in
+                        if a.archived != b.archived { return a.archived }
+                        let am = transcriptMtimes[a.uuid] ?? .distantPast
+                        let bm = transcriptMtimes[b.uuid] ?? .distantPast
+                        return am < bm
+                    }
+                var doomed = Set<String>()
+                for record in evictable {
+                    guard records.count - doomed.count > maxRecords else { break }
+                    doomed.insert(record.uuid)
+                }
+                records.removeAll { doomed.contains($0.uuid) }
+            }
+
+            if records.count != before {
+                saveRecordsLocked(records)
             }
         }
     }

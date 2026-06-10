@@ -65,6 +65,12 @@ final class LiveSession: ObservableObject {
     var lastHashChange: Date?
     var rcCache = BridgeSessionCache()
 
+    #if DEBUG
+    /// Shakedown identity, captured at init (deinit is nonisolated, so it must
+    /// not read main-actor state): the window id, else the uuid prefix.
+    private nonisolated let debugLabel: String
+    #endif
+
     init(record: SessionRecord,
          windowId: String? = nil,
          ccornTag: String? = nil,
@@ -79,7 +85,18 @@ final class LiveSession: ObservableObject {
         self.state = state
         self.remoteControlActive = remoteControlActive
         self.adopted = adopted
+        #if DEBUG
+        self.debugLabel = windowId
+            ?? (record.uuid.isEmpty ? "unbound" : String(record.uuid.prefix(8)))
+        DebugLife.adjust("live-session-objects", by: 1, note: "init LiveSession \(debugLabel)")
+        #endif
     }
+
+    #if DEBUG
+    deinit {
+        DebugLife.adjust("live-session-objects", by: -1, note: "deinit LiveSession \(debugLabel)")
+    }
+    #endif
 
     /// The session UUID detection should resolve the transcript by: the tmux
     /// @ccorn_id tag when bound, else the persisted record's UUID ("" for a

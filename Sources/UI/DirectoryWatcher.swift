@@ -42,6 +42,10 @@ final class DirectoryWatcher {
         self.stream = stream
         FSEventStreamSetDispatchQueue(stream, .main)
         FSEventStreamStart(stream)
+        #if DEBUG
+        DebugLife.adjust("fsevents-streams", by: 1, note: "stream started \(path)")
+        DebugLife.adjust("dir-watchers", by: 1, note: "init DirectoryWatcher \(path)")
+        #endif
     }
 
     /// Called on the main queue (the stream's dispatch queue).
@@ -58,6 +62,12 @@ final class DirectoryWatcher {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
             FSEventStreamRelease(stream)
+            #if DEBUG
+            DebugLife.adjust("fsevents-streams", by: -1, note: "stream released")
+            #endif
         }
+        #if DEBUG
+        DebugLife.adjust("dir-watchers", by: -1, note: "deinit DirectoryWatcher")
+        #endif
     }
 }

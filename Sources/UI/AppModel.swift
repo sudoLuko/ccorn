@@ -88,15 +88,41 @@ final class AppModel: ObservableObject {
         }
 
         pollTask = Task { [weak self] in
+            #if DEBUG
+            DebugLife.adjust("poll-loops", by: 1, note: "poll loop entered")
+            defer { DebugLife.adjust("poll-loops", by: -1, note: "poll loop exited") }
+            #endif
             await self?.initialSync()
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.engine.refreshAll()
                 self.rebuildRows()
+                #if DEBUG
+                self.logDebugTick()
+                #endif
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
     }
+
+    #if DEBUG
+    /// Shakedown tick line: structural-invariant gauges + resident memory,
+    /// emitted once per poll tick.
+    private func logDebugTick() {
+        let snap = DebugLife.snapshot()
+        let mem = DebugLife.memoryBytes()
+        DebugLife.event("tick live=\(engine.liveSessions.count)"
+            + " liveObjs=\(snap["live-session-objects"] ?? 0)"
+            + " pollLoops=\(snap["poll-loops"] ?? 0)"
+            + " streams=\(snap["fsevents-streams"] ?? 0)"
+            + " records=\(snap["store-records"] ?? -1)"
+            + " storeWrites=\(snap["store-writes"] ?? 0)"
+            + " stateMem=\(stateMemory.count)"
+            + " notifKeys=\(NotificationManager.shared.firedKeys.count)"
+            + " footprintMB=\(mem.footprint / 1_048_576)"
+            + " rssMB=\(mem.resident / 1_048_576)")
+    }
+    #endif
 
     func stop() {
         pollTask?.cancel()
@@ -122,12 +148,16 @@ final class AppModel: ObservableObject {
         let store = engine.store
         let discovery = engine.discovery
         await Task.detached {
-            let transcripts = Set(discovery.transcriptIndex().keys)
+            let index = discovery.transcriptIndex()
             // An empty index almost certainly means the projects root was
             // unreadable, not that every transcript vanished — pruning on it
             // would wipe every record. Skip; next launch retries.
-            guard !transcripts.isEmpty else { return }
-            store.pruneRecords(withoutTranscriptIn: transcripts, keeping: keep)
+            guard !index.isEmpty else { return }
+            store.pruneRecords(withoutTranscriptIn: Set(index.keys), keeping: keep)
+            // Retention on what survives: archived records inactive past the
+            // age limit go, then the total is capped — the store must not
+            // grow unbounded across months of sessions.
+            store.applyRetention(transcriptMtimes: index.mapValues(\.modified), keeping: keep)
         }.value
     }
 
@@ -197,6 +227,9 @@ final class AppModel: ObservableObject {
                    [String: TranscriptMeta], [SessionRecord]) in
             let projects = discovery.discover(watchDirectories: watchDirs)
             let index = discovery.transcriptIndex()
+            // Drop meta-cache entries for transcripts that no longer exist,
+            // or the cache grows monotonically across session churn.
+            metaCache.retain(paths: Set(index.values.map(\.transcriptPath)))
             let records = store.loadRecords()
             var wanted = Set(managedUUIDs)
             for project in projects {
@@ -362,6 +395,14 @@ final class AppModel: ObservableObject {
                                                   title: row.title,
                                                   state: row.state)
             }
+        }
+        // Drop memory for rows that no longer exist (killed windows, pruned
+        // records): window ids are monotonic, so without this the map grows
+        // for the lifetime of the app. A vanished row that ever returns is
+        // re-observed silently first — exactly the adopted-row rule.
+        if stateMemory.count > rows.count {
+            let liveIds = Set(rows.map(\.id))
+            stateMemory = stateMemory.filter { liveIds.contains($0.key) }
         }
     }
 

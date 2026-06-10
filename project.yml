@@ -71,6 +71,9 @@ targets:
       - path: Sources/Models/SessionRecord.swift
       - path: Sources/Models/Discovery.swift
       - path: Sources/Models/CCornSettings.swift
+      # Tests build the engine sources in Debug, where store/session lifecycle
+      # instrumentation references DebugLife (#if DEBUG).
+      - path: Sources/Debug/DebugLifecycle.swift
 schemes:
   CCorn:
     build:

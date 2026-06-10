@@ -28,4 +28,13 @@ final class TranscriptMetaCache: @unchecked Sendable {
         }
         return meta
     }
+
+    /// Drop entries whose transcript no longer exists (`paths` is the current
+    /// transcript index). Without this the cache grows monotonically as
+    /// sessions come and go.
+    func retain(paths: Set<String>) {
+        queue.sync {
+            entries = entries.filter { paths.contains($0.key) }
+        }
+    }
 }

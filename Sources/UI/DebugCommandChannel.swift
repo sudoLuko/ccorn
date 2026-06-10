@@ -21,6 +21,9 @@ import SwiftUI
 ///   onboard <dir> [dir...]    -> completeOnboarding
 ///   stale <seconds>           -> set stale threshold
 ///   importsheet               -> presentImportSheetIfNeeded
+///   counters                  -> JSON of DebugLife gauges + memory (shakedown)
+///   pids                      -> windowId:pid map of live sessions (shakedown)
+///   watch <dir> | unwatch <dir> -> add/remove a watch directory (applySettings)
 @MainActor
 final class DebugCommandChannel {
     private let model: AppModel
@@ -150,6 +153,36 @@ final class DebugCommandChannel {
 
         case "notifs":
             return "notifs [\(NotificationManager.shared.firedKeys.joined(separator: ", "))]"
+
+        case "counters":
+            var snap: [String: Any] = DebugLife.snapshot()
+            let mem = DebugLife.memoryBytes()
+            snap["engine-live-sessions"] = model.engine.liveSessions.count
+            snap["footprint-bytes"] = Int(mem.footprint)
+            snap["rss-bytes"] = Int(mem.resident)
+            guard let data = try? JSONSerialization.data(withJSONObject: snap, options: [.sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) else { return "err json" }
+            return json
+
+        case "pids":
+            let pairs = model.engine.liveSessions.map { windowId, live in
+                "\(windowId)=\(live.pid.map(String.init) ?? "-")"
+            }
+            return "pids \(pairs.sorted().joined(separator: " "))"
+
+        case "watch" where parts.count >= 2:
+            var settings = model.engine.settings
+            if !settings.watchDirectories.contains(parts[1]) {
+                settings.watchDirectories.append(parts[1])
+                model.applySettings(settings)
+            }
+            return "watch \(settings.watchDirectories)"
+
+        case "unwatch" where parts.count >= 2:
+            var settings = model.engine.settings
+            settings.watchDirectories.removeAll { $0 == parts[1] }
+            model.applySettings(settings)
+            return "unwatch \(settings.watchDirectories)"
 
         case "settingswindow":
             let opened = NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)

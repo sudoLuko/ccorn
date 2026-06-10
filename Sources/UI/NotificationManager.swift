@@ -34,6 +34,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// the cooldown and the content.
     func notify(sessionKey: String, title: String, state: SessionState, now: Date = Date()) {
         guard state == .waiting || state == .dead else { return }
+        // An entry past the cooldown behaves exactly like a missing one, so
+        // expired entries are dropped here — keyed by window id (monotonic),
+        // the map would otherwise grow for the lifetime of the app.
+        lastFired = lastFired.filter { now.timeIntervalSince($0.value) < cooldown }
         let key = "\(sessionKey)|\(state.rawValue)"
         if let last = lastFired[key], now.timeIntervalSince(last) < cooldown { return }
         lastFired[key] = now
