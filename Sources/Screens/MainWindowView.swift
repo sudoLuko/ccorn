@@ -26,16 +26,27 @@ enum SidebarNav: Hashable {
     case archived
 }
 
-/// Left sidebar: New Session button at the top (no wordmark — the window
-/// title bar already says CCorn), SESSIONS nav (All Sessions + indented
-/// Archived), pinned settings gear. No borders between items — hierarchy
-/// through indentation and weight only.
+/// Left sidebar: branded header (the lockup is where app identity lives —
+/// the title bar hides its text), New Session button, SESSIONS nav (All
+/// Sessions + indented Archived), pinned settings gear. Below the header,
+/// no borders between items — hierarchy through indentation and weight only.
 private struct SidebarView: View {
     @ObservedObject var model: AppModel
     @Binding var nav: SidebarNav
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            BrandLockup()
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+
+            Rectangle()
+                .fill(Color(.separatorColor))
+                .frame(height: 0.5)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+
             Button {
                 model.newSession()
             } label: {
@@ -51,7 +62,6 @@ private struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
-            .padding(.top, 12)
             .padding(.bottom, 4)
 
             List(selection: Binding(get: { nav as SidebarNav? },

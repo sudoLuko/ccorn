@@ -31,7 +31,13 @@ final class MainWindowController {
         if window == nil {
             let hosting = NSHostingController(rootView: MainWindowView(model: model))
             let window = NSWindow(contentViewController: hosting)
+            // App identity lives in the branded sidebar header; the title bar
+            // keeps standard chrome (traffic lights, .titled mask) but hides
+            // its text so "CCorn" isn't duplicated. The title STRING must
+            // stay set: DebugStage finds this window by title == "CCorn", and
+            // the activation policy keys off .titled.
             window.title = "CCorn"
+            window.titleVisibility = .hidden
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             window.contentMinSize = NSSize(width: 720, height: 480)
             window.setContentSize(NSSize(width: 860, height: 540))

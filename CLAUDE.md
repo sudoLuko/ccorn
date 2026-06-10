@@ -36,8 +36,8 @@ Native macOS menu-bar app. Swift/SwiftUI. Manages Claude Code sessions in tmux. 
 - Use SwiftUI semantic colors (Color.primary, Color.secondary, Color(.separatorColor), Color(.windowBackgroundColor)) for ALL main-window UI; never hardcode hex in the main window.
 - Hardcoded hex only in the menu-bar popover (it is always dark; semantic colors would be wrong there).
 - SF Pro Text only; SF Mono for directory paths via `.monospaced()`.
-- Two font weights only: regular (400) and medium (500).
-- 0.5px borders only, never 1px. No shadows, gradients, or decorative elements.
+- Two font weights only: regular (400) and medium (500). One exception: the brand lockup wordmark (sidebar + popover headers) is `.title3` semibold.
+- 0.5px borders only, never 1px. No shadows, gradients, or decorative elements. Exception: hollow status-dot rings (stopped/unmanaged) are 1px — a 0.5px ring is invisible at 7px.
 - Status marks are the only color in the app: every row shows exactly one mark — a colored dot for routine states, or the single `exclamationmark.triangle.fill` (amber recoverable / red terminal) for the broken trio (sign-in, no-remote, crashed). Never both, never any other status glyph.
 - The menu-bar popover is fixed dark (#09090B) regardless of system appearance; the main window follows system appearance via semantic colors.
 

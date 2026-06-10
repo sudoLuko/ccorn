@@ -27,9 +27,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("CCorn")
-                .font(.subheadline.weight(.medium))
-                .foregroundColor(PopoverPalette.primaryText)
+            BrandLockup(textColor: PopoverPalette.primaryText)
             Spacer()
             aggregateMark
         }
@@ -48,7 +46,7 @@ struct PopoverView: View {
                        stoppedOutline: PopoverPalette.stoppedOutline)
         } else {
             Circle()
-                .strokeBorder(PopoverPalette.stoppedOutline, lineWidth: 0.5)
+                .strokeBorder(PopoverPalette.stoppedOutline, lineWidth: 1)
                 .frame(width: 7, height: 7)
                 .frame(width: StatusMark.slotWidth)
         }
@@ -105,7 +103,7 @@ struct PopoverView: View {
         } label: {
             HStack(spacing: 8) {
                 Circle()
-                    .strokeBorder(StatusPalette.unmanagedOutline, lineWidth: 0.5)
+                    .strokeBorder(StatusPalette.unmanagedOutline, lineWidth: 1)
                     .frame(width: 7, height: 7)
                     .frame(width: StatusMark.slotWidth)
                 Text("\(model.unmanagedRows.count) discovered, not managed")

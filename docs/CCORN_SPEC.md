@@ -327,15 +327,21 @@ CCorn uses `NSApplicationActivationPolicyAccessory` (in Swift, `.accessory`) by 
 
 - `NavigationSplitView` — two panels
 - Minimum size: 720 × 480px, resizable
-- Standard macOS title bar with traffic lights
-- Title: “CCorn”
+- Standard macOS title bar with traffic lights, title TEXT hidden
+  (`window.titleVisibility = .hidden`) — app identity lives in the branded
+  sidebar header and the popover header, not duplicated in the title bar
+- `window.title` stays set to `"CCorn"` for programmatic lookup (the debug
+  channel finds the window by title; activation policy keys off `.titled`)
 - No toolbar
 
 **Left Sidebar — 200px fixed:**
 
 Top section:
 
-- CCorn app icon (small, ~16px) + “CCorn” wordmark — `.subheadline` medium `Color.primary`
+- Brand lockup: corn emoji (🌽, ~15pt) + “CCorn” wordmark — `.title3`
+  semibold `Color.primary` (deliberately heavier/larger than row and nav
+  text; the one weight above medium in the app), 0.5px hairline divider
+  beneath (`Color(.separatorColor)`, inset 12px)
 - `+ New Session` — text button with SF Symbol `plus` icon left, `.subheadline` medium `Color.primary`
 
 Nav section (`.listStyle(.sidebar)`):
@@ -398,7 +404,7 @@ Triggered by clicking the CCorn icon in the macOS menu bar. Fixed dark zinc rega
 
 **Header (32px):**
 
-- “CCorn” — `.subheadline` medium `#FAFAFA` left
+- Brand lockup: corn emoji + “CCorn” wordmark — `.title3` semibold `#FAFAFA` left (matches the sidebar header)
 - Aggregate status dot far right: reflects the worst state across all sessions, using the severity order red (dead) > yellow (waiting) > orange (stale) > blue (working) > green (running). Waiting outranks Stale because a waiting session is blocked on the user. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
 - 0.5px divider below — `#27272A`
 

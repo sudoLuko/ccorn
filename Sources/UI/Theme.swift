@@ -53,9 +53,11 @@ enum PopoverPalette {
     static let primaryText = Color(hex: 0xFAFAFA)
     static let secondaryText = Color(hex: 0x71717A)
     static let footerText = Color(hex: 0xA1A1AA)
-    /// Outline for a stopped session's empty dot — the spec's section-4 value
-    /// (#E4E4E7 border only), which it states without a dark-mode adaptation.
-    static let stoppedOutline = Color(hex: 0xE4E4E7)
+    /// Outline for a stopped session's empty dot on the fixed-dark popover.
+    /// Zinc-400, not the spec's light-mode #E4E4E7, which glares on #09090B —
+    /// visibly present, recessive, and a step lighter than the unmanaged
+    /// outline (#71717A) so the two hollow dots keep their hierarchy.
+    static let stoppedOutline = Color(hex: 0xA1A1AA)
 }
 
 // MARK: - StatusPresentation colors
@@ -107,9 +109,10 @@ enum WorkingBreath {
 /// other glyph.
 struct StatusMark: View {
     let presentation: StatusPresentation
-    /// Outline color for the stopped state — semantic separator in the main
-    /// window, a fixed zinc in the popover.
-    var stoppedOutline: Color = Color(.separatorColor)
+    /// Outline color for the stopped state — tertiary label in the main
+    /// window (separatorColor is a hairline tone that vanishes at 7px), a
+    /// fixed zinc in the popover.
+    var stoppedOutline: Color = Color(.tertiaryLabelColor)
 
     /// Width of the status slot on every surface (the symbol is the widest mark).
     static let slotWidth: CGFloat = 14
@@ -125,11 +128,13 @@ struct StatusMark: View {
                     .fill(fill)
                     .frame(width: 7, height: 7)
             } else {
+                // 1px ring, not the chrome hairline: at 7px a 0.5px ring is
+                // sub-pixel on 1x displays and the dot disappears.
                 Circle()
                     .strokeBorder(
                         presentation == .unmanaged
                             ? StatusPalette.unmanagedOutline : stoppedOutline,
-                        lineWidth: 0.5)
+                        lineWidth: 1)
                     .frame(width: 7, height: 7)
             }
         }
@@ -146,7 +151,7 @@ struct StatusMark: View {
 /// State changes fade the mark over briefly.
 struct RowStatusIndicator: View {
     let presentation: StatusPresentation
-    var stoppedOutline: Color = Color(.separatorColor)
+    var stoppedOutline: Color = Color(.tertiaryLabelColor)
 
     @State private var pulsing = false
     @State private var breathing = false
@@ -185,6 +190,31 @@ struct RowStatusIndicator: View {
     private func syncMotion() {
         pulsing = presentation == .waiting
         breathing = presentation == .working && WorkingBreath.enabled
+    }
+}
+
+// MARK: - Brand lockup
+
+/// The in-window home of app identity (header-and-branding pass): corn emoji
+/// + "CCorn" wordmark, deliberately heavier and slightly larger than row/nav
+/// text so it reads as a brand header, not a row. Used by the sidebar header
+/// and the popover header — each surface draws its own hairline divider
+/// beneath in its palette. The title bar hides its text instead of
+/// duplicating this (NSWindow.title stays "CCorn" for programmatic lookup).
+struct BrandLockup: View {
+    /// Wordmark color — semantic primary in the main window, the popover's
+    /// fixed light text on its always-dark background.
+    var textColor: Color = .primary
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text("🌽")
+                .font(.system(size: 15))
+                .accessibilityHidden(true)
+            Text("CCorn")
+                .font(.title3.weight(.semibold))
+                .foregroundColor(textColor)
+        }
     }
 }
 
