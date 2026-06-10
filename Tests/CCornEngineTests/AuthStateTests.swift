@@ -37,6 +37,25 @@ import Testing
         #expect(detector.authNotice(pane: pane) == "Invalid API key · Please run /login")
     }
 
+    /// REAL invalid-key error render, captured on 2.1.172 by the preflight
+    /// harness (RUNTIME_FINDINGS P3): an approved-but-invalid env key fails on
+    /// the first send with "Invalid API key · Fix external API key". The
+    /// "Please run /login" suffix of older versions is gone; the "Invalid API
+    /// key" phrase is what must keep matching.
+    @Test func realInvalidKeyErrorFrameIsNeedsAuth() {
+        let pane = Fixtures.paneText("needs-auth-invalid-key-2172.txt")
+        #expect(classifyFresh(pane) == .needsAuth)
+        #expect(detector.authNotice(pane: pane)?.contains("Invalid API key") == true)
+    }
+
+    /// REAL signed-out login screen (fresh CLAUDE_CONFIG_DIR first run),
+    /// captured on 2.1.172 by the preflight harness (RUNTIME_FINDINGS P4) —
+    /// the live counterpart of the modeled needs-auth-login fixture.
+    @Test func realFreshLoginScreenIsNeedsAuth() {
+        let pane = Fixtures.paneText("needs-auth-fresh-login-2172.txt")
+        #expect(classifyFresh(pane) == .needsAuth)
+    }
+
     @Test func expiredOAuthTokenIsNeedsAuth() {
         let pane = "OAuth token expired · Please run /login"
         #expect(classifyFresh(pane) == .needsAuth)

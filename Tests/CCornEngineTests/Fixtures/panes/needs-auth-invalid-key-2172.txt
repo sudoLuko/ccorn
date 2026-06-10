@@ -1,0 +1,50 @@
+/Users/dev/.local/bin/claude --rc "CCorn Preflight BadKey"
+dev@host badkey % /Users/dev/.local/bin/claude --rc "CCorn Preflight BadKey"
+╭─── Claude Code v2.1.172 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                                                                                                                            │
+│                    Welcome back!                   │ Ask Claude to create a new app or clone a repository                                                                                                                │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                                                                                          │
+│                      ▝▜█████▛▘                     │ Sub-agents can now spawn their own sub-agents (up to 5 levels deep)                                                                                                 │
+│                        ▘▘ ▝▝                       │ Amazon Bedrock now reads the AWS region from `~/.aws` config files when `AWS_REGION` isn't set, matching AWS SDK precedence; `/status` shows where the region came… │
+│                                                    │ Added a search bar when browsing a marketplace's plugins in `/plugin`                                                                                               │
+│    Fable 5 with xhigh effort · API Usage Billing   │ /release-notes for more                                                                                                                                             │
+│  /…/tmp/ccorn-preflight/run-20260610-145242/badkey │                                                                                                                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+ ⚠ Both claude.ai and ANTHROPIC_API_KEY set · auth may not work as expected
+   · to use claude.ai: Unset the ANTHROPIC_API_KEY environment variable, or claude /logout then say "No" to the API key approval before login.
+   · to use ANTHROPIC_API_KEY: claude /logout to sign out of claude.ai.
+
+ ▎ Fable 5 is here! Our newest model for complex, long-running work
+ ▎ Included in your plan limits until Jun 22, then switch to usage credits to continue.
+
+❯ Reply with exactly: ok
+  ⎿  Invalid API key · Fix external API key
+
+✻ Cooked for 0s
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts · ← for agents                                                                                                                                                                         ◉ xhigh · /effort
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
