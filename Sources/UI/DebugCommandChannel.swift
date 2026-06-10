@@ -21,6 +21,17 @@ import SwiftUI
 ///   onboard <dir> [dir...]    -> completeOnboarding
 ///   onboarddir <dir>          -> add a directory to the onboarding card (gate check)
 ///   popovercalm               -> toggle the popover's calm disclosure (triage)
+///   nav group <id-or-name>    -> select a group view in the sidebar
+///   groups                    -> JSON of the group definitions
+///   groupcreate <name...>     -> createGroup
+///   groupnew                  -> beginNewGroup (placeholder + inline editor)
+///   groupedit <id>            -> beginGroupRename (inline editor open)
+///   groupeditcommit <name...> -> commit the open inline editor
+///   groupeditcancel           -> cancel the open inline editor
+///   groupdelete <id>          -> performGroupDelete (no confirm modal)
+///   groupassign <dir> <gid>   -> add the row at <dir> to a group
+///   groupunassign <dir> <gid> -> remove the row at <dir> from a group
+///   groupsmenu <dir> [secs]   -> pop the row's Groups submenu (screenshots)
 ///   stale <seconds>           -> set stale threshold
 ///   importsheet               -> presentImportSheetIfNeeded
 ///   counters                  -> JSON of DebugLife gauges + memory (shakedown)
@@ -168,8 +179,84 @@ final class DebugCommandChannel {
             return "stage \(flow.stage) items \(flow.items.map { "\($0.title):\($0.phase)" }.joined(separator: ","))"
 
         case "nav" where parts.count >= 2:
-            model.sidebarNav = parts[1] == "archived" ? .archived : .allSessions
+            switch parts[1] {
+            case "archived":
+                model.sidebarNav = .archived
+            case "group" where parts.count >= 3:
+                let key = parts[2...].joined(separator: " ")
+                guard let group = model.groups.first(where: { $0.id == key || $0.name == key }) else {
+                    return "err no-group \(key)"
+                }
+                model.sidebarNav = .group(group.id)
+            default:
+                model.sidebarNav = .allSessions
+            }
             return "nav \(model.sidebarNav)"
+
+        // MARK: Groups (5.11)
+
+        case "groups":
+            let defs = model.groups.map { ["id": $0.id, "name": $0.name] }
+            guard let data = try? JSONSerialization.data(withJSONObject: defs, options: [.sortedKeys]),
+                  let json = String(data: data, encoding: .utf8) else { return "err json" }
+            return json
+
+        case "groupcreate" where parts.count >= 2:
+            let group = model.createGroup(named: parts[1...].joined(separator: " "))
+            return "groupcreate \(group.id)"
+
+        case "groupnew":
+            model.beginNewGroup()
+            return "groupnew \(model.editingGroupId ?? "-")"
+
+        case "groupedit" where parts.count >= 2:
+            model.beginGroupRename(parts[1])
+            return "groupedit \(parts[1])"
+
+        case "groupeditcommit" where parts.count >= 2:
+            guard let id = model.editingGroupId else { return "err not-editing" }
+            model.commitGroupName(id, to: parts[1...].joined(separator: " "))
+            return "groupeditcommit \(id)"
+
+        case "groupeditcancel":
+            model.cancelGroupEdit()
+            return "groupeditcancel"
+
+        case "groupdelete" where parts.count >= 2:
+            // Confirmation-free core, same split as the kill flow.
+            model.performGroupDelete(parts[1])
+            return "groupdelete \(parts[1])"
+
+        case "groupassign" where parts.count >= 3:
+            guard let target = row(at: parts[1]) else { return "err no-row" }
+            guard !target.groupIDs.contains(parts[2]) else { return "already-member" }
+            model.toggleGroupMembership(target, groupId: parts[2])
+            return "groupassign \(target.uuid) -> \(parts[2])"
+
+        case "groupunassign" where parts.count >= 3:
+            guard let target = row(at: parts[1]) else { return "err no-row" }
+            model.removeFromGroup(target, groupId: parts[2])
+            return "groupunassign \(target.uuid) -x \(parts[2])"
+
+        case "groupsmenu" where parts.count >= 2:
+            // Pop the row's Groups submenu (screenshot aid). popUp BLOCKS in
+            // its tracking loop, so dismissal is armed first on a .common-mode
+            // timer, which still fires during menu tracking.
+            guard let target = row(at: parts[1]) else { return "err no-row" }
+            let menu = SessionMenu.menu(for: target, model: model)
+            guard let submenu = menu.items.first(where: { $0.title == "Groups" })?.submenu else {
+                return "err no-groups-submenu"
+            }
+            let seconds = parts.count >= 3 ? (Double(parts[2]) ?? 6) : 6
+            let timer = Timer(timeInterval: seconds, repeats: false) { _ in
+                submenu.cancelTracking()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            let anchor = NSApp.windows.first { $0.title == "CCorn" }
+            let origin = anchor.map { NSPoint(x: $0.frame.midX - 80, y: $0.frame.midY) }
+                ?? NSPoint(x: 400, y: 400)
+            submenu.popUp(positioning: nil, at: origin, in: nil)
+            return "groupsmenu dismissed"
 
         case "notifs":
             return "notifs [\(NotificationManager.shared.firedKeys.joined(separator: ", "))]"
@@ -234,7 +321,8 @@ final class DebugCommandChannel {
                 return "seeded calm \(rows.count)"
             }
             let seeded = DebugStage.seedRows()
-            model.debugSeed(rows: seeded.all, archived: seeded.archived)
+            model.debugSeed(rows: seeded.all, archived: seeded.archived,
+                            groups: DebugStage.seedGroups)
             return "seeded \(seeded.all.count)+\(seeded.archived.count)"
 
         case "appearance" where parts.count >= 2:
@@ -299,6 +387,7 @@ final class DebugCommandChannel {
                 "rc": row.remoteControlActive,
                 "archived": archivedList,
                 "windowId": row.windowId ?? "",
+                "groups": row.groupIDs,
             ]
         }
         let all = rows.map { encode($0, archivedList: false) }

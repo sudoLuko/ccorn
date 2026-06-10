@@ -702,6 +702,73 @@ Local macOS notifications (`UNUserNotificationCenter`) for state changes worth s
 
 -----
 
+### 5.11 Groups (user-defined collections)
+
+The Apple Books collections pattern: a group is a user-named collection of
+sessions, one level, no nesting, no new screens.
+
+**Model and storage — the split matters:**
+
+- Group DEFINITIONS (id, name; order = array position) persist in
+  `CCornSettings.groups` (settings.json), using the settings file's
+  field-by-field-defaulting decode so files written by older builds never
+  reset.
+- MEMBERSHIP is a field on the session record (`SessionRecord.groupIDs`),
+  merged by uuid exactly like the archived flag (nil leaves it untouched;
+  the record is created if absent). It therefore inherits the record store's
+  prune and retention lifecycle: when a record dies, its memberships die
+  with it; deleting a group sweeps its id off every record.
+- Membership keys on the session UUID, never `SessionRow.id` — the row id
+  differs across managed (`@N` window id), stopped (`record:` prefix), and
+  unmanaged rows, and changes when a session stops.
+- Bound-uuid gate: a brand-new session has an empty uuid until its first
+  transcript binds, so the Groups control is disabled until uuid is
+  non-empty (same gating family as Restart on a missing path).
+
+**Scope:** record-backed rows only — running, working, waiting, needsAuth,
+stale, dead, stopped, archived. Unmanaged/discovered rows get no Groups
+control: they have no record, their uuid is borrowed and can shift, and
+creating a record would reclassify them out of Discovered. A discovered
+session joins a group after the user imports it.
+
+**Sidebar:**
+
+- GROUPS section below SESSIONS — header `.caption` `Color.secondary`
+  uppercase, one row per group in stored order, member count `.caption`
+  `Color.secondary` trailing
+- `+ New Group` creates a group with a placeholder name and opens the
+  inline editor on it (the 5.8 rename pattern: plain TextField, pre-selected
+  text, Enter commits, Escape cancels — cancel on a just-created placeholder
+  removes it). The editing row is not selection-tagged, so the editor never
+  fights List selection.
+- Right-click on a group row: Rename / Delete Group (native menu).
+  Deleting asks to confirm, removes the definition, and clears the id from
+  every record's membership — sessions are NEVER deleted or archived by it.
+
+**Per-session menu (5.7 additions, record-backed variants only):**
+
+- "Groups" submenu: one item per group with its state `.on` when the session
+  is a member; toggling assigns/unassigns — the one control does both and
+  shows membership inline. "New Group…" at the bottom creates a group,
+  assigns the session, and opens the sidebar's inline editor.
+- While a group view is active, a direct "Remove from [Group name]" item
+  surfaces near the top of the menu.
+
+**Filtering:**
+
+- Selecting a group in the sidebar (`SidebarNav.group(id)`) lists managed,
+  non-archived rows whose record carries the group id, in the shared recency
+  order. Archived members keep their membership but surface only in the
+  Archived view.
+- Empty group: "No sessions in this group" with a hint to add via a
+  session's `⋯` menu.
+
+**Out of scope (this pass):** drag-and-drop assignment onto sidebar groups —
+the menu submenu fully covers assignment; drag needs gesture-interplay
+verification with the list's existing tap/right-click stack.
+
+-----
+
 ## 6. User Flows
 
 ### 6.1 First Launch

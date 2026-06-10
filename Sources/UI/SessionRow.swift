@@ -34,6 +34,10 @@ struct SessionRow: Identifiable, Equatable {
     /// (docs/CCORN_SPEC.md §8). Drive tooltips and the one-shot alerts.
     let authNotice: String?
     let rcPlanNotice: String?
+    /// User-group membership, mirrored from the session's record (keyed by
+    /// uuid there — never by this row's id, which differs across managed/
+    /// stopped/unmanaged and changes on stop). Always [] for unmanaged rows.
+    let groupIDs: [String]
 
     init(id: String,
          kind: Kind,
@@ -46,7 +50,8 @@ struct SessionRow: Identifiable, Equatable {
          archived: Bool = false,
          lastActive: Date?,
          authNotice: String? = nil,
-         rcPlanNotice: String? = nil) {
+         rcPlanNotice: String? = nil,
+         groupIDs: [String] = []) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -59,6 +64,7 @@ struct SessionRow: Identifiable, Equatable {
         self.lastActive = lastActive
         self.authNotice = authNotice
         self.rcPlanNotice = rcPlanNotice
+        self.groupIDs = groupIDs
     }
 
     var isManaged: Bool {

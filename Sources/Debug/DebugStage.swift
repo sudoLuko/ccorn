@@ -11,10 +11,22 @@ enum DebugStage {
 
     // MARK: - Seed data
 
+    /// Sidebar groups for the seeded set. Definitions only — seeding swaps
+    /// AppModel's PUBLISHED list; settings.json is never written.
+    static let seedGroups: [SessionGroup] = [
+        SessionGroup(id: "seed-group-client", name: "Client work"),
+        SessionGroup(id: "seed-group-infra", name: "Infra"),
+        // No members: exercises the empty-group state.
+        SessionGroup(id: "seed-group-empty", name: "Experiments"),
+    ]
+
     /// A realistic mix covering every presentation: routine dots (working,
     /// waiting, running, stale, stopped), the full broken trio (sign-in,
     /// no-remote — one generic, one with the captured plan notice — and
-    /// crashed), a few unmanaged discoveries, and an archived pair.
+    /// crashed), a few unmanaged discoveries, and an archived pair. Group
+    /// coverage: members of each seed group, one session in BOTH groups, an
+    /// archived-and-grouped record, and one brand-new UNBOUND session (empty
+    /// uuid — the Groups control must gate disabled on it).
     static func seedRows(now: Date = Date()) -> (all: [SessionRow], archived: [SessionRow]) {
         func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
         let home = NSHomeDirectory()
@@ -25,13 +37,15 @@ enum DebugStage {
                        uuid: "aaaaaaaa-0000-4000-8000-000000000001",
                        path: "\(home)/dev/ccorn",
                        state: .working, remoteControlActive: true,
-                       lastActive: ago(15)),
+                       lastActive: ago(15),
+                       groupIDs: ["seed-group-client"]),
             SessionRow(id: "@902", kind: .managed(windowId: "@902"),
                        title: "Checkout flow revamp",
                        uuid: "aaaaaaaa-0000-4000-8000-000000000002",
                        path: "\(home)/dev/shop",
                        state: .waiting, remoteControlActive: true,
-                       lastActive: ago(4 * 60)),
+                       lastActive: ago(4 * 60),
+                       groupIDs: ["seed-group-client"]),
             SessionRow(id: "@903", kind: .managed(windowId: "@903"),
                        title: "Auth service refactor",
                        uuid: "aaaaaaaa-0000-4000-8000-000000000003",
@@ -60,19 +74,31 @@ enum DebugStage {
                        path: "\(home)/dev/infra",
                        state: .working, remoteControlActive: false,
                        lastActive: ago(8 * 60),
-                       rcPlanNotice: "Remote Control is not available on your plan. Upgrade to enable it."),
+                       rcPlanNotice: "Remote Control is not available on your plan. Upgrade to enable it.",
+                       groupIDs: ["seed-group-infra"]),
             SessionRow(id: "@906", kind: .managed(windowId: "@906"),
                        title: "Data pipeline",
                        uuid: "aaaaaaaa-0000-4000-8000-000000000006",
                        path: "\(home)/dev/etl",
                        state: .stale, remoteControlActive: true,
-                       lastActive: ago(6 * 3600)),
+                       lastActive: ago(6 * 3600),
+                       // In BOTH groups: multi-membership coverage.
+                       groupIDs: ["seed-group-client", "seed-group-infra"]),
             SessionRow(id: "@907", kind: .managed(windowId: "@907"),
                        title: "Docs site rebuild",
                        uuid: "aaaaaaaa-0000-4000-8000-000000000007",
                        path: "\(home)/dev/docs",
                        state: .dead, remoteControlActive: false,
                        lastActive: ago(3 * 3600)),
+            // Brand-new session whose transcript hasn't bound yet: NO uuid,
+            // so the Groups control must render disabled for it.
+            SessionRow(id: "@909", kind: .managed(windowId: "@909"),
+                       title: "untitled spike",
+                       uuid: "",
+                       path: "\(home)/dev/sandbox",
+                       state: .working, remoteControlActive: false,
+                       rcGraceExpired: false,
+                       lastActive: ago(5)),
             SessionRow(id: "record:aaaaaaaa-0000-4000-8000-000000000008",
                        kind: .record,
                        title: "Spike: rate limiter",
@@ -111,7 +137,10 @@ enum DebugStage {
                        path: "\(home)/dev/shop",
                        state: .stopped, remoteControlActive: false,
                        archived: true,
-                       lastActive: ago(18 * 86_400)),
+                       lastActive: ago(18 * 86_400),
+                       // Archived AND grouped: membership survives, but the
+                       // row surfaces only in the Archived view.
+                       groupIDs: ["seed-group-client"]),
             SessionRow(id: "record:cccccccc-0000-4000-8000-000000000002",
                        kind: .record,
                        title: "Onboarding email flow",

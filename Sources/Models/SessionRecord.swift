@@ -14,14 +14,32 @@ struct SessionRecord: Codable, Identifiable, Equatable {
     var title: String
     /// Survives relaunch: whether the user archived this session.
     var archived: Bool
+    /// Ids of the user-defined groups this session belongs to. Definitions
+    /// live in `CCornSettings.groups`; membership lives here, keyed by the
+    /// record's uuid like everything else, so it is pruned and retained with
+    /// the record.
+    var groupIDs: [String]
 
     var id: String { uuid }
 
-    init(uuid: String, path: String, title: String, archived: Bool = false) {
+    init(uuid: String, path: String, title: String, archived: Bool = false,
+         groupIDs: [String] = []) {
         self.uuid = uuid
         self.path = path
         self.title = title
         self.archived = archived
+        self.groupIDs = groupIDs
+    }
+
+    /// Field-by-field defaults (the CCornSettings rule) so a sessions.json
+    /// written by an older build decodes cleanly instead of failing wholesale.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try c.decode(String.self, forKey: .uuid)
+        path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        groupIDs = try c.decodeIfPresent([String].self, forKey: .groupIDs) ?? []
     }
 }
 

@@ -14,7 +14,7 @@ enum SessionColumns {
 /// visibly de-emphasized, so a glance lands on your sessions first.
 struct SessionListView: View {
     @ObservedObject var model: AppModel
-    var archived = false
+    var nav: SidebarNav = .allSessions
 
     /// Collapsed state of the DISCOVERED section, persisted across launches.
     @AppStorage("discoveredSectionCollapsed") private var discoveredCollapsed = false
@@ -25,18 +25,28 @@ struct SessionListView: View {
     private let forceEmpty =
         ProcessInfo.processInfo.environment["CCORN_DEBUG_UI"]?.contains("empty") == true
 
+    private var archived: Bool { nav == .archived }
+
+    /// The list's source per sidebar view — All Sessions, Archived, or one
+    /// group's members (record-backed, non-archived).
     private var managedRows: [SessionRow] {
-        archived ? model.archivedRows : model.managedRows
+        switch nav {
+        case .allSessions: return model.managedRows
+        case .archived: return model.archivedRows
+        case .group(let id): return model.groupRows(id: id)
+        }
     }
 
+    /// Ambient discoveries belong to All Sessions only: groups are
+    /// record-backed, and the archived view is records by definition.
     private var discoveredRows: [SessionRow] {
-        archived ? [] : model.unmanagedRows
+        nav == .allSessions ? model.unmanagedRows : []
     }
 
     var body: some View {
         Group {
             if (model.hasScanned && managedRows.isEmpty && discoveredRows.isEmpty) || forceEmpty {
-                EmptyStateView(model: model, archived: archived)
+                EmptyStateView(model: model, nav: nav)
             } else {
                 list
             }
@@ -133,14 +143,28 @@ struct SessionListView: View {
     }
 }
 
-/// Centered empty state (docs/CCORN_SPEC.md 5.6; 5.9 for the archived view,
-/// which gets the mark and title but no action buttons). The corn emoji plus
-/// the tagline are the one place CCorn's identity shows (review item 3: the
-/// emoji is the in-app mark; vector assets are reserved for the app icon and
-/// menu-bar glyph).
+/// Centered empty state (docs/CCORN_SPEC.md 5.6; 5.9 for the archived view
+/// and 5.11 for an empty group, which get the mark, title, and a hint but no
+/// action buttons). The corn emoji plus the tagline are the one place
+/// CCorn's identity shows (review item 3: the emoji is the in-app mark;
+/// vector assets are reserved for the app icon and menu-bar glyph).
 private struct EmptyStateView: View {
     @ObservedObject var model: AppModel
-    var archived = false
+    var nav: SidebarNav = .allSessions
+
+    private var archived: Bool { nav == .archived }
+    private var isGroup: Bool {
+        if case .group = nav { return true }
+        return false
+    }
+
+    private var title: String {
+        switch nav {
+        case .allSessions: return "No sessions found"
+        case .archived: return "No archived sessions"
+        case .group: return "No sessions in this group"
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -149,12 +173,16 @@ private struct EmptyStateView: View {
                 .padding(.bottom, 16)
                 .accessibilityHidden(true)
 
-            Text(archived ? "No archived sessions" : "No sessions found")
+            Text(title)
                 .font(.title3.weight(.medium))
                 .foregroundColor(.primary)
                 .padding(.bottom, 8)
 
-            if archived {
+            if isGroup {
+                Text("Add sessions from a session's ⋯ menu → Groups")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            } else if archived {
                 Text("Sessions you archive are kept here")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
