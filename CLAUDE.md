@@ -6,7 +6,7 @@
 - `docs/design-references/`: reference screenshots for every screen.
 
 ## Current state
-The verified empty app shell (`project.yml` + `Sources/`) already exists and builds and launches as a menu-bar app under XcodeGen. Build the app in milestones; do not rebuild the shell. After adding Swift files, run `xcodegen generate` before `xcodebuild`.
+All three milestones are built and verified: engine (M1), menu bar + main window (M2), and the full interaction surface (M3 — new session, import, kill/restart/archive, rename, onboarding, settings, archived view, notifications). After adding Swift files, run `xcodegen generate` before `xcodebuild`. Debug builds expose a file-based command channel for scripted verification (`CCORN_DEBUG_UI=cmd`, see Sources/UI/DebugCommandChannel.swift); it is compiled out of release builds.
 
 ## What this is
 Native macOS menu-bar app. Swift/SwiftUI. Manages Claude Code sessions in tmux. Process manager only, no chat interface.

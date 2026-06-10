@@ -31,8 +31,8 @@ final class ActionMenuItem: NSMenuItem {
 }
 
 /// Builds the per-row context menu (docs/CCORN_SPEC.md section 5.7). Native
-/// NSMenu, no custom styling. Milestone 2: Open in Browser / Open in Terminal /
-/// Copy Session ID work; mutation actions are present but disabled.
+/// NSMenu, no custom styling. Four variants: live, dead/stopped, archived,
+/// unmanaged.
 @MainActor
 enum SessionMenu {
     static func menu(for row: SessionRow, model: AppModel) -> NSMenu {
@@ -42,6 +42,16 @@ enum SessionMenu {
         let copyItem = ActionMenuItem(title: "Copy Session ID",
                                       enabled: !row.uuid.isEmpty) { [weak model] in
             model?.copySessionID(row)
+        }
+
+        // Archived rows are stopped, so check the flag before the state.
+        if row.archived {
+            menu.addItem(ActionMenuItem(title: "Unarchive") { [weak model] in
+                model?.unarchiveSession(row)
+            })
+            menu.addItem(.separator())
+            menu.addItem(copyItem)
+            return menu
         }
 
         switch row.state {
@@ -57,24 +67,42 @@ enum SessionMenu {
                 model?.openInTerminal(row)
             })
             menu.addItem(.separator())
-            menu.addItem(ActionMenuItem(title: "Rename", enabled: false))
+            menu.addItem(ActionMenuItem(title: "Rename") { [weak model] in
+                model?.beginRename(row)
+            })
             menu.addItem(.separator())
-            menu.addItem(ActionMenuItem(title: "Kill Session", enabled: false, destructive: true))
-            menu.addItem(ActionMenuItem(title: "Archive", enabled: false))
+            menu.addItem(ActionMenuItem(title: "Kill Session", destructive: true) { [weak model] in
+                model?.killSession(row)
+            })
+            menu.addItem(ActionMenuItem(title: "Archive") { [weak model] in
+                model?.archiveSession(row)
+            })
             menu.addItem(.separator())
             menu.addItem(copyItem)
 
         case .dead, .stopped:
-            menu.addItem(ActionMenuItem(title: "Restart Session", enabled: false))
+            menu.addItem(ActionMenuItem(
+                title: "Restart Session",
+                enabled: !row.path.isEmpty) { [weak model] in
+                model?.restartSession(row)
+            })
             menu.addItem(.separator())
-            menu.addItem(ActionMenuItem(title: "Rename", enabled: false))
+            menu.addItem(ActionMenuItem(title: "Rename") { [weak model] in
+                model?.beginRename(row)
+            })
             menu.addItem(.separator())
-            menu.addItem(ActionMenuItem(title: "Archive", enabled: false))
+            menu.addItem(ActionMenuItem(title: "Archive") { [weak model] in
+                model?.archiveSession(row)
+            })
             menu.addItem(.separator())
             menu.addItem(copyItem)
 
         case .unmanaged:
-            menu.addItem(ActionMenuItem(title: "Import Session", enabled: false))
+            menu.addItem(ActionMenuItem(
+                title: "Import Session",
+                enabled: !row.uuid.isEmpty && !row.path.isEmpty) { [weak model] in
+                model?.importSession(row)
+            })
             menu.addItem(.separator())
             menu.addItem(copyItem)
         }

@@ -89,16 +89,15 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            // New Session is a milestone-3 flow: present but disabled.
-            Button {} label: {
+            Button {
+                model.newSession()
+            } label: {
                 Label("New Session", systemImage: "plus")
                     .labelStyle(.titleAndIcon)
                     .font(.caption.weight(.medium))
                     .foregroundColor(PopoverPalette.footerText)
             }
             .buttonStyle(.plain)
-            .disabled(true)
-            .opacity(0.4)
 
             Spacer()
 

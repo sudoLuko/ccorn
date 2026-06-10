@@ -2,21 +2,38 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// UI-facing coordinator over the milestone-1 engine. Owns the 3s state poll,
-/// the FSEvents-driven discovery refresh, and the row models both the popover
-/// and the main window render. Read-only on engine data in milestone 2 — the
-/// only actions are Open in Browser / Open in Terminal / Copy Session ID.
+/// UI-facing coordinator over the engine. Owns the 3s state poll, the
+/// FSEvents-driven discovery refresh, and the row models every screen renders.
+/// Milestone 3: also owns the full action surface — new session, kill,
+/// restart, archive, import, rename — plus onboarding completion, the
+/// first-run import flow, state-transition notifications, and auto-restart.
 @MainActor
 final class AppModel: ObservableObject {
     let engine: SessionEngine
 
-    /// All rows, sorted by last active (most recent first).
+    /// All Sessions rows, sorted by last active (most recent first).
     @Published private(set) var rows: [SessionRow] = []
+    /// Archived view rows, same sort.
+    @Published private(set) var archivedRows: [SessionRow] = []
     /// True once the first discovery pass has completed — gates the empty state
     /// ("watch directories have been scanned but no sessions found").
     @Published private(set) var hasScanned = false
     /// Main-window list selection (row id).
     @Published var selection: String?
+    /// Sidebar navigation (All Sessions / Archived) — model-owned so actions
+    /// (and verification) can switch views.
+    @Published var sidebarNav: SidebarNav = .allSessions
+
+    /// Inline rename state (docs/CCORN_SPEC.md 5.8): the row being edited and
+    /// the inline error shown under it ("That name is already taken").
+    @Published var renamingRowId: String?
+    @Published var renameError: String?
+    /// A commit is in flight (the 3s pane error-watch); the field locks.
+    @Published var renameInFlight = false
+
+    /// Non-nil while the first-run import sheet is up (set after onboarding's
+    /// scan when unmanaged sessions were found).
+    @Published var importFlow: ImportFlowModel?
 
     /// Set by the AppDelegate so popover/empty-state actions can reach the
     /// window layer without the model importing it.
@@ -24,6 +41,9 @@ final class AppModel: ObservableObject {
     var closePopover: (() -> Void)?
 
     private var unmanagedProjects: [DiscoveredProject] = []
+    /// Persisted session records, mirrored from the store on every discovery
+    /// pass and after every mutation. Source of the Stopped/Archived rows.
+    private var records: [SessionRecord] = []
     /// uuid -> transcript (path + mtime), refreshed with discovery; provides the
     /// "last active" timestamp for managed sessions.
     private var transcriptIndex: [String: DiscoveredSession] = [:]
@@ -38,6 +58,10 @@ final class AppModel: ObservableObject {
     /// no newer pass started while it ran, so a slow early pass can never
     /// overwrite fresher results.
     private var discoveryGeneration = 0
+    /// Last seen state per session (keyed by uuid, else row id) — the edge
+    /// detector behind Waiting/Dead notifications. First observation of a
+    /// session records silently; only a real change can notify.
+    private var stateMemory: [String: SessionState] = [:]
 
     init(engine: SessionEngine) {
         self.engine = engine
@@ -49,11 +73,13 @@ final class AppModel: ObservableObject {
         SessionState.aggregate(rows.map(\.state))
     }
 
+    var onboardingNeeded: Bool { !engine.settings.onboardingComplete }
+
     // MARK: - Lifecycle
 
-    /// Reconcile with existing tmux windows, run discovery, then poll states
-    /// every 3 seconds. Discovery re-runs only on FSEvents from
-    /// `~/.claude/projects/`, never on the poll.
+    /// Reconcile with existing tmux windows, run discovery, auto-restart if
+    /// enabled, then poll states every 3 seconds. Discovery re-runs only on
+    /// FSEvents from `~/.claude/projects/`, never on the poll.
     func start() {
         guard pollTask == nil else { return }
 
@@ -62,8 +88,7 @@ final class AppModel: ObservableObject {
         }
 
         pollTask = Task { [weak self] in
-            await self?.engine.reconcile()
-            await self?.runDiscovery()
+            await self?.initialSync()
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.engine.refreshAll()
@@ -79,54 +104,152 @@ final class AppModel: ObservableObject {
         watcher = nil
     }
 
+    private func initialSync() async {
+        pruneMissingWatchDirectories()
+        await engine.reconcile()
+        await pruneOrphanedRecords()
+        await runDiscovery()
+        if engine.settings.autoRestartOnLaunch {
+            await autoRestartStoppedAndDead()
+        }
+    }
+
+    /// Retention (launch only): a record whose transcript is gone and which has
+    /// no live window cannot be resumed — `claude --resume` would have nothing
+    /// to resume — so it is dropped instead of lingering as a dead Stopped row.
+    private func pruneOrphanedRecords() async {
+        let keep = Set(engine.liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty })
+        let store = engine.store
+        let discovery = engine.discovery
+        await Task.detached {
+            let transcripts = Set(discovery.transcriptIndex().keys)
+            // An empty index almost certainly means the projects root was
+            // unreadable, not that every transcript vanished — pruning on it
+            // would wipe every record. Skip; next launch retries.
+            guard !transcripts.isEmpty else { return }
+            store.pruneRecords(withoutTranscriptIn: transcripts, keeping: keep)
+        }.value
+    }
+
+    /// Section 8: a watch directory that no longer exists is skipped on scan
+    /// and removed from the settings list. Launch-time only, so a briefly
+    /// unmounted volume isn't forgotten mid-session.
+    private func pruneMissingWatchDirectories() {
+        var settings = engine.settings
+        let existing = settings.watchDirectories.filter {
+            FileManager.default.fileExists(atPath: SessionDiscovery.expandTilde($0))
+        }
+        guard existing.count != settings.watchDirectories.count else { return }
+        settings.watchDirectories = existing
+        engine.updateSettings(settings)
+    }
+
+    // MARK: - Onboarding (flows 6.1 / 6.2)
+
+    /// Called by the onboarding screen's "Start Scanning": persist the watch
+    /// directories, mark onboarding done, arm notifications, start the engine,
+    /// open the main window, and put up the import sheet if the scan found
+    /// unmanaged sessions.
+    func completeOnboarding(directories: [String]) {
+        var settings = engine.settings
+        settings.watchDirectories = directories
+        settings.onboardingComplete = true
+        engine.updateSettings(settings)
+        NotificationManager.shared.requestPermission()
+        Task {
+            start()
+            while !hasScanned {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            openMainWindow?()
+            presentImportSheetIfNeeded()
+        }
+    }
+
+    /// First-run import sheet (5.4): only when the scan surfaced unmanaged
+    /// sessions. Probes each candidate off-main for a live external process
+    /// and recent transcript activity (the Working/Idle badge).
+    func presentImportSheetIfNeeded() {
+        let candidates = rows.filter { $0.state == .unmanaged && !$0.uuid.isEmpty }
+        guard !candidates.isEmpty else { return }
+        Task {
+            let probed = await ImportFlowModel.probe(candidates: candidates,
+                                                     transcriptIndex: transcriptIndex)
+            guard !probed.isEmpty else { return }
+            importFlow = ImportFlowModel(items: probed, model: self)
+        }
+    }
+
     // MARK: - Discovery
 
     private func runDiscovery() async {
         discoveryGeneration += 1
         let generation = discoveryGeneration
         let discovery = engine.discovery
+        let store = engine.store
         let watchDirs = engine.settings.watchDirectories
         let metaCache = self.metaCache
         // Managed sessions' titles also come from their transcripts — snapshot
         // the uuids on the main actor before hopping off.
         let managedUUIDs = engine.liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty }
-        let (projects, index, meta) = await Task.detached {
-            () -> ([DiscoveredProject], [String: DiscoveredSession], [String: TranscriptMeta]) in
+        let (projects, index, meta, loadedRecords) = await Task.detached {
+            () -> ([DiscoveredProject], [String: DiscoveredSession],
+                   [String: TranscriptMeta], [SessionRecord]) in
             let projects = discovery.discover(watchDirectories: watchDirs)
             let index = discovery.transcriptIndex()
+            let records = store.loadRecords()
             var wanted = Set(managedUUIDs)
             for project in projects {
                 if let uuid = project.mostRecentSession?.uuid { wanted.insert(uuid) }
             }
+            for record in records { wanted.insert(record.uuid) }
             var meta: [String: TranscriptMeta] = [:]
             for uuid in wanted {
                 if let transcript = index[uuid] {
                     meta[uuid] = metaCache.meta(for: transcript)
                 }
             }
-            return (projects, index, meta)
+            return (projects, index, meta, records)
         }.value
         guard generation == discoveryGeneration else { return } // superseded
         unmanagedProjects = projects
         transcriptIndex = index
         metaByUUID = meta
+        records = loadedRecords
         if !hasScanned { hasScanned = true }
         rebuildRows()
     }
 
+    /// Reload records + states after a mutating action so the UI reflects it
+    /// immediately rather than on the next FSEvents/poll tick.
+    private func refreshAfterMutation() async {
+        let store = engine.store
+        records = await Task.detached { store.loadRecords() }.value
+        await engine.refreshAll()
+        rebuildRows()
+        await runDiscovery()
+    }
+
     // MARK: - Rows
 
-    /// Rebuild the immutable row models from engine state + discovery results.
-    /// A discovered project is unmanaged only when no live window matches it by
-    /// path or by session UUID (docs/CCORN_SPEC.md section 4, Unmanaged).
+    /// Rebuild the immutable row models from engine state + records +
+    /// discovery results. Precedence per project: a live managed window wins;
+    /// a persisted record renders as Stopped (or in Archived); only a project
+    /// with no window and no record at all is Unmanaged (docs/CCORN_SPEC.md
+    /// section 4).
     private func rebuildRows() {
         var built: [SessionRow] = []
+        var archived: [SessionRow] = []
         var managedPaths = Set<String>()
         var managedUUIDs = Set<String>()
+        let recordUUIDs = Set(records.map(\.uuid))
+        let now = Date()
 
+        var adoptedIds = Set<String>()
         for (windowId, live) in engine.liveSessions {
             let uuid = live.sessionUUID
             if !uuid.isEmpty { managedUUIDs.insert(uuid) }
+            if live.adopted { adoptedIds.insert(windowId) }
             let meta = uuid.isEmpty ? nil : metaByUUID[uuid]
             // A managed row must always resolve a directory: the record path
             // (set at start/resume/reconcile), else the transcript's cwd.
@@ -148,14 +271,42 @@ final class AppModel: ObservableObject {
                 path: path,
                 state: live.state,
                 remoteControlActive: live.remoteControlActive,
+                rcGraceExpired: now.timeIntervalSince(live.startedAt) > 30,
                 lastActive: lastActive
             ))
+        }
+
+        // Persisted records with no live window: Stopped rows (or Archived).
+        // A record whose uuid is currently managed is the same session — skip.
+        for record in records where !managedUUIDs.contains(record.uuid) {
+            let row = SessionRow(
+                id: "record:\(record.uuid)",
+                kind: .record,
+                title: Self.displayTitle(explicit: record.title,
+                                         aiTitle: metaByUUID[record.uuid]?.title,
+                                         path: record.path),
+                uuid: record.uuid,
+                path: record.path,
+                state: .stopped,
+                remoteControlActive: false,
+                archived: record.archived,
+                lastActive: transcriptIndex[record.uuid]?.modified
+            )
+            if record.archived {
+                archived.append(row)
+            } else {
+                built.append(row)
+            }
         }
 
         for project in unmanagedProjects {
             guard let path = project.resolvedPath else { continue }
             guard !managedPaths.contains(path) else { continue }
-            guard !project.sessions.contains(where: { managedUUIDs.contains($0.uuid) }) else { continue }
+            // Any session of this project that CCorn already knows — live or
+            // recorded — means the project is represented; not unmanaged.
+            guard !project.sessions.contains(where: {
+                managedUUIDs.contains($0.uuid) || recordUUIDs.contains($0.uuid)
+            }) else { continue }
             let uuid = project.mostRecentSession?.uuid ?? ""
             built.append(SessionRow(
                 id: "unmanaged:\(project.encodedKey)",
@@ -172,11 +323,45 @@ final class AppModel: ObservableObject {
         }
 
         built.sort { ($0.lastActive ?? .distantPast) > ($1.lastActive ?? .distantPast) }
+        archived.sort { ($0.lastActive ?? .distantPast) > ($1.lastActive ?? .distantPast) }
+
+        emitStateTransitions(built, adoptedIds: adoptedIds)
+
         // Publish only on real change: the 3s tick must not re-render an
         // unchanged popover + main window for the lifetime of the app.
         if built != rows { rows = built }
-        if let selection, !built.contains(where: { $0.id == selection }) {
+        if archived != archivedRows { archivedRows = archived }
+        if let selection,
+           !built.contains(where: { $0.id == selection }),
+           !archived.contains(where: { $0.id == selection }) {
             self.selection = nil
+        }
+        if let renamingRowId,
+           !built.contains(where: { $0.id == renamingRowId }),
+           !archived.contains(where: { $0.id == renamingRowId }) {
+            cancelRename()
+        }
+    }
+
+    /// Notification edges (5.10): fire only when a watched session
+    /// *transitions into* Waiting or Dead. Keyed by row id (the stable window
+    /// id for managed rows — uuid binding mid-run must not break continuity).
+    /// A session CCorn started this run gets a Running baseline, so a spawn
+    /// that lands directly on a trust/permission prompt still notifies; an
+    /// adopted (reconciled) or record row is first recorded silently —
+    /// whatever state it is first seen in is not a transition CCorn watched.
+    private func emitStateTransitions(_ rows: [SessionRow], adoptedIds: Set<String>) {
+        for row in rows where row.kind != .unmanaged {
+            let baseline: SessionState? =
+                (row.isManaged && !adoptedIds.contains(row.id)) ? .running : nil
+            let previous = stateMemory[row.id] ?? baseline
+            stateMemory[row.id] = row.state
+            guard let previous, previous != row.state else { continue }
+            if row.state == .waiting || row.state == .dead {
+                NotificationManager.shared.notify(sessionKey: row.id,
+                                                  title: row.title,
+                                                  state: row.state)
+            }
         }
     }
 
@@ -193,7 +378,7 @@ final class AppModel: ObservableObject {
         return "Session"
     }
 
-    // MARK: - Actions (milestone 2: read-only set)
+    // MARK: - Read-only actions
 
     /// No per-session URL exists (RUNTIME_FINDINGS C1): open the claude.ai/code
     /// session list; the user finds the session by its title.
@@ -224,5 +409,242 @@ final class AppModel: ObservableObject {
         guard !row.uuid.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(row.uuid, forType: .string)
+    }
+
+    // MARK: - New session (flow 6.3)
+
+    func newSession() {
+        closePopover?()
+        // The popover is reachable before onboarding completes; the app is
+        // not usable until a watch directory exists (5.3) — route there.
+        guard !onboardingNeeded else {
+            openMainWindow?()
+            return
+        }
+        guard let directory = Alerts.pickFolder(prompt: "Start Session") else { return }
+        let canonical = SessionDiscovery.canonicalize(directory)
+        let aliveHere = rows.contains {
+            $0.isManaged && $0.path == canonical
+                && [.running, .working, .waiting, .stale].contains($0.state)
+        }
+        if aliveHere {
+            guard Alerts.confirm(title: "This directory already has an active session",
+                                 message: "Start another session in \(canonical)?",
+                                 action: "Start Anyway") else { return }
+        }
+        Task {
+            let result = await engine.startNewSession(directory: directory)
+            handleStartResult(result, verb: "start")
+            await refreshAfterMutation()
+        }
+    }
+
+    /// Empty-state "Add Directory": grow the watch list directly.
+    func addWatchDirectory() {
+        guard let directory = Alerts.pickFolder(prompt: "Watch Directory") else { return }
+        var settings = engine.settings
+        guard !settings.watchDirectories.contains(directory) else { return } // silently ignore dup
+        settings.watchDirectories.append(directory)
+        engine.updateSettings(settings)
+        Task { await runDiscovery() }
+    }
+
+    /// Settings changed (watch dirs / threshold / toggles): persist + rescan.
+    func applySettings(_ settings: CCornSettings) {
+        engine.updateSettings(settings)
+        Task { await runDiscovery() }
+    }
+
+    // MARK: - Kill (flow 6.6)
+
+    func killSession(_ row: SessionRow) {
+        guard let windowId = row.windowId else { return }
+        guard Alerts.confirmKill(name: row.title) else { return }
+        Task {
+            await engine.killSession(windowId: windowId)
+            await refreshAfterMutation()
+        }
+    }
+
+    // MARK: - Restart (flow 6.7)
+
+    func restartSession(_ row: SessionRow) {
+        Task {
+            guard !row.path.isEmpty,
+                  FileManager.default.fileExists(atPath: row.path) else {
+                Alerts.info(title: "The project directory no longer exists.")
+                return
+            }
+            // The transcript must still exist or `claude --resume` has nothing
+            // to resume (section 8: "Session ID not found in JSONL files").
+            let discovery = engine.discovery
+            let uuid = row.uuid
+            let hasTranscript = await Task.detached {
+                !uuid.isEmpty && discovery.transcriptIndex()[uuid] != nil
+            }.value
+            guard hasTranscript else {
+                if Alerts.confirm(title: "Couldn't find session data.",
+                                  message: "Start a new session in this directory instead?",
+                                  action: "Start New Session") {
+                    // Tear the dead window down first or it lingers next to
+                    // the replacement as an orphaned Dead row.
+                    if let windowId = row.windowId {
+                        await engine.terminate(windowId: windowId)
+                    }
+                    let result = await engine.startNewSession(directory: row.path)
+                    handleStartResult(result, verb: "start")
+                    await refreshAfterMutation()
+                }
+                return
+            }
+            let result = await engine.restartSession(uuid: uuid,
+                                                     directory: row.path,
+                                                     replacingWindowId: row.windowId)
+            handleStartResult(result, verb: "restart")
+            await refreshAfterMutation()
+        }
+    }
+
+    // MARK: - Archive / unarchive (flow 6.9)
+
+    func archiveSession(_ row: SessionRow) {
+        let isAlive = [.running, .working, .waiting, .stale].contains(row.state)
+        if isAlive {
+            guard Alerts.confirm(title: "This session is still running.",
+                                 message: "Archive and stop it?",
+                                 action: "Archive") else { return }
+        }
+        Task {
+            await engine.archiveSession(uuid: row.uuid, windowId: row.windowId)
+            await refreshAfterMutation()
+        }
+    }
+
+    func unarchiveSession(_ row: SessionRow) {
+        Task {
+            await engine.unarchiveSession(uuid: row.uuid)
+            await refreshAfterMutation()
+        }
+    }
+
+    // MARK: - Import single unmanaged session (flow 6.10)
+
+    func importSession(_ row: SessionRow) {
+        guard !row.uuid.isEmpty, !row.path.isEmpty else { return }
+        guard Alerts.confirm(
+            title: "Import this session?",
+            message: "CCorn will take over this session. Your existing terminal window will stop working.",
+            action: "Import") else { return }
+        Task {
+            let result = await engine.importSession(uuid: row.uuid, directory: row.path)
+            handleStartResult(result, verb: "import")
+            await refreshAfterMutation()
+        }
+    }
+
+    /// Import sheet dismissed (Skip for Now / Close).
+    func importFlowFinished() {
+        importFlow = nil
+        Task { await refreshAfterMutation() }
+    }
+
+    /// The sequential import finished (sheet still up on "All done"): refresh
+    /// rows behind the sheet so the main window already shows the imported
+    /// sessions with correct dots.
+    func importDidMutateSessions() {
+        Task { await refreshAfterMutation() }
+    }
+
+    // MARK: - Rename (flow 6.8)
+
+    func beginRename(_ row: SessionRow) {
+        renamingRowId = row.id
+        renameError = nil
+        renameInFlight = false
+    }
+
+    func cancelRename() {
+        renamingRowId = nil
+        renameError = nil
+        renameInFlight = false
+    }
+
+    /// Enter: empty or unchanged cancels; otherwise `/rename` + window rename +
+    /// persist, with the inline duplicate-name error path (5.8).
+    func commitRename(_ row: SessionRow, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != row.title else {
+            cancelRename()
+            return
+        }
+        renameInFlight = true
+        renameError = nil
+        Task {
+            let result = await engine.renameSession(windowId: row.windowId,
+                                                    uuid: row.uuid,
+                                                    to: trimmed)
+            renameInFlight = false
+            switch result {
+            case .ok:
+                cancelRename()
+                await refreshAfterMutation()
+            case .failed:
+                renameError = "That name is already taken"
+            }
+        }
+    }
+
+    // MARK: - Auto-restart on launch (flow 6.11)
+
+    /// Sequentially restart every stopped/dead session: dead live windows
+    /// first, then stopped records. Sessions whose directory or transcript is
+    /// gone are skipped silently (they surface their alerts when restarted
+    /// manually instead — a launch must not open a stack of modals).
+    private func autoRestartStoppedAndDead() async {
+        let discovery = engine.discovery
+        let index = await Task.detached { discovery.transcriptIndex() }.value
+
+        let dead = engine.liveSessions.filter { $0.value.state == .dead }
+        for (windowId, live) in dead {
+            let uuid = live.sessionUUID
+            let path = live.record.path
+            guard !uuid.isEmpty, index[uuid] != nil,
+                  !path.isEmpty, FileManager.default.fileExists(atPath: path) else { continue }
+            _ = await engine.restartSession(uuid: uuid, directory: path,
+                                            replacingWindowId: windowId)
+            rebuildRows()
+        }
+
+        let liveUUIDs = Set(engine.liveSessions.values.map(\.sessionUUID))
+        for record in records where !record.archived && !liveUUIDs.contains(record.uuid) {
+            guard index[record.uuid] != nil,
+                  !record.path.isEmpty,
+                  FileManager.default.fileExists(atPath: record.path) else { continue }
+            _ = await engine.restartSession(uuid: record.uuid, directory: record.path)
+            rebuildRows()
+        }
+        await refreshAfterMutation()
+    }
+
+    #if DEBUG
+    /// Verification hook (DebugCommandChannel): reload records + rows after a
+    /// scripted engine mutation, same path the real actions use.
+    func debugRefresh() async {
+        await refreshAfterMutation()
+    }
+    #endif
+
+    // MARK: - Result handling
+
+    private func handleStartResult(_ result: StartResult, verb: String) {
+        switch result {
+        case .started:
+            break
+        case .windowCreatedNoProcess:
+            Alerts.info(title: "Claude Code didn't \(verb)",
+                        message: "No claude process appeared. Make sure Claude Code is installed and authenticated (run `claude` in a terminal; use /login if prompted).")
+        case let .failed(reason):
+            Alerts.info(title: "Could not \(verb) the session", message: reason)
+        }
     }
 }

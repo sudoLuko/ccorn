@@ -1,32 +1,37 @@
 import SwiftUI
 
 /// Main app window (docs/CCORN_SPEC.md section 5.1): NavigationSplitView with a
-/// 200px fixed sidebar and the session list. Semantic colors only — the window
-/// follows system appearance.
+/// 200px fixed sidebar and the session list (All Sessions or Archived).
+/// Semantic colors only — the window follows system appearance. Also hosts the
+/// first-run import sheet (5.4).
 struct MainWindowView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
         NavigationSplitView {
-            SidebarView()
+            SidebarView(model: model, nav: $model.sidebarNav)
                 .navigationSplitViewColumnWidth(200)
         } detail: {
-            SessionListView(model: model)
+            SessionListView(model: model, archived: model.sidebarNav == .archived)
         }
         .frame(minWidth: 720, minHeight: 480)
+        .sheet(item: $model.importFlow) { flow in
+            ImportSheetView(flow: flow)
+        }
     }
 }
 
-/// Left sidebar: wordmark, New Session button, SESSIONS nav, pinned settings
-/// gear. No borders between items — hierarchy through indentation and weight
-/// only. New Session / Archived / Settings are milestone-3 surfaces: present
-/// but disabled.
-private struct SidebarView: View {
-    private enum NavItem: Hashable {
-        case allSessions
-    }
+enum SidebarNav: Hashable {
+    case allSessions
+    case archived
+}
 
-    @State private var selection: NavItem? = .allSessions
+/// Left sidebar: wordmark, New Session button, SESSIONS nav (All Sessions +
+/// indented Archived), pinned settings gear. No borders between items —
+/// hierarchy through indentation and weight only.
+private struct SidebarView: View {
+    @ObservedObject var model: AppModel
+    @Binding var nav: SidebarNav
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -44,7 +49,9 @@ private struct SidebarView: View {
             .padding(.top, 10)
             .padding(.bottom, 8)
 
-            Button {} label: {
+            Button {
+                model.newSession()
+            } label: {
                 Label {
                     Text("New Session")
                         .font(.subheadline.weight(.medium))
@@ -53,26 +60,24 @@ private struct SidebarView: View {
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundColor(.primary)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(true)
-            .opacity(0.4)
             .padding(.horizontal, 12)
             .padding(.bottom, 4)
 
-            List(selection: $selection) {
+            List(selection: Binding(get: { nav as SidebarNav? },
+                                    set: { nav = $0 ?? .allSessions })) {
                 Section {
                     Text("All Sessions")
-                        .font(.subheadline.weight(selection == .allSessions ? .medium : .regular))
+                        .font(.subheadline.weight(nav == .allSessions ? .medium : .regular))
                         .foregroundColor(.primary)
-                        .tag(NavItem.allSessions)
-                    // Archived view ships in milestone 3 — indented, inert.
+                        .tag(SidebarNav.allSessions)
                     Text("Archived")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.leading, 12)
-                        .opacity(0.5)
-                        .selectionDisabled()
+                        .tag(SidebarNav.archived)
                 } header: {
                     Text("Sessions")
                         .font(.caption)
@@ -85,29 +90,36 @@ private struct SidebarView: View {
 
             Spacer(minLength: 0)
 
-            Button {} label: {
-                Image(systemName: "gear")
-                    .font(.system(size: 16))
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            .disabled(true)
-            .opacity(0.4)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            settingsButton
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
         }
     }
-}
 
-/// `.selectionDisabled()` exists only on macOS 14+; on 13 an untagged row is
-/// simply not selectable, so this is a no-op shim.
-private extension View {
+    /// Gear opens the Settings scene. `SettingsLink` is the supported way on
+    /// macOS 14+; 13 falls back to the legacy responder-chain selector.
     @ViewBuilder
-    func selectionDisabled() -> some View {
+    private var settingsButton: some View {
         if #available(macOS 14.0, *) {
-            self.selectionDisabled(true)
+            SettingsLink {
+                gearLabel
+            }
+            .buttonStyle(.plain)
         } else {
-            self
+            Button {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            } label: {
+                gearLabel
+            }
+            .buttonStyle(.plain)
         }
+    }
+
+    private var gearLabel: some View {
+        Image(systemName: "gear")
+            .font(.system(size: 16))
+            .foregroundColor(.secondary)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Settings")
     }
 }

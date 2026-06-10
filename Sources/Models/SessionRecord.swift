@@ -37,7 +37,20 @@ struct SessionRecord: Codable, Identifiable, Equatable {
 /// see `detectionInput()` / `apply(_:)`.
 @MainActor
 final class LiveSession: ObservableObject {
-    let record: SessionRecord
+    /// Mutable: identity binding rewrites it once the session UUID is learned,
+    /// and rename updates the title. Persisting it is the engine's job.
+    @Published var record: SessionRecord
+
+    /// When CCorn started (or adopted) this session. Drives the 30s grace
+    /// before "remote control not active" shows a warning indicator
+    /// (docs/CCORN_SPEC.md section 8).
+    let startedAt = Date()
+
+    /// True when this session was adopted from an existing tmux window at
+    /// launch (reconcile) rather than started by CCorn in this run. Adopted
+    /// sessions get no notification baseline: whatever state they are first
+    /// seen in is not a transition CCorn watched happen.
+    let adopted: Bool
 
     @Published var windowId: String?
     @Published var ccornTag: String?
@@ -57,13 +70,15 @@ final class LiveSession: ObservableObject {
          ccornTag: String? = nil,
          pid: Int32? = nil,
          state: SessionState = .stopped,
-         remoteControlActive: Bool = false) {
+         remoteControlActive: Bool = false,
+         adopted: Bool = false) {
         self.record = record
         self.windowId = windowId
         self.ccornTag = ccornTag
         self.pid = pid
         self.state = state
         self.remoteControlActive = remoteControlActive
+        self.adopted = adopted
     }
 
     /// The session UUID detection should resolve the transcript by: the tmux

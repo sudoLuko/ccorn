@@ -28,6 +28,10 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: CCorn
+        # Versions flow from the build settings (xcodegen regenerates this
+        # plist, so hand-edits there do not survive).
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "13.0"
         # NSAppleEventsUsageDescription is the TCC string shown the first time the
         # app automates Terminal. Keep it even in the shell.
@@ -60,9 +64,13 @@ targets:
       - path: Sources/Engine/CommandRunner.swift
       - path: Sources/Engine/TranscriptMetaCache.swift
       - path: Sources/Engine/ClaudeSessionRegistry.swift
+      - path: Sources/Engine/SessionEngine.swift
+      - path: Sources/Engine/SessionStore.swift
+      - path: Sources/Engine/UnmanagedClaudeFinder.swift
       - path: Sources/Models/SessionState.swift
       - path: Sources/Models/SessionRecord.swift
       - path: Sources/Models/Discovery.swift
+      - path: Sources/Models/CCornSettings.swift
 schemes:
   CCorn:
     build:

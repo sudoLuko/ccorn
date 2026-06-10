@@ -27,12 +27,22 @@ final class SessionEngine: ObservableObject {
     nonisolated let store = SessionStore()
     nonisolated let runner = CommandRunner.shared
 
-    private(set) var settings: CCornSettings
+    @Published private(set) var settings: CCornSettings
     /// Keyed by tmux window id.
     @Published private(set) var liveSessions: [String: LiveSession] = [:]
 
     init(settings: CCornSettings? = nil) {
         self.settings = settings ?? SessionStore.shared.loadSettings()
+    }
+
+    /// Apply + persist new settings. The poll picks up the stale threshold on
+    /// its next tick; re-running discovery for new watch dirs is the caller's
+    /// concern (AppModel).
+    func updateSettings(_ newSettings: CCornSettings) {
+        guard newSettings != settings else { return }
+        settings = newSettings
+        let store = self.store
+        Task.detached { store.saveSettings(newSettings) }
     }
 
     // MARK: - Dependency checks
@@ -245,6 +255,163 @@ final class SessionEngine: ObservableObject {
         await ProcessControl.terminate(pid: pid)
     }
 
+    /// Kill a managed session (flow 6.6): learn its identity if still unknown
+    /// (last chance — the registry file goes stale once the process dies), and
+    /// persist the record so the row survives as Stopped, then run the
+    /// canonical kill-window → SIGTERM → SIGKILL routine. Returns the session
+    /// UUID ("" when it never became known; nothing persists, the row simply
+    /// disappears — there is nothing to resume).
+    @discardableResult
+    func killSession(windowId: String) async -> String {
+        var uuid = ""
+        if let live = liveSessions[windowId] {
+            uuid = live.sessionUUID
+            let pid = live.pid
+            if uuid.isEmpty, let pid {
+                uuid = await Task.detached {
+                    ClaudeSessionRegistry.info(forPid: pid)?.sessionId ?? ""
+                }.value
+            }
+            if !uuid.isEmpty {
+                let record = live.record
+                let store = self.store
+                let frozen = uuid
+                await Task.detached {
+                    store.mergeRecord(uuid: frozen,
+                                      path: record.path.isEmpty ? nil : record.path,
+                                      title: record.title.isEmpty ? nil : record.title)
+                }.value
+            }
+        }
+        await terminate(windowId: windowId)
+        return uuid
+    }
+
+    /// Restart a dead or stopped session (flow 6.7): tear down any window still
+    /// holding the session first — a crashed claude leaves its window and shell
+    /// behind, and resuming next to it would orphan a dead window plus create a
+    /// `-2` duplicate — then `claude --resume <uuid> --rc` in a fresh window.
+    func restartSession(uuid: String, directory: String,
+                        replacingWindowId: String? = nil) async -> StartResult {
+        var doomed = Set<String>()
+        if let replacingWindowId { doomed.insert(replacingWindowId) }
+        for (windowId, live) in liveSessions where live.sessionUUID == uuid {
+            doomed.insert(windowId)
+        }
+        for windowId in doomed { liveSessions[windowId] = nil }
+        let tmux = self.tmux
+        await Task.detached {
+            for windowId in doomed { tmux.killWindow(windowId: windowId) }
+            // A window tagged with this uuid from a previous run, unknown to
+            // liveSessions (e.g. reconcile skipped it mid-kill).
+            if let lingering = tmux.window(forCcornId: uuid) {
+                tmux.killWindow(windowId: lingering.windowId)
+            }
+        }.value
+        return await resumeSession(uuid: uuid, directory: directory)
+    }
+
+    /// Import an unmanaged session (flows 6.2 / 6.10): SIGTERM → 5s → SIGKILL
+    /// the external claude process running the session (if any — matched by
+    /// session UUID via the pid registry, else by working directory), then
+    /// resume it under CCorn with remote control on.
+    func importSession(uuid: String, directory: String) async -> StartResult {
+        await Task.detached {
+            if let external = UnmanagedClaudeFinder.find(inDirectory: directory,
+                                                         sessionId: uuid) {
+                await ProcessControl.terminate(pid: external.pid)
+            }
+        }.value
+        return await resumeSession(uuid: uuid, directory: directory)
+    }
+
+    // MARK: - Rename
+
+    enum RenameResult: Sendable, Equatable {
+        case ok
+        case failed(String)
+    }
+
+    /// Rename (flow 6.8). A live session gets Claude's native `/rename`, typed
+    /// into the TUI — NOT shell-quoted: the pane's foreground process is the
+    /// claude TUI, not a shell, so quotes would become part of the name. The
+    /// pane is then watched ~3s for an error render (e.g. a duplicate name);
+    /// only new text that wasn't visible before the rename counts. On success
+    /// the tmux window name follows and the title is persisted as the display
+    /// title. Dead/stopped sessions have no claude to tell — the title is
+    /// persisted locally only (it becomes the `--rc`-style explicit title).
+    func renameSession(windowId: String?, uuid: String, to newName: String) async -> RenameResult {
+        let live = windowId.flatMap { liveSessions[$0] }
+        let isLive = live.map { [.running, .working, .waiting, .stale].contains($0.state) } ?? false
+        let tmux = self.tmux
+
+        let result: RenameResult = await Task.detached {
+            if let windowId, isLive {
+                let before = tmux.capturePane(windowId: windowId)
+                tmux.sendCommand(windowId: windowId, "/rename \(newName)")
+                for _ in 0..<6 {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 6 × 500ms = 3s
+                    let after = tmux.capturePane(windowId: windowId)
+                    if let error = Self.renameError(before: before, after: after) {
+                        return .failed(error)
+                    }
+                }
+            }
+            if let windowId {
+                tmux.renameWindow(windowId: windowId, to: tmux.uniqueWindowName(from: newName))
+            }
+            return .ok
+        }.value
+
+        if result == .ok {
+            live?.record.title = newName
+            if !uuid.isEmpty {
+                let store = self.store
+                Task.detached { store.mergeRecord(uuid: uuid, title: newName) }
+            }
+        }
+        return result
+    }
+
+    /// Error text newly rendered since the rename was sent, if any. Matches
+    /// only rename-shaped failures — generic words like "error" would
+    /// false-positive on session content that happens to stream in the window.
+    nonisolated static func renameError(before: String, after: String) -> String? {
+        let markers = ["already taken", "already exists", "unknown command", "rename failed"]
+        let beforeLines = Set(before.split(whereSeparator: \.isNewline))
+        for line in after.split(whereSeparator: \.isNewline) where !beforeLines.contains(line) {
+            let lowered = line.lowercased()
+            if markers.contains(where: { lowered.contains($0) }) {
+                return line.trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Archive
+
+    /// Archive (flow 6.9): a running session is killed first (the caller has
+    /// already confirmed), then the record is flagged. The killSession step
+    /// persists the record, so the flag always has something to land on.
+    func archiveSession(uuid: String, windowId: String?) async {
+        var uuid = uuid
+        if let windowId, liveSessions[windowId] != nil {
+            let killed = await killSession(windowId: windowId)
+            if uuid.isEmpty { uuid = killed }
+        }
+        guard !uuid.isEmpty else { return }
+        let store = self.store
+        let frozen = uuid
+        await Task.detached { store.mergeRecord(uuid: frozen, archived: true) }.value
+    }
+
+    /// Unarchive: the session reappears in All Sessions as Stopped (flow 6.9).
+    func unarchiveSession(uuid: String) async {
+        guard !uuid.isEmpty else { return }
+        let store = self.store
+        await Task.detached { store.mergeRecord(uuid: uuid, archived: false) }.value
+    }
+
     // MARK: - Discovery
 
     func discoverProjects() async -> [DiscoveredProject] {
@@ -269,7 +436,61 @@ final class SessionEngine: ObservableObject {
     /// `detect` is mtime-cached per session. All of it runs off-main; results
     /// are applied back on the main actor.
     func refreshAll(now: Date = Date()) async {
+        await bindUnknownIdentities()
         await refresh(jobs: detectionJobs(), now: now)
+    }
+
+    /// Bind live sessions whose UUID is still unknown. startNewSession binds at
+    /// spawn when it can, but a trust prompt in a new directory delays claude's
+    /// registry write past that window (verified live) — so this retries on
+    /// every refresh tick until the file appears, then tags the window and
+    /// persists the record exactly once. Costs one small JSON read per still-
+    /// unbound session and nothing when all sessions are bound.
+    private func bindUnknownIdentities() async {
+        struct Job: Sendable {
+            let windowId: String
+            let pid: Int32
+        }
+        let jobs: [Job] = liveSessions.compactMap { windowId, live in
+            guard live.sessionUUID.isEmpty, let pid = live.pid else { return nil }
+            return Job(windowId: windowId, pid: pid)
+        }
+        guard !jobs.isEmpty else { return }
+
+        let tmux = self.tmux
+        let found = await Task.detached { () -> [String: ClaudeSessionRegistry.Info] in
+            var out: [String: ClaudeSessionRegistry.Info] = [:]
+            for job in jobs {
+                if let info = ClaudeSessionRegistry.info(forPid: job.pid) {
+                    tmux.setCcornId(windowId: job.windowId, uuid: info.sessionId)
+                    out[job.windowId] = info
+                }
+            }
+            return out
+        }.value
+        guard !found.isEmpty else { return }
+
+        let store = self.store
+        for (windowId, info) in found {
+            guard let live = liveSessions[windowId], live.sessionUUID.isEmpty else { continue }
+            // Registry files linger for dead pids; a recycled pid could pair
+            // our claude with a stale file describing a different session.
+            // The cwd is the cheap incarnation check: when both sides are
+            // known and disagree, leave the session unbound for this tick.
+            if let cwd = info.cwd, !live.record.path.isEmpty,
+               SessionDiscovery.canonicalize(cwd) != live.record.path {
+                continue
+            }
+            live.ccornTag = info.sessionId
+            let path = live.record.path.isEmpty
+                ? info.cwd.map(SessionDiscovery.canonicalize) ?? ""
+                : live.record.path
+            let record = SessionRecord(uuid: info.sessionId, path: path,
+                                       title: live.record.title,
+                                       archived: live.record.archived)
+            live.record = record
+            Task.detached { store.upsert(record) }
+        }
     }
 
     /// Re-detect state for one live session.
@@ -406,7 +627,8 @@ final class SessionEngine: ObservableObject {
         for item in reconciled {
             let live = LiveSession(record: item.record,
                                    windowId: item.window.windowId,
-                                   ccornTag: item.record.uuid.isEmpty ? nil : item.record.uuid)
+                                   ccornTag: item.record.uuid.isEmpty ? nil : item.record.uuid,
+                                   adopted: true)
             live.apply(item.result)
             liveSessions[item.window.windowId] = live
         }

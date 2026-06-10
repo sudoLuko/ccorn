@@ -6,16 +6,25 @@ import Foundation
 /// re-derived on launch (see docs/CCORN_SPEC.md "Session Record" / "Launch Reconciliation").
 ///
 /// @unchecked Sendable: all reads and writes are serialized through `queue`.
-// TODO(M3): retention policy — session records grow without bound (nothing is
-// ever pruned). Decide an archived/aged-out pruning rule during M3 polish.
+///
+/// Retention: records whose transcript no longer exists (and which have no
+/// live window) are pruned at launch — `claude --resume` would have nothing to
+/// resume, so the record is dead weight (see AppModel.pruneOrphanedRecords).
 final class SessionStore: @unchecked Sendable {
     static let shared = SessionStore()
 
     private let fileManager = FileManager.default
     private let queue = DispatchQueue(label: "studio.ccorn.store")
+    /// Test override; nil in normal app use.
+    private let supportDirOverride: URL?
 
-    /// `~/Library/Application Support/CCorn`
+    init(supportDir: URL? = nil) {
+        self.supportDirOverride = supportDir
+    }
+
+    /// `~/Library/Application Support/CCorn` (or the test override).
     var supportDir: URL {
+        if let supportDirOverride { return supportDirOverride }
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent("Library/Application Support")
@@ -66,6 +75,42 @@ final class SessionStore: @unchecked Sendable {
                 records.append(record)
             }
             saveRecordsLocked(records)
+        }
+    }
+
+    /// Read-modify-write one record (created if absent) in a single critical
+    /// section. nil parameters leave the existing field untouched, so a caller
+    /// that only knows part of a session's identity can't clobber the rest.
+    func mergeRecord(uuid: String,
+                     path: String? = nil,
+                     title: String? = nil,
+                     archived: Bool? = nil) {
+        guard !uuid.isEmpty else { return }
+        queue.sync {
+            var records = loadRecordsLocked()
+            var record = records.first { $0.uuid == uuid }
+                ?? SessionRecord(uuid: uuid, path: "", title: "")
+            if let path { record.path = path }
+            if let title { record.title = title }
+            if let archived { record.archived = archived }
+            if let idx = records.firstIndex(where: { $0.uuid == uuid }) {
+                records[idx] = record
+            } else {
+                records.append(record)
+            }
+            saveRecordsLocked(records)
+        }
+    }
+
+    /// Drop records for sessions that can no longer be resumed. `keep` is the
+    /// set of UUIDs that must survive regardless (live windows).
+    func pruneRecords(withoutTranscriptIn transcripts: Set<String>, keeping keep: Set<String>) {
+        queue.sync {
+            let records = loadRecordsLocked()
+            let kept = records.filter { transcripts.contains($0.uuid) || keep.contains($0.uuid) }
+            if kept.count != records.count {
+                saveRecordsLocked(kept)
+            }
         }
     }
 

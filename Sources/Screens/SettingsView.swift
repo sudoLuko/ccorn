@@ -1,0 +1,183 @@
+import SwiftUI
+import ServiceManagement
+
+/// Settings (docs/CCORN_SPEC.md 5.5): single screen, three Form sections, no
+/// tabs. Lives in the SwiftUI `Settings` scene, so it renders as a native
+/// preferences window automatically.
+struct SettingsView: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject var engine: SessionEngine
+
+    /// Mirrors SMAppService.mainApp; the toggle is the UI for the system state.
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    init(model: AppModel) {
+        self.model = model
+        self.engine = model.engine
+    }
+
+    /// Stale threshold options (5.5): 1, 2, 4, 8, 24 hours.
+    private static let thresholdOptions: [TimeInterval] = [3600, 7200, 14400, 28800, 86400]
+
+    var body: some View {
+        Form {
+            watchDirectoriesSection
+            behaviorSection
+            aboutSection
+        }
+        .formStyle(.grouped)
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear(perform: snapLegacyThreshold)
+    }
+
+    /// A hand-edited or pre-picker value (e.g. the old 600s default) would
+    /// display as the nearest option while the engine kept the raw value —
+    /// misleading. Persist the snap once so display and behavior agree.
+    private func snapLegacyThreshold() {
+        let snapped = Self.nearestThreshold(engine.settings.staleThresholdSeconds)
+        guard snapped != engine.settings.staleThresholdSeconds else { return }
+        var settings = engine.settings
+        settings.staleThresholdSeconds = snapped
+        model.applySettings(settings)
+    }
+
+    // MARK: Section 1 — Watch Directories
+
+    private var watchDirectoriesSection: some View {
+        Section("Watch Directories") {
+            ForEach(engine.settings.watchDirectories, id: \.self) { dir in
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text((dir as NSString).abbreviatingWithTildeInPath)
+                        .font(.subheadline.monospaced())
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Button {
+                        removeDirectory(dir)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove \(dir)")
+                }
+            }
+
+            Button {
+                addDirectory()
+            } label: {
+                Text("+ Add Directory")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.primary)
+            }
+            .buttonStyle(.plain)
+
+            Text("CCorn scans these folders for Claude Code sessions")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    /// Remove with the warning alert (5.5). Watch directories scope discovery
+    /// only, so the rows that actually hide are the *unmanaged* ones under the
+    /// directory — sessions CCorn manages (or has records for) stay listed.
+    private func removeDirectory(_ dir: String) {
+        let canonical = SessionDiscovery.canonicalize(SessionDiscovery.expandTilde(dir))
+        let hidden = model.rows.filter {
+            $0.state == .unmanaged && !$0.path.isEmpty
+                && SessionDiscovery.isPath($0.path, inside: canonical)
+        }.count
+        let display = (dir as NSString).abbreviatingWithTildeInPath
+        guard Alerts.confirm(
+            title: "Remove \(display)?",
+            message: "This will hide \(hidden) session\(hidden == 1 ? "" : "s") from the list. Sessions will continue running in the background.",
+            action: "Remove",
+            destructive: true) else { return }
+        var settings = engine.settings
+        settings.watchDirectories.removeAll { $0 == dir }
+        model.applySettings(settings)
+    }
+
+    /// Duplicates silently ignored (section 8).
+    private func addDirectory() {
+        guard let dir = Alerts.pickFolder(prompt: "Add Directory") else { return }
+        var settings = engine.settings
+        guard !settings.watchDirectories.contains(dir) else { return }
+        settings.watchDirectories.append(dir)
+        model.applySettings(settings)
+    }
+
+    // MARK: Section 2 — Behavior
+
+    private var behaviorSection: some View {
+        Section("Behavior") {
+            Toggle("Launch at login", isOn: $launchAtLogin)
+                .onChange(of: launchAtLogin) { enabled in
+                    do {
+                        if enabled {
+                            try SMAppService.mainApp.register()
+                        } else {
+                            try SMAppService.mainApp.unregister()
+                        }
+                    } catch {
+                        // Revert the toggle; the system state is the truth.
+                        launchAtLogin = SMAppService.mainApp.status == .enabled
+                        Alerts.info(title: "Could not update Login Items",
+                                    message: error.localizedDescription)
+                    }
+                }
+
+            Toggle("Auto-restart sessions on launch", isOn: Binding(
+                get: { engine.settings.autoRestartOnLaunch },
+                set: { value in
+                    var settings = engine.settings
+                    settings.autoRestartOnLaunch = value
+                    model.applySettings(settings)
+                }
+            ))
+
+            Picker("Stale session threshold", selection: Binding(
+                get: { Self.nearestThreshold(engine.settings.staleThresholdSeconds) },
+                set: { value in
+                    var settings = engine.settings
+                    settings.staleThresholdSeconds = value
+                    model.applySettings(settings)
+                }
+            )) {
+                Text("1 hour").tag(TimeInterval(3600))
+                Text("2 hours").tag(TimeInterval(7200))
+                Text("4 hours").tag(TimeInterval(14400))
+                Text("8 hours").tag(TimeInterval(28800))
+                Text("24 hours").tag(TimeInterval(86400))
+            }
+        }
+    }
+
+    /// A persisted value from an older build may not be one of the options;
+    /// the picker shows the nearest so the selection is never blank.
+    private static func nearestThreshold(_ value: TimeInterval) -> TimeInterval {
+        thresholdOptions.min { abs($0 - value) < abs($1 - value) } ?? 3600
+    }
+
+    // MARK: Section 3 — About
+
+    private var aboutSection: some View {
+        Section("About") {
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                as? String ?? "—"
+            Text("Version \(version)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Link("View on GitHub",
+                 destination: URL(string: "https://github.com/sudoLuko/ccorn")!)
+                .font(.caption)
+                .foregroundColor(.accentColor)
+        }
+    }
+}
