@@ -94,4 +94,36 @@ import Testing
     @Test func noRemoteAggregatesAboveNonActiveStates() {
         #expect(StatusPresentation.aggregate([.stopped, .unmanaged, .noRemote]) == .noRemote)
     }
+
+    // MARK: Popover triage (attention / calm split)
+
+    /// The popover's attention tier is exactly waiting plus the broken trio;
+    /// running/working/stale/stopped collapse behind the quiet disclosure,
+    /// and unmanaged is ambient (neither tier).
+    @Test func attentionTierMembership() {
+        for needy: StatusPresentation in [.waiting, .noRemote, .needsAuth, .crashed] {
+            #expect(needy.needsAttention)
+        }
+        for calm: StatusPresentation in [.running, .working, .stale, .stopped, .unmanaged] {
+            #expect(!calm.needsAttention)
+        }
+    }
+
+    /// Attention rows order by the aggregate severity ladder, worst first —
+    /// the popover sorts its attention section with exactly this key.
+    @Test func attentionOrderFollowsSeverityLadder() {
+        let sorted: [StatusPresentation] = [.waiting, .crashed, .noRemote, .needsAuth]
+            .sorted { ($0.aggregateSeverity ?? 0) > ($1.aggregateSeverity ?? 0) }
+        #expect(sorted == [.crashed, .needsAuth, .noRemote, .waiting])
+    }
+
+    /// All-clear: a calm-only set never aggregates into the attention tier,
+    /// so the popover header keeps a calm dot (never the symbol) while the
+    /// body shows the all-clear line.
+    @Test func calmOnlyAggregateStaysCalm() {
+        let worst = StatusPresentation.aggregate([.running, .working, .stale, .stopped])
+        #expect(worst == .stale)
+        #expect(worst?.needsAttention == false)
+        #expect(worst?.isBroken == false)
+    }
 }

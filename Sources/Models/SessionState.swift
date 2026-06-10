@@ -77,6 +77,17 @@ enum StatusPresentation: String, Equatable {
         }
     }
 
+    /// The popover's triage tier: true when the session needs the user — the
+    /// broken trio plus waiting (blocked on input). The calm states (running,
+    /// working, stale, stopped) collapse behind the popover's quiet
+    /// disclosure; unmanaged is ambient and belongs to neither tier.
+    var needsAttention: Bool {
+        switch self {
+        case .waiting, .noRemote, .needsAuth, .crashed: return true
+        case .running, .working, .stale, .stopped, .unmanaged: return false
+        }
+    }
+
     /// Severity rank for the menu-bar aggregate mark (higher = worse). The
     /// broken tier tops the ladder — crashed (terminal) > sign-in > no-remote
     /// (degraded, slotted next to sign-in) — so a broken-tier worst shows the

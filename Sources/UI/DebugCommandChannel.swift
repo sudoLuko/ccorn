@@ -20,12 +20,13 @@ import SwiftUI
 ///   archive <dir> | unarchive <dir>
 ///   onboard <dir> [dir...]    -> completeOnboarding
 ///   onboarddir <dir>          -> add a directory to the onboarding card (gate check)
+///   popovercalm               -> toggle the popover's calm disclosure (triage)
 ///   stale <seconds>           -> set stale threshold
 ///   importsheet               -> presentImportSheetIfNeeded
 ///   counters                  -> JSON of DebugLife gauges + memory (shakedown)
 ///   pids                      -> windowId:pid map of live sessions (shakedown)
 ///   watch <dir> | unwatch <dir> -> add/remove a watch directory (applySettings)
-///   seed [empty|working]      -> stop the poll, stage curated rows (DebugStage)
+///   seed [empty|working|calm] -> stop the poll, stage curated rows (DebugStage)
 ///   appearance <light|dark|system> -> override NSApp.appearance
 ///   show <main|popover>       -> open a surface for screenshots
 ///   shoot <target> <path>     -> PNG of a window (main/popover/settings/onboarding/sheet/key)
@@ -129,6 +130,11 @@ final class DebugCommandChannel {
             model.completeOnboarding(directories: Array(parts[1...]))
             return "onboarding \(Array(parts[1...]))"
 
+        case "popovercalm":
+            // Scripted click on the popover's calm disclosure (expand/collapse).
+            NotificationCenter.default.post(name: PopoverView.debugToggleCalm, object: nil)
+            return "popovercalm toggled"
+
         case "onboarddir" where parts.count >= 2:
             // Scripted stand-in for the onboarding NSOpenPanel: verifies the
             // Start Scanning disabled->enabled gate without a modal.
@@ -221,6 +227,11 @@ final class DebugCommandChannel {
                 let rows = DebugStage.seedWorkingHeavyRows()
                 model.debugSeed(rows: rows, archived: [])
                 return "seeded working \(rows.count)"
+            }
+            if parts.count >= 2, parts[1] == "calm" {
+                let rows = DebugStage.seedCalmRows()
+                model.debugSeed(rows: rows, archived: [])
+                return "seeded calm \(rows.count)"
             }
             let seeded = DebugStage.seedRows()
             model.debugSeed(rows: seeded.all, archived: seeded.archived)

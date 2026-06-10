@@ -165,6 +165,49 @@ enum DebugStage {
         return rows
     }
 
+    /// All-clear set: only calm sessions (working/running/stale/stopped), no
+    /// attention tier — exercises the popover's all-clear line and its calm
+    /// disclosure without attention rows above it.
+    static func seedCalmRows(now: Date = Date()) -> [SessionRow] {
+        func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
+        let home = NSHomeDirectory()
+        var rows: [SessionRow] = [
+            SessionRow(id: "@971", kind: .managed(windowId: "@971"),
+                       title: "ccorn polish pass",
+                       uuid: "eeeeeeee-0000-4000-8000-000000000001",
+                       path: "\(home)/dev/ccorn",
+                       state: .working, remoteControlActive: true,
+                       lastActive: ago(20)),
+            SessionRow(id: "@972", kind: .managed(windowId: "@972"),
+                       title: "Mella landing page",
+                       uuid: "eeeeeeee-0000-4000-8000-000000000002",
+                       path: "\(home)/dev/mella",
+                       state: .running, remoteControlActive: true,
+                       lastActive: ago(9 * 60)),
+            SessionRow(id: "@973", kind: .managed(windowId: "@973"),
+                       title: "Checkout flow revamp",
+                       uuid: "eeeeeeee-0000-4000-8000-000000000003",
+                       path: "\(home)/dev/shop",
+                       state: .running, remoteControlActive: true,
+                       lastActive: ago(25 * 60)),
+            SessionRow(id: "@974", kind: .managed(windowId: "@974"),
+                       title: "Data pipeline",
+                       uuid: "eeeeeeee-0000-4000-8000-000000000004",
+                       path: "\(home)/dev/etl",
+                       state: .stale, remoteControlActive: true,
+                       lastActive: ago(5 * 3600)),
+            SessionRow(id: "record:eeeeeeee-0000-4000-8000-000000000005",
+                       kind: .record,
+                       title: "Spike: rate limiter",
+                       uuid: "eeeeeeee-0000-4000-8000-000000000005",
+                       path: "\(home)/dev/limiter",
+                       state: .stopped, remoteControlActive: false,
+                       lastActive: ago(2 * 86_400)),
+        ]
+        rows.sort { ($0.lastActive ?? .distantPast) > ($1.lastActive ?? .distantPast) }
+        return rows
+    }
+
     // MARK: - Window screenshots
 
     /// Render a window's full frame (title bar included) to a PNG via

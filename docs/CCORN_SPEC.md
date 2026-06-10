@@ -405,19 +405,34 @@ Triggered by clicking the CCorn icon in the macOS menu bar. Fixed dark zinc rega
 **Header (32px):**
 
 - Brand lockup: corn emoji + “CCorn” wordmark — `.title3` semibold `#FAFAFA` left (matches the sidebar header)
-- Aggregate status dot far right: reflects the worst state across all sessions, using the severity order red (dead) > yellow (waiting) > orange (stale) > blue (working) > green (running). Waiting outranks Stale because a waiting session is blocked on the user. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
+- Aggregate status mark far right: reflects the worst presentation across all sessions, severity order crashed > sign-in > no-remote > waiting > stale > working > running (waiting outranks stale because a waiting session is blocked on the user). A broken-tier worst renders the exclamation symbol colored by severity (amber recoverable, red terminal); otherwise the worst state's dot. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
 - 0.5px divider below — `#27272A`
 
-**Session list:**
+**Session list — triage layout:**
 
-- Each row 32px, 8px left/right padding
-- Status dot 7px left
-- 8px gap
-- Session name — `.subheadline` medium `#FAFAFA`
-- Last active — `.caption` `#71717A` far right
-- Click anywhere on row → opens claude.ai/code for that session in default browser
-- Hover: `#18181B` background
-- Max ~8 sessions before scrolling
+The popover is a triage surface, not a mirror of the dashboard: it answers
+"does anything need me" first and summarizes the rest. The split is
+popover-local — the main window keeps its full recency-ordered list.
+
+- Attention section, top: sessions whose presentation needs the user —
+  Waiting (Needs input), Sign in, No remote, Crashed — as individual rows,
+  sorted worst-first by the aggregate severity ladder (crashed > sign-in >
+  no-remote > waiting), recency as tiebreak
+- Calm section, below: running/working/stale/stopped sessions are NOT listed
+  individually by default; they collapse behind one disclosure row showing a
+  count ("5 quiet", chevron left), which expands on click to the full
+  recency-ordered calm list. Collapsed by default on every popover open.
+- All-clear: with no attention sessions, the disclosure row doubles as the
+  all-clear line — "All clear" (`.subheadline` medium `#FAFAFA`) + "N quiet"
+  (`.caption` `#71717A`) — and the header aggregate shows its calm dot
+- Row anatomy unchanged: 32px rows, 8px left/right padding, status mark in
+  the fixed slot left, 8px gap, session name `.subheadline` medium `#FAFAFA`,
+  attention word after the name, last active `.caption` `#71717A` far right
+- Click anywhere on a session row → opens claude.ai/code in default browser
+- Hover: `#18181B` background (rows and the disclosure row)
+- Size budget: width stays 280; the list region caps at 8 rows × 32px before
+  scrolling. Attention rows + the collapsed disclosure fit unscrolled in the
+  common case; expanding the calm list is what scrolls.
 - 0.5px dividers `#27272A`
 
 **Footer (36px):**
