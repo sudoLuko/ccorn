@@ -134,20 +134,20 @@ struct SessionListView: View {
 }
 
 /// Centered empty state (docs/CCORN_SPEC.md 5.6; 5.9 for the archived view,
-/// which gets the illustration and title but no action buttons). The corn-cob
-/// outline plus the tagline are the one place CCorn's identity shows.
+/// which gets the mark and title but no action buttons). The corn emoji plus
+/// the tagline are the one place CCorn's identity shows (review item 3: the
+/// emoji is the in-app mark; vector assets are reserved for the app icon and
+/// menu-bar glyph).
 private struct EmptyStateView: View {
     @ObservedObject var model: AppModel
     var archived = false
 
     var body: some View {
         VStack(spacing: 0) {
-            CornCobShape()
-                .stroke(Color.secondary, style: StrokeStyle(lineWidth: 1.5,
-                                                            lineCap: .round,
-                                                            lineJoin: .round))
-                .frame(width: 48, height: 48)
+            Text("🌽")
+                .font(.system(size: 40))
                 .padding(.bottom, 16)
+                .accessibilityHidden(true)
 
             Text(archived ? "No archived sessions" : "No sessions found")
                 .font(.title3.weight(.medium))

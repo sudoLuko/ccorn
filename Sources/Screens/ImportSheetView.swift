@@ -195,31 +195,3 @@ private struct ImportRowView: View {
             .cornerRadius(4)
     }
 }
-
-/// Primary-action filled button (Color.primary fill, knockout text) shared by
-/// the sheet, onboarding, and the empty state.
-struct FilledButton: View {
-    let title: String
-    var disabled = false
-    var fullWidth = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                // Knockout text on the primary fill: dark-on-light in dark
-                // mode, light-on-dark in light mode. Color.white would vanish
-                // on the white fill dark mode produces.
-                .foregroundColor(Color(.windowBackgroundColor))
-                .padding(.horizontal, 14)
-                .frame(height: 28)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
-                .background(Color.primary)
-                .cornerRadius(6)
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.4 : 1)
-    }
-}

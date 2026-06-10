@@ -71,24 +71,34 @@ struct SessionRow: Identifiable, Equatable {
         return nil
     }
 
-    /// Alive states get the warning indicator when remote control has not
-    /// come up within the activation grace window (docs/CCORN_SPEC.md
-    /// section 4, "Warning indicator visual"; section 8, 30s activation).
-    /// needsAuth is excluded: it carries its own key indicator — sign-in is
-    /// the problem, missing remote control is just its consequence.
-    var needsAttention: Bool {
-        switch state {
-        case .running, .working, .waiting, .stale:
-            return !remoteControlActive && rcGraceExpired
-        case .needsAuth, .dead, .stopped, .unmanaged:
-            return false
-        }
+    /// The one status mark this row shows (review item 1: one mark per row).
+    /// Folds the remote-control condition — alive but RC inactive past the
+    /// 30s activation grace, the old warning-overlay rule — into the mark as
+    /// No remote; needsAuth/dead/stopped/unmanaged keep their own
+    /// presentations.
+    var presentation: StatusPresentation {
+        StatusPresentation.resolve(state: state,
+                                   remoteControlActive: remoteControlActive,
+                                   rcGraceExpired: rcGraceExpired)
     }
 
-    /// Tooltip for the remote-control warning indicator: the CLI's
-    /// plan-restriction line when one was captured, else the generic reason.
-    var attentionTooltip: String {
-        rcPlanNotice ?? "Remote control is not active on this session"
+    /// Tooltip for the status mark. No remote keeps its existing text — the
+    /// CLI's captured plan-restriction line when there is one, else the
+    /// generic reason — with the underlying activity appended (the mark no
+    /// longer shows it). Sign-in leads with the CLI's own login line.
+    var statusTooltip: String {
+        switch presentation {
+        case .noRemote:
+            let reason = rcPlanNotice ?? "Remote control is not active on this session"
+            let activity = StatusPresentation.resolve(state: state,
+                                                      remoteControlActive: true,
+                                                      rcGraceExpired: false)
+            return "\(reason) — session is \(activity.displayName.lowercased())"
+        case .needsAuth:
+            return authNotice ?? "Claude Code is not signed in"
+        default:
+            return presentation.displayName
+        }
     }
 
     /// Home-relative display form of `path` ("~/dev/ccorn").

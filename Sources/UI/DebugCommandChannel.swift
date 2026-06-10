@@ -19,12 +19,13 @@ import SwiftUI
 ///   import <dir>              -> importSession for the unmanaged row
 ///   archive <dir> | unarchive <dir>
 ///   onboard <dir> [dir...]    -> completeOnboarding
+///   onboarddir <dir>          -> add a directory to the onboarding card (gate check)
 ///   stale <seconds>           -> set stale threshold
 ///   importsheet               -> presentImportSheetIfNeeded
 ///   counters                  -> JSON of DebugLife gauges + memory (shakedown)
 ///   pids                      -> windowId:pid map of live sessions (shakedown)
 ///   watch <dir> | unwatch <dir> -> add/remove a watch directory (applySettings)
-///   seed                      -> stop the poll, stage curated rows (DebugStage)
+///   seed [empty|working]      -> stop the poll, stage curated rows (DebugStage)
 ///   appearance <light|dark|system> -> override NSApp.appearance
 ///   show <main|popover>       -> open a surface for screenshots
 ///   shoot <target> <path>     -> PNG of a window (main/popover/settings/onboarding/sheet/key)
@@ -128,6 +129,13 @@ final class DebugCommandChannel {
             model.completeOnboarding(directories: Array(parts[1...]))
             return "onboarding \(Array(parts[1...]))"
 
+        case "onboarddir" where parts.count >= 2:
+            // Scripted stand-in for the onboarding NSOpenPanel: verifies the
+            // Start Scanning disabled->enabled gate without a modal.
+            NotificationCenter.default.post(name: OnboardingView.debugAddDirectory,
+                                            object: parts[1])
+            return "onboarddir \(parts[1])"
+
         case "stale" where parts.count >= 2:
             guard let seconds = TimeInterval(parts[1]) else { return "err bad-secs" }
             var settings = model.engine.settings
@@ -208,6 +216,11 @@ final class DebugCommandChannel {
             if parts.count >= 2, parts[1] == "empty" {
                 model.debugSeed(rows: [], archived: [])
                 return "seeded empty"
+            }
+            if parts.count >= 2, parts[1] == "working" {
+                let rows = DebugStage.seedWorkingHeavyRows()
+                model.debugSeed(rows: rows, archived: [])
+                return "seeded working \(rows.count)"
             }
             let seeded = DebugStage.seedRows()
             model.debugSeed(rows: seeded.all, archived: seeded.archived)

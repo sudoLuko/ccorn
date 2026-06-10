@@ -77,10 +77,12 @@ final class AppModel: ObservableObject {
         self.engine = engine
     }
 
-    /// The popover header's aggregate dot: worst active state across all rows,
-    /// nil (empty/outline dot) when no session has an active color.
-    var aggregateState: SessionState? {
-        SessionState.aggregate(rows.map(\.state))
+    /// The popover header's aggregate mark: worst presentation across all
+    /// rows (same per-row resolution the lists use, so a broken-tier worst
+    /// shows the warning symbol), nil (empty/outline dot) when no session has
+    /// an active color.
+    var aggregatePresentation: StatusPresentation? {
+        StatusPresentation.aggregate(rows.map(\.presentation))
     }
 
     /// Sessions CCorn manages (live windows + stopped records) — the primary

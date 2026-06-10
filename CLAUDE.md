@@ -38,7 +38,7 @@ Native macOS menu-bar app. Swift/SwiftUI. Manages Claude Code sessions in tmux. 
 - SF Pro Text only; SF Mono for directory paths via `.monospaced()`.
 - Two font weights only: regular (400) and medium (500).
 - 0.5px borders only, never 1px. No shadows, gradients, or decorative elements.
-- Status dots are the only color in the app.
+- Status marks are the only color in the app: every row shows exactly one mark — a colored dot for routine states, or the single `exclamationmark.triangle.fill` (amber recoverable / red terminal) for the broken trio (sign-in, no-remote, crashed). Never both, never any other status glyph.
 - The menu-bar popover is fixed dark (#09090B) regardless of system appearance; the main window follows system appearance via semantic colors.
 
 ## Activation policy

@@ -90,23 +90,29 @@ import Testing
         #expect(TmuxController.shellQuote("'") == "''\\'''")
     }
 
-    // MARK: Aggregate-dot severity ordering
+    // MARK: Aggregate-mark severity ordering
 
-    @Test func aggregatePicksWorstActiveState() {
-        // Full severity ladder: dead > waiting > stale > working > running.
-        #expect(SessionState.aggregate([.running, .working, .stale, .waiting, .dead]) == .dead)
+    @Test func aggregatePicksWorstPresentation() {
+        // Full ladder: crashed > needsAuth > noRemote > waiting > stale >
+        // working > running (broken tier on top).
+        #expect(StatusPresentation.aggregate(
+            [.running, .working, .stale, .waiting, .noRemote, .needsAuth, .crashed]) == .crashed)
+        #expect(StatusPresentation.aggregate(
+            [.running, .working, .stale, .waiting, .noRemote, .needsAuth]) == .needsAuth)
+        #expect(StatusPresentation.aggregate(
+            [.running, .working, .stale, .waiting, .noRemote]) == .noRemote)
         // Waiting outranks Stale (a waiting session is blocked on the user).
-        #expect(SessionState.aggregate([.running, .working, .stale, .waiting]) == .waiting)
-        #expect(SessionState.aggregate([.running, .working, .stale]) == .stale)
-        #expect(SessionState.aggregate([.running, .working]) == .working)
-        #expect(SessionState.aggregate([.running, .running]) == .running)
+        #expect(StatusPresentation.aggregate([.running, .working, .stale, .waiting]) == .waiting)
+        #expect(StatusPresentation.aggregate([.running, .working, .stale]) == .stale)
+        #expect(StatusPresentation.aggregate([.running, .working]) == .working)
+        #expect(StatusPresentation.aggregate([.running, .running]) == .running)
     }
 
     @Test func aggregateIgnoresNonActiveStates() {
         // No active color -> nil (caller shows the empty/outline dot).
-        #expect(SessionState.aggregate([.stopped, .unmanaged]) == nil)
-        #expect(SessionState.aggregate([]) == nil)
+        #expect(StatusPresentation.aggregate([.stopped, .unmanaged]) == nil)
+        #expect(StatusPresentation.aggregate([]) == nil)
         // Non-active states don't dilute the worst active one.
-        #expect(SessionState.aggregate([.stopped, .unmanaged, .running]) == .running)
+        #expect(StatusPresentation.aggregate([.stopped, .unmanaged, .running]) == .running)
     }
 }

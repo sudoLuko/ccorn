@@ -31,22 +31,26 @@ struct PopoverView: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(PopoverPalette.primaryText)
             Spacer()
-            aggregateDot
+            aggregateMark
         }
         .frame(height: 32)
         .padding(.horizontal, 8)
     }
 
-    /// Worst state across all sessions; empty/outline dot when no session has
-    /// an active color.
+    /// Worst presentation across all sessions — same resolution as the rows,
+    /// so a broken-tier worst shows the exclamation symbol colored by
+    /// severity, not a dot. Empty/outline dot when no session has an active
+    /// color.
     @ViewBuilder
-    private var aggregateDot: some View {
-        if let state = model.aggregateState {
-            StatusDot(state: state, stoppedOutline: PopoverPalette.stoppedOutline)
+    private var aggregateMark: some View {
+        if let presentation = model.aggregatePresentation {
+            StatusMark(presentation: presentation,
+                       stoppedOutline: PopoverPalette.stoppedOutline)
         } else {
             Circle()
                 .strokeBorder(PopoverPalette.stoppedOutline, lineWidth: 0.5)
                 .frame(width: 7, height: 7)
+                .frame(width: StatusMark.slotWidth)
         }
     }
 
@@ -103,6 +107,7 @@ struct PopoverView: View {
                 Circle()
                     .strokeBorder(StatusPalette.unmanagedOutline, lineWidth: 0.5)
                     .frame(width: 7, height: 7)
+                    .frame(width: StatusMark.slotWidth)
                 Text("\(model.unmanagedRows.count) discovered, not managed")
                     .font(.caption)
                     .foregroundColor(PopoverPalette.secondaryText)
@@ -153,8 +158,9 @@ struct PopoverView: View {
     }
 }
 
-/// One popover row: dot, name, last-active. Click anywhere opens the browser
-/// (claude.ai/code); hover highlights #18181B.
+/// One popover row: the same single status mark as the main window (dot or
+/// warning symbol, fixed slot), name, attention word, last-active. Click
+/// anywhere opens the browser (claude.ai/code); hover highlights #18181B.
 private struct PopoverRowView: View {
     let row: SessionRow
     let action: () -> Void
@@ -163,17 +169,18 @@ private struct PopoverRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            RowStatusIndicator(state: row.state,
+            RowStatusIndicator(presentation: row.presentation,
                                stoppedOutline: PopoverPalette.stoppedOutline)
+                .help(row.statusTooltip)
             Text(row.title)
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(PopoverPalette.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            if let label = row.state.attentionLabel {
+            if let label = row.presentation.attentionLabel {
                 Text(label)
                     .font(.caption)
-                    .foregroundColor(row.state.labelColor)
+                    .foregroundColor(row.presentation.labelColor)
                     .lineLimit(1)
                     .fixedSize()
             }

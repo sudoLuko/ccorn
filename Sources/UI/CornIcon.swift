@@ -1,10 +1,11 @@
 import AppKit
-import SwiftUI
 
 /// CCorn's corn-cob mark, drawn in code (no asset pipeline): one stroked
 /// outline geometry — tilted cob, kernel-row lines, two husk blades — rendered
-/// as a template NSImage for the menu bar and as SwiftUI `Shape`s for in-window
-/// use (sidebar wordmark, empty state). Stroke-built like an SF Symbol.
+/// as a template NSImage for the menu bar. This vector mark exists ONLY for
+/// the places a color emoji cannot go (the menu-bar template glyph and,
+/// eventually, the app icon); everywhere in-window the brand mark is the corn
+/// emoji (review item 3).
 ///
 /// The mark is an OUTLINE on purpose: a filled corn silhouette with no kernel
 /// detail is ambiguous at small sizes (it reads as a microphone upright, a
@@ -83,21 +84,4 @@ enum CornIcon {
         image.accessibilityDescription = "CCorn"
         return image
     }()
-}
-
-/// The small corn mark for in-window use (sidebar wordmark, ~16px). Stroke it:
-/// `.stroke(Color.primary, lineWidth: 1)` — kernel cross-lines are omitted at
-/// this size.
-struct CornMarkShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path(CornIcon.cornPath(in: rect, crossLines: false))
-    }
-}
-
-/// Full-detail outline corn cob for the empty state (~48px, stroked, no fill) —
-/// the one place CCorn's identity shows (docs/CCORN_SPEC.md section 5.6).
-struct CornCobShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path(CornIcon.cornPath(in: rect, crossLines: true))
-    }
 }

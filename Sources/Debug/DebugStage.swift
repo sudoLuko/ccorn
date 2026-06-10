@@ -11,8 +11,10 @@ enum DebugStage {
 
     // MARK: - Seed data
 
-    /// A realistic mix: managed sessions across all states (the attention
-    /// states included), a few unmanaged discoveries, and an archived pair.
+    /// A realistic mix covering every presentation: routine dots (working,
+    /// waiting, running, stale, stopped), the full broken trio (sign-in,
+    /// no-remote — one generic, one with the captured plan notice — and
+    /// crashed), a few unmanaged discoveries, and an archived pair.
     static func seedRows(now: Date = Date()) -> (all: [SessionRow], archived: [SessionRow]) {
         func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
         let home = NSHomeDirectory()
@@ -43,12 +45,22 @@ enum DebugStage {
                        path: "\(home)/dev/mella",
                        state: .running, remoteControlActive: true,
                        lastActive: ago(22 * 60)),
+            // Presents as No remote (alive + RC inactive past the grace).
             SessionRow(id: "@905", kind: .managed(windowId: "@905"),
                        title: "Release scripts",
                        uuid: "aaaaaaaa-0000-4000-8000-000000000005",
                        path: "\(home)/dev/release-tools",
                        state: .running, remoteControlActive: false,
                        lastActive: ago(35 * 60)),
+            // No remote with the captured plan-restriction notice (tooltip),
+            // underlying activity Working.
+            SessionRow(id: "@908", kind: .managed(windowId: "@908"),
+                       title: "Infra terraform",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000009",
+                       path: "\(home)/dev/infra",
+                       state: .working, remoteControlActive: false,
+                       lastActive: ago(8 * 60),
+                       rcPlanNotice: "Remote Control is not available on your plan. Upgrade to enable it."),
             SessionRow(id: "@906", kind: .managed(windowId: "@906"),
                        title: "Data pipeline",
                        uuid: "aaaaaaaa-0000-4000-8000-000000000006",
@@ -110,7 +122,47 @@ enum DebugStage {
                        lastActive: ago(40 * 86_400)),
         ]
 
-        return (managed + unmanaged, archived)
+        // Same sort the real rebuild applies (most recent first) — debugSeed
+        // bypasses rebuildRows, so unsorted seeds would render unsorted.
+        let all = (managed + unmanaged)
+            .sorted { ($0.lastActive ?? .distantPast) > ($1.lastActive ?? .distantPast) }
+        return (all, archived)
+    }
+
+    /// Working-heavy set: several Working rows at once so the optional
+    /// working-dot breath can be judged in motion (review item 1, "Process"),
+    /// with one waiting and one running row as contrast.
+    static func seedWorkingHeavyRows(now: Date = Date()) -> [SessionRow] {
+        func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
+        let home = NSHomeDirectory()
+        let working: [(String, String)] = [
+            ("ccorn polish pass", "ccorn"),
+            ("Checkout flow revamp", "shop"),
+            ("Auth service refactor", "auth-service"),
+            ("Data pipeline", "etl"),
+            ("Docs site rebuild", "docs"),
+        ]
+        var rows = working.enumerated().map { index, item in
+            SessionRow(id: "@95\(index)", kind: .managed(windowId: "@95\(index)"),
+                       title: item.0,
+                       uuid: "dddddddd-0000-4000-8000-00000000000\(index)",
+                       path: "\(home)/dev/\(item.1)",
+                       state: .working, remoteControlActive: true,
+                       lastActive: ago(TimeInterval(10 + index * 40)))
+        }
+        rows.append(SessionRow(id: "@958", kind: .managed(windowId: "@958"),
+                               title: "Mella landing page",
+                               uuid: "dddddddd-0000-4000-8000-000000000008",
+                               path: "\(home)/dev/mella",
+                               state: .waiting, remoteControlActive: true,
+                               lastActive: ago(5 * 60)))
+        rows.append(SessionRow(id: "@959", kind: .managed(windowId: "@959"),
+                               title: "Release scripts",
+                               uuid: "dddddddd-0000-4000-8000-000000000009",
+                               path: "\(home)/dev/release-tools",
+                               state: .running, remoteControlActive: true,
+                               lastActive: ago(12 * 60)))
+        return rows
     }
 
     // MARK: - Window screenshots
