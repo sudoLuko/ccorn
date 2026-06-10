@@ -1,18 +1,23 @@
 import SwiftUI
 
-/// Column layout shared by the header row and session rows so they stay
-/// aligned. NAME and DIRECTORY flex equally; the rest are fixed.
+/// Trailing fixed-width columns shared by every row so the right edge stays
+/// aligned. NAME and DIRECTORY flex equally.
 enum SessionColumns {
-    static let status: CGFloat = 92
     static let lastActive: CGFloat = 88
     static let actions: CGFloat = 28
 }
 
-/// Main panel: column headers + session rows, or the empty state
-/// (docs/CCORN_SPEC.md sections 5.1, 5.6, and 5.9 for the archived variant).
+/// Main panel (docs/CCORN_SPEC.md sections 5.1, 5.6, 5.9). Managed sessions
+/// are the primary content and render first, with no chrome above them — the
+/// sidebar already names the view. Unmanaged sessions discovered on the system
+/// are ambient context: they sit below a collapsible DISCOVERED divider,
+/// visibly de-emphasized, so a glance lands on your sessions first.
 struct SessionListView: View {
     @ObservedObject var model: AppModel
     var archived = false
+
+    /// Collapsed state of the DISCOVERED section, persisted across launches.
+    @AppStorage("discoveredSectionCollapsed") private var discoveredCollapsed = false
 
     /// Debug-only (CCORN_DEBUG_UI contains "empty"): force the empty state so
     /// the corn-cob identity moment can be verified without clearing real
@@ -20,13 +25,17 @@ struct SessionListView: View {
     private let forceEmpty =
         ProcessInfo.processInfo.environment["CCORN_DEBUG_UI"]?.contains("empty") == true
 
-    private var rows: [SessionRow] {
-        archived ? model.archivedRows : model.rows
+    private var managedRows: [SessionRow] {
+        archived ? model.archivedRows : model.managedRows
+    }
+
+    private var discoveredRows: [SessionRow] {
+        archived ? [] : model.unmanagedRows
     }
 
     var body: some View {
         Group {
-            if (model.hasScanned && rows.isEmpty) || forceEmpty {
+            if (model.hasScanned && managedRows.isEmpty && discoveredRows.isEmpty) || forceEmpty {
                 EmptyStateView(model: model, archived: archived)
             } else {
                 list
@@ -37,51 +46,96 @@ struct SessionListView: View {
     }
 
     private var list: some View {
-        VStack(spacing: 0) {
-            headerRow
-            Rectangle()
-                .fill(Color(.separatorColor))
-                .frame(height: 0.5)
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(rows) { row in
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if managedRows.isEmpty {
+                    noManagedHint
+                } else {
+                    ForEach(managedRows) { row in
                         SessionRowView(row: row, model: model)
-                        Rectangle()
-                            .fill(Color(.separatorColor))
-                            .frame(height: 0.5)
+                        rowDivider
                     }
                 }
-                .animation(.default, value: rows.map(\.id))
+
+                if !discoveredRows.isEmpty {
+                    discoveredHeader
+                    if !discoveredCollapsed {
+                        ForEach(discoveredRows) { row in
+                            SessionRowView(row: row, model: model)
+                            rowDivider
+                        }
+                    }
+                }
             }
+            .padding(.top, 4)
+            .animation(.easeInOut(duration: 0.2),
+                       value: (managedRows + discoveredRows).map(\.id))
         }
     }
 
-    /// 28px column header row: NAME — STATUS — DIRECTORY — LAST ACTIVE — (actions).
-    private var headerRow: some View {
-        HStack(spacing: 12) {
-            Text("Name")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Status")
-                .frame(width: SessionColumns.status, alignment: .leading)
-            Text("Directory")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Last Active")
-                .frame(width: SessionColumns.lastActive, alignment: .trailing)
-            Color.clear
-                .frame(width: SessionColumns.actions, height: 1)
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(Color(.separatorColor))
+            .frame(height: 0.5)
+            .padding(.leading, 16)
+    }
+
+    /// Divider between your sessions and ambient discovery. Click to collapse;
+    /// the chevron and count keep the collapsed state legible.
+    private var discoveredHeader: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                discoveredCollapsed.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text("Discovered")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                Text("\(discoveredRows.count)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .opacity(0.7)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .rotationEffect(.degrees(discoveredCollapsed ? -90 : 0))
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 28)
+            .contentShape(Rectangle())
         }
-        .font(.caption2)
-        .foregroundColor(.secondary)
-        .textCase(.uppercase)
-        .padding(.leading, 16)
-        .padding(.trailing, 16)
-        .frame(height: 28)
-        .background(Color(.controlBackgroundColor))
+        .buttonStyle(.plain)
+        .padding(.top, managedRows.isEmpty ? 0 : 12)
+        .help("Sessions found on this Mac that CCorn doesn't manage yet")
+    }
+
+    /// Managed list is empty but discovery found sessions: a quiet inline
+    /// hint, not the full empty state — the discovered rows below are the
+    /// likely next step.
+    private var noManagedHint: some View {
+        VStack(spacing: 8) {
+            Text("No sessions yet")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.primary)
+            Text("Start a new session, or import one below")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            FilledButton(title: "New Session") {
+                model.newSession()
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
     }
 }
 
 /// Centered empty state (docs/CCORN_SPEC.md 5.6; 5.9 for the archived view,
-/// which gets the illustration and title but no action buttons).
+/// which gets the illustration and title but no action buttons). The corn-cob
+/// outline plus the tagline are the one place CCorn's identity shows.
 private struct EmptyStateView: View {
     @ObservedObject var model: AppModel
     var archived = false
@@ -100,7 +154,11 @@ private struct EmptyStateView: View {
                 .foregroundColor(.primary)
                 .padding(.bottom, 8)
 
-            if !archived {
+            if archived {
+                Text("Sessions you archive are kept here")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            } else {
                 Text("Add a watch directory or start a new Claude Code session")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -129,6 +187,12 @@ private struct EmptyStateView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .padding(.bottom, 24)
+
+                Text("All your kernels, one cob.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .opacity(0.7)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

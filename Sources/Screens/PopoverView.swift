@@ -52,15 +52,18 @@ struct PopoverView: View {
 
     // MARK: Session list
 
+    /// Managed sessions only — the popover is the at-a-glance surface for
+    /// *your* sessions. Unmanaged discoveries are ambient context and live in
+    /// the main window; here they collapse to a one-line count.
     @ViewBuilder
     private var sessionList: some View {
-        if model.rows.isEmpty {
+        if model.managedRows.isEmpty {
             Text("No sessions")
                 .font(.caption)
                 .foregroundColor(PopoverPalette.secondaryText)
                 .frame(maxWidth: .infinity)
                 .frame(height: rowHeight * 2)
-        } else if model.rows.count > maxVisibleRows {
+        } else if model.managedRows.count > maxVisibleRows {
             ScrollView(showsIndicators: false) {
                 rowsStack
             }
@@ -68,11 +71,15 @@ struct PopoverView: View {
         } else {
             rowsStack
         }
+        if !model.unmanagedRows.isEmpty {
+            divider
+            discoveredHint
+        }
     }
 
     private var rowsStack: some View {
         VStack(spacing: 0) {
-            ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
+            ForEach(Array(model.managedRows.enumerated()), id: \.element.id) { index, row in
                 if index > 0 {
                     divider
                 }
@@ -83,6 +90,30 @@ struct PopoverView: View {
                 .frame(height: rowHeight)
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: model.managedRows.map(\.id))
+    }
+
+    /// Quiet pointer to the main window for unmanaged discoveries.
+    private var discoveredHint: some View {
+        Button {
+            model.closePopover?()
+            model.openMainWindow?()
+        } label: {
+            HStack(spacing: 8) {
+                Circle()
+                    .strokeBorder(StatusPalette.unmanagedOutline, lineWidth: 0.5)
+                    .frame(width: 7, height: 7)
+                Text("\(model.unmanagedRows.count) discovered, not managed")
+                    .font(.caption)
+                    .foregroundColor(PopoverPalette.secondaryText)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open CCorn to import them")
     }
 
     // MARK: Footer (36px)
@@ -132,12 +163,20 @@ private struct PopoverRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            StatusDot(state: row.state, stoppedOutline: PopoverPalette.stoppedOutline)
+            RowStatusIndicator(state: row.state,
+                               stoppedOutline: PopoverPalette.stoppedOutline)
             Text(row.title)
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(PopoverPalette.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
+            if let label = row.state.attentionLabel {
+                Text(label)
+                    .font(.caption)
+                    .foregroundColor(row.state.labelColor)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
             Spacer(minLength: 8)
             Text(LastActiveFormat.string(from: row.lastActive))
                 .font(.caption)

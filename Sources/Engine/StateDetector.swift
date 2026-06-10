@@ -42,6 +42,12 @@ struct DetectionResult: Sendable {
     var lastPaneHash: String?
     var lastHashChange: Date?
     var rcCache: BridgeSessionCache
+    /// The CLI's own auth-error line when the pane shows a login prompt
+    /// (docs/CCORN_SPEC.md section 8: surface the CLI's text, not a canned string).
+    var authNotice: String?
+    /// The CLI's own line when remote control failed for plan/credential
+    /// reasons (section 8's plan-restriction alert).
+    var rcPlanNotice: String?
 }
 
 /// Caches the bridge-session transcript check so the 3s refresh hot path does
@@ -121,6 +127,33 @@ struct StateDetector: Sendable {
     /// substrings. `\b` keeps "approved"/"approval" from matching.
     static let waitingWordPattern = #"\bapprove\b"#
 
+    /// Login-prompt phrases (docs/CCORN_SPEC.md section 8, "User not
+    /// authenticated"). Anchored to whole UI/error renders — the login picker,
+    /// the OAuth flow, and the invalid-credential errors — never a bare
+    /// "/login", which could appear in ordinary conversation text. A session
+    /// matching one of these is blocked on sign-in, which is a different
+    /// problem than Waiting (needs input): it gets its own state so the row
+    /// and the notification say "sign in", not "Claude needs your input".
+    static let authPhrases = [
+        "Select login method",
+        "Please run /login",
+        "Invalid API key",
+        "OAuth token expired",
+        "OAuth token revoked",
+        "Paste code here if prompted",
+        "use the url below to sign in",
+        "Press Enter to open your browser and sign in",
+    ]
+
+    /// Remote-control plan/credential failure phrases (section 8's
+    /// plan-restriction alert). Matched as a pane *line* containing
+    /// "remote control" plus a failure word, so the stable footer string
+    /// `Remote Control active` can never trip it.
+    static let rcPlanFailureWords = [
+        "not available", "not supported", "requires", "unavailable",
+        "upgrade", "not enabled", "disabled by", "failed",
+    ]
+
     /// How long a freshly created window may sit without a `claude` child before
     /// it is reported Dead instead of "still spawning" (node installs can take
     /// several seconds to exec).
@@ -159,6 +192,42 @@ struct StateDetector: Sendable {
         }
         return pane.range(of: Self.waitingWordPattern,
                           options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// The CLI's auth-error/login line if the pane shows a login prompt, nil
+    /// otherwise. Returns the matched line (trimmed of TUI box-drawing and
+    /// whitespace) so the alert can surface Claude Code's own words.
+    func authNotice(pane: String) -> String? {
+        for line in pane.split(whereSeparator: \.isNewline) {
+            if let phrase = Self.authPhrases.first(where: {
+                line.localizedCaseInsensitiveContains($0)
+            }) {
+                let cleaned = Self.cleanTUILine(line)
+                return cleaned.isEmpty ? phrase : cleaned
+            }
+        }
+        return nil
+    }
+
+    /// The CLI's remote-control failure line, if the pane reports that remote
+    /// control could not be enabled for plan/credential reasons.
+    func rcPlanNotice(pane: String) -> String? {
+        for line in pane.split(whereSeparator: \.isNewline) {
+            guard line.localizedCaseInsensitiveContains("remote control"),
+                  !line.contains(Self.remoteControlMarker) else { continue }
+            if Self.rcPlanFailureWords.contains(where: {
+                line.localizedCaseInsensitiveContains($0)
+            }) {
+                return Self.cleanTUILine(line)
+            }
+        }
+        return nil
+    }
+
+    /// Strip TUI chrome (box-drawing borders, prompt glyphs) and surrounding
+    /// whitespace from a captured pane line.
+    private static func cleanTUILine(_ line: Substring) -> String {
+        line.trimmingCharacters(in: CharacterSet(charactersIn: "│┃|╭╮╰╯─━❯> \t"))
     }
 
     static func sha256(_ s: String) -> String {
@@ -229,6 +298,7 @@ struct StateDetector: Sendable {
         result.remoteControlActive = pane.contains(Self.remoteControlMarker)
             || result.rcCache.hasBridgeSession(path: transcript?.transcriptPath,
                                                mtime: transcript?.modified)
+        result.rcPlanNotice = rcPlanNotice(pane: pane)
 
         let verdict = classifyPane(pane: pane,
                                    lastPaneHash: input.lastPaneHash,
@@ -238,6 +308,9 @@ struct StateDetector: Sendable {
         result.state = verdict.state
         result.lastPaneHash = verdict.hash
         result.lastHashChange = verdict.hashChange
+        if verdict.state == .needsAuth {
+            result.authNotice = authNotice(pane: pane)
+        }
         return result
     }
 
@@ -245,12 +318,15 @@ struct StateDetector: Sendable {
     /// No process or tmux I/O, so tests drive it directly with captured-frame
     /// fixtures. Returns the new stale-tracking values alongside the state.
     ///
-    /// Precedence: live activity > Waiting > pane-changed > (Stale | Running).
-    /// The live-activity hint outranks Waiting so prompt-like text streamed
-    /// mid-turn ("Would you like…") doesn't flag a busy session as blocked;
-    /// pane-changed ranks below Waiting so a freshly rendered confirmation prompt
-    /// reads Waiting immediately, not Working. A first observation (no previous
-    /// hash) does not count as a change.
+    /// Precedence: live activity > NeedsAuth > Waiting > pane-changed >
+    /// (Stale | Running). The live-activity hint outranks everything so
+    /// prompt-like text streamed mid-turn ("Would you like…", a pasted login
+    /// error) doesn't flag a busy session as blocked; NeedsAuth outranks
+    /// Waiting because the login screen renders option pickers ("❯ 1.",
+    /// "Enter to confirm") that would otherwise mislabel it as needs-input
+    /// (section 8); pane-changed ranks below both so a freshly rendered prompt
+    /// reads correctly immediately, not Working. A first observation (no
+    /// previous hash) does not count as a change.
     func classifyPane(pane: String,
                       lastPaneHash: String?,
                       lastHashChange: Date?,
@@ -261,6 +337,7 @@ struct StateDetector: Sendable {
         let changedSinceLastPoll = (lastPaneHash != nil && hash != lastPaneHash)
 
         if showsLiveActivity(pane: pane) { return (.working, hash, hashChange) }
+        if authNotice(pane: pane) != nil { return (.needsAuth, hash, hashChange) }
         if isWaiting(pane: pane) { return (.waiting, hash, hashChange) }
         if changedSinceLastPoll { return (.working, hash, hashChange) }
 

@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// One 36px session row (docs/CCORN_SPEC.md section 5.1): status dot (+ warning
-/// indicator), name, status label, directory, last active, hover-only `…`
-/// button. Single click selects; double click = Open in Browser (disabled when
-/// remote control is inactive); right-click / `…` shows the NSMenu. Rename
-/// swaps the name for an inline TextField (5.8) with the error caption below.
-/// Archived rows render muted with the empty dot (5.9).
+/// One 36px session row. The status dot leads (as in the popover); the textual
+/// state word lives in the dot's tooltip, except for the states that need the
+/// user — Waiting, Sign-in required, Crashed — which get a short colored label
+/// next to the name so they pop in a list of calm rows. Single click selects;
+/// double click = Open in Browser (disabled when remote control is inactive);
+/// right-click / `…` shows the NSMenu. Rename swaps the name for an inline
+/// TextField (5.8) with the error caption below. Archived rows render muted
+/// with the empty dot (5.9); unmanaged rows render de-emphasized — discovered
+/// context, not managed content.
 struct SessionRowView: View {
     let row: SessionRow
     @ObservedObject var model: AppModel
@@ -17,6 +20,9 @@ struct SessionRowView: View {
 
     private var isSelected: Bool { model.selection == row.id }
     private var isRenaming: Bool { model.renamingRowId == row.id }
+    /// Unmanaged and archived rows are secondary content: quieter title,
+    /// regular weight, tertiary metadata.
+    private var isMuted: Bool { row.kind == .unmanaged || row.archived }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,6 +57,7 @@ struct SessionRowView: View {
             }
             .allowsHitTesting(!isRenaming)
         )
+        .animation(.easeInOut(duration: 0.18), value: hovering)
     }
 
     private var rowContent: some View {
@@ -58,14 +65,10 @@ struct SessionRowView: View {
             nameColumn
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(row.state.displayName)
-                .font(.caption)
-                .foregroundColor(row.state.labelColor)
-                .frame(width: SessionColumns.status, alignment: .leading)
-
             Text(row.displayPath)
                 .font(.caption.monospaced())
                 .foregroundColor(.secondary)
+                .opacity(isMuted ? 0.7 : 1)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,6 +76,7 @@ struct SessionRowView: View {
             Text(LastActiveFormat.string(from: row.lastActive))
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .opacity(isMuted ? 0.7 : 1)
                 .frame(width: SessionColumns.lastActive, alignment: .trailing)
 
             ellipsisButton
@@ -84,24 +88,39 @@ struct SessionRowView: View {
 
     private var nameColumn: some View {
         HStack(spacing: 8) {
-            StatusDot(state: row.state)
+            RowStatusIndicator(state: row.state)
+            if row.state == .needsAuth {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(StatusPalette.waiting)
+                    .help(row.authNotice ?? "Claude Code is not signed in")
+            }
             if row.needsAttention {
                 Image(systemName: "exclamationmark.circle")
                     .font(.system(size: 11))
                     .foregroundColor(StatusPalette.warning)
-                    .help("Remote control is not active on this session")
+                    .help(row.attentionTooltip)
             }
             if isRenaming {
                 renameField
             } else {
                 Text(row.title)
-                    .font(.subheadline.weight(.medium))
-                    // Archived sessions are visually muted (5.9).
-                    .foregroundColor(row.archived ? .secondary : .primary)
+                    .font(.subheadline.weight(isMuted ? .regular : .medium))
+                    // Archived and unmanaged rows are visually muted (5.9).
+                    .foregroundColor(isMuted ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            if !isRenaming, let label = row.state.attentionLabel {
+                Text(label)
+                    .font(.caption)
+                    .foregroundColor(row.state.labelColor)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: row.state)
     }
 
     /// Inline rename (5.8): same font/position, subtle border, pre-selected
@@ -131,14 +150,17 @@ struct SessionRowView: View {
             }
     }
 
+    /// Selection beats hover; hover is a quiet wash that works on both
+    /// appearances (controlBackgroundColor is invisible against the light
+    /// window background).
     @ViewBuilder
     private var rowBackground: some View {
         if isSelected {
-            Color.accentColor.opacity(0.15)
+            Color.accentColor.opacity(0.14)
         } else if hovering {
-            Color(.controlBackgroundColor)
+            Color.primary.opacity(0.045)
         } else {
-            Color(.windowBackgroundColor)
+            Color.clear
         }
     }
 

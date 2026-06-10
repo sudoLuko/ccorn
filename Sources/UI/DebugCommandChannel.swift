@@ -24,6 +24,12 @@ import SwiftUI
 ///   counters                  -> JSON of DebugLife gauges + memory (shakedown)
 ///   pids                      -> windowId:pid map of live sessions (shakedown)
 ///   watch <dir> | unwatch <dir> -> add/remove a watch directory (applySettings)
+///   seed                      -> stop the poll, stage curated rows (DebugStage)
+///   appearance <light|dark|system> -> override NSApp.appearance
+///   show <main|popover>       -> open a surface for screenshots
+///   shoot <target> <path>     -> PNG of a window (main/popover/settings/onboarding/sheet/key)
+///   authalert                 -> present the section-8 auth alert (sheet on main)
+///   dismisssheet              -> end any attached sheet
 @MainActor
 final class DebugCommandChannel {
     private let model: AppModel
@@ -197,6 +203,61 @@ final class DebugCommandChannel {
             window.title = "CCorn Settings (debug preview)"
             window.makeKeyAndOrderFront(nil)
             return "settingspreview shown"
+
+        case "seed":
+            if parts.count >= 2, parts[1] == "empty" {
+                model.debugSeed(rows: [], archived: [])
+                return "seeded empty"
+            }
+            let seeded = DebugStage.seedRows()
+            model.debugSeed(rows: seeded.all, archived: seeded.archived)
+            return "seeded \(seeded.all.count)+\(seeded.archived.count)"
+
+        case "appearance" where parts.count >= 2:
+            switch parts[1] {
+            case "light": NSApp.appearance = NSAppearance(named: .aqua)
+            case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+            default: NSApp.appearance = nil
+            }
+            return "appearance \(parts[1])"
+
+        case "show" where parts.count >= 2:
+            switch parts[1] {
+            case "main": model.openMainWindow?()
+            case "popover": model.openPopover?()
+            default: return "err unknown surface \(parts[1])"
+            }
+            return "show \(parts[1])"
+
+        case "shoot" where parts.count >= 3:
+            // Let the runloop settle pending renders before capturing.
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            return DebugStage.shoot(target: parts[1], path: parts[2])
+
+        case "windowid" where parts.count >= 2:
+            // CGWindowID for `screencapture -l` — real compositor pixels,
+            // which render materials/vibrancy faithfully where cacheDisplay
+            // cannot.
+            guard let number = DebugStage.windowNumber(for: parts[1]) else {
+                return "err no-window \(parts[1])"
+            }
+            return "windowid \(number)"
+
+        case "authalert":
+            let content = AppModel.authAlertContent(
+                notice: "Invalid API key · Please run /login")
+            Alerts.sheetOrModal(title: content.title, message: content.message)
+            return "authalert shown"
+
+        case "dismisssheet":
+            var ended = 0
+            for window in NSApp.windows {
+                if let sheet = window.attachedSheet {
+                    window.endSheet(sheet)
+                    ended += 1
+                }
+            }
+            return "dismissed \(ended)"
 
         default:
             return "err unknown: \(line)"

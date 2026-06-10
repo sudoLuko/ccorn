@@ -26,6 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model.openMainWindow = { [weak self] in self?.openMainWindow() }
         model.closePopover = { [weak self] in self?.popover.performClose(nil) }
+        model.closeOnboarding = { [weak self] in self?.onboarding.close() }
+        #if DEBUG
+        model.openPopover = { [weak self] in self?.showPopover() }
+        #endif
 
         configureStatusItem()
         configurePopover()

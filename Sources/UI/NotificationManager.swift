@@ -33,7 +33,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// guarantees this is an edge (previous state differed); this layer adds
     /// the cooldown and the content.
     func notify(sessionKey: String, title: String, state: SessionState, now: Date = Date()) {
-        guard state == .waiting || state == .dead else { return }
+        guard state == .waiting || state == .dead || state == .needsAuth else { return }
         // An entry past the cooldown behaves exactly like a missing one, so
         // expired entries are dropped here — keyed by window id (monotonic),
         // the map would otherwise grow for the lifetime of the app.
@@ -47,6 +47,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         case .waiting:
             content.title = "\(title) is waiting"
             content.body = "Claude needs your input or approval."
+        case .needsAuth:
+            content.title = "\(title) needs sign-in"
+            content.body = "Claude Code is not authenticated. Open the session in Terminal and run /login."
         case .dead:
             content.title = "\(title) died"
             content.body = "The session's process is gone. Restart it from CCorn."

@@ -55,7 +55,7 @@ enum SessionMenu {
         }
 
         switch row.state {
-        case .running, .working, .waiting, .stale:
+        case .running, .working, .waiting, .needsAuth, .stale:
             menu.addItem(ActionMenuItem(
                 title: "Open in Browser",
                 enabled: row.remoteControlActive,

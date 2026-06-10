@@ -64,6 +64,11 @@ final class LiveSession: ObservableObject {
     var lastPaneHash: String?
     var lastHashChange: Date?
     var rcCache = BridgeSessionCache()
+    /// CLI-authored auth/plan failure lines from the latest detection pass
+    /// (section 8 alerts + row tooltips). Read only during rebuildRows, which
+    /// runs after every apply — no need to publish.
+    var authNotice: String?
+    var rcPlanNotice: String?
 
     #if DEBUG
     /// Shakedown identity, captured at init (deinit is nonisolated, so it must
@@ -120,5 +125,7 @@ final class LiveSession: ObservableObject {
         lastPaneHash = result.lastPaneHash
         lastHashChange = result.lastHashChange
         rcCache = result.rcCache
+        authNotice = result.authNotice
+        rcPlanNotice = result.rcPlanNotice
     }
 }

@@ -43,6 +43,31 @@ enum Alerts {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
+    /// One-button alert that attaches as a sheet when a regular CCorn window
+    /// is visible (non-blocking, lands on what the user is looking at) and
+    /// falls back to the app-modal alert otherwise (menu-bar-only state).
+    /// Used by the detection-driven section-8 alerts, which fire from the poll
+    /// loop — an app-modal `runModal` there would stall the 3s tick.
+    static func sheetOrModal(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        // Prefer the main window — these alerts are about a session in its
+        // list; never sheet onto whatever titled window happens to sort first.
+        let candidates = NSApp.windows.filter {
+            $0.isVisible && $0.styleMask.contains(.titled)
+                && $0.level == .normal && !($0 is NSPanel) && $0.attachedSheet == nil
+        }
+        if let window = candidates.first(where: { $0.title == "CCorn" }) ?? candidates.first {
+            alert.beginSheetModal(for: window)
+        } else {
+            activate()
+            alert.runModal()
+        }
+    }
+
     /// Informational alert with a single OK button.
     static func info(title: String, message: String = "") {
         activate()

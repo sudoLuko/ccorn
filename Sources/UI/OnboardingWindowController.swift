@@ -11,9 +11,11 @@ final class OnboardingWindowController {
 
     func show(model: AppModel) {
         if window == nil {
-            let view = OnboardingView { [weak self] directories in
+            let view = OnboardingView { directories in
+                // completeOnboarding closes this window via the model's
+                // closeOnboarding hook, so every completion path (including
+                // the debug channel's `onboard`) tears the card down.
                 model.completeOnboarding(directories: directories)
-                self?.close()
             }
             let hosting = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: hosting)
@@ -30,7 +32,7 @@ final class OnboardingWindowController {
 
     var isShowing: Bool { window?.isVisible == true }
 
-    private func close() {
+    func close() {
         window?.close()
         window = nil
         MainWindowController.updateActivationPolicy()

@@ -1,0 +1,174 @@
+#if DEBUG
+import AppKit
+
+/// Debug-build-only staging for the design pass: a curated, deterministic set
+/// of seeded rows (every state, realistic titles/paths/ages) and an in-process
+/// window screenshot helper. Driven by DebugCommandChannel (`seed`, `shoot`,
+/// `appearance`); compiled out of release builds entirely. Seeding goes
+/// through AppModel.debugSeed, which stops the live poll first — the real
+/// store, tmux session, and discovery are never touched.
+enum DebugStage {
+
+    // MARK: - Seed data
+
+    /// A realistic mix: managed sessions across all states (the attention
+    /// states included), a few unmanaged discoveries, and an archived pair.
+    static func seedRows(now: Date = Date()) -> (all: [SessionRow], archived: [SessionRow]) {
+        func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
+        let home = NSHomeDirectory()
+
+        let managed: [SessionRow] = [
+            SessionRow(id: "@901", kind: .managed(windowId: "@901"),
+                       title: "ccorn polish pass",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000001",
+                       path: "\(home)/dev/ccorn",
+                       state: .working, remoteControlActive: true,
+                       lastActive: ago(15)),
+            SessionRow(id: "@902", kind: .managed(windowId: "@902"),
+                       title: "Checkout flow revamp",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000002",
+                       path: "\(home)/dev/shop",
+                       state: .waiting, remoteControlActive: true,
+                       lastActive: ago(4 * 60)),
+            SessionRow(id: "@903", kind: .managed(windowId: "@903"),
+                       title: "Auth service refactor",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000003",
+                       path: "\(home)/dev/auth-service",
+                       state: .needsAuth, remoteControlActive: false,
+                       lastActive: ago(60),
+                       authNotice: "Invalid API key · Please run /login"),
+            SessionRow(id: "@904", kind: .managed(windowId: "@904"),
+                       title: "Mella landing page",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000004",
+                       path: "\(home)/dev/mella",
+                       state: .running, remoteControlActive: true,
+                       lastActive: ago(22 * 60)),
+            SessionRow(id: "@905", kind: .managed(windowId: "@905"),
+                       title: "Release scripts",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000005",
+                       path: "\(home)/dev/release-tools",
+                       state: .running, remoteControlActive: false,
+                       lastActive: ago(35 * 60)),
+            SessionRow(id: "@906", kind: .managed(windowId: "@906"),
+                       title: "Data pipeline",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000006",
+                       path: "\(home)/dev/etl",
+                       state: .stale, remoteControlActive: true,
+                       lastActive: ago(6 * 3600)),
+            SessionRow(id: "@907", kind: .managed(windowId: "@907"),
+                       title: "Docs site rebuild",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000007",
+                       path: "\(home)/dev/docs",
+                       state: .dead, remoteControlActive: false,
+                       lastActive: ago(3 * 3600)),
+            SessionRow(id: "record:aaaaaaaa-0000-4000-8000-000000000008",
+                       kind: .record,
+                       title: "Spike: rate limiter",
+                       uuid: "aaaaaaaa-0000-4000-8000-000000000008",
+                       path: "\(home)/dev/limiter",
+                       state: .stopped, remoteControlActive: false,
+                       lastActive: ago(2 * 86_400)),
+        ]
+
+        let unmanaged: [SessionRow] = [
+            SessionRow(id: "unmanaged:-dev-scratchpad", kind: .unmanaged,
+                       title: "scratchpad",
+                       uuid: "bbbbbbbb-0000-4000-8000-000000000001",
+                       path: "\(home)/dev/scratchpad",
+                       state: .unmanaged, remoteControlActive: false,
+                       lastActive: ago(5 * 86_400)),
+            SessionRow(id: "unmanaged:-dev-old-blog", kind: .unmanaged,
+                       title: "old-blog",
+                       uuid: "bbbbbbbb-0000-4000-8000-000000000002",
+                       path: "\(home)/dev/old-blog",
+                       state: .unmanaged, remoteControlActive: false,
+                       lastActive: ago(12 * 86_400)),
+            SessionRow(id: "unmanaged:-experiments-llm-eval", kind: .unmanaged,
+                       title: "llm-eval",
+                       uuid: "bbbbbbbb-0000-4000-8000-000000000003",
+                       path: "\(home)/experiments/llm-eval",
+                       state: .unmanaged, remoteControlActive: false,
+                       lastActive: ago(21 * 86_400)),
+        ]
+
+        let archived: [SessionRow] = [
+            SessionRow(id: "record:cccccccc-0000-4000-8000-000000000001",
+                       kind: .record,
+                       title: "Bug bash May",
+                       uuid: "cccccccc-0000-4000-8000-000000000001",
+                       path: "\(home)/dev/shop",
+                       state: .stopped, remoteControlActive: false,
+                       archived: true,
+                       lastActive: ago(18 * 86_400)),
+            SessionRow(id: "record:cccccccc-0000-4000-8000-000000000002",
+                       kind: .record,
+                       title: "Onboarding email flow",
+                       uuid: "cccccccc-0000-4000-8000-000000000002",
+                       path: "\(home)/dev/mailers",
+                       state: .stopped, remoteControlActive: false,
+                       archived: true,
+                       lastActive: ago(40 * 86_400)),
+        ]
+
+        return (managed + unmanaged, archived)
+    }
+
+    // MARK: - Window screenshots
+
+    /// Render a window's full frame (title bar included) to a PNG via
+    /// `cacheDisplay` — no screen-recording permission needed, and the render
+    /// honors the current NSApp.appearance. Targets: main / popover /
+    /// settings / onboarding / sheet / key.
+    @MainActor
+    static func shoot(target: String, path: String) -> String {
+        guard let window = window(for: target) else { return "err no-window \(target)" }
+        // The themeFrame (contentView's superview) covers the whole window
+        // incl. the title bar; borderless windows (popover) fall back to the
+        // content view.
+        guard let view = window.contentView?.superview ?? window.contentView else {
+            return "err no-view"
+        }
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+            return "err no-rep"
+        }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            return "err no-png"
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            return "shot \(target) \(Int(view.bounds.width))x\(Int(view.bounds.height)) -> \(path)"
+        } catch {
+            return "err write \(error.localizedDescription)"
+        }
+    }
+
+    /// CGWindowID of a target window, for `screencapture -l`.
+    @MainActor
+    static func windowNumber(for target: String) -> Int? {
+        window(for: target).map(\.windowNumber)
+    }
+
+    @MainActor
+    private static func window(for target: String) -> NSWindow? {
+        switch target {
+        case "main":
+            return NSApp.windows.first { $0.title == "CCorn" }
+        case "settings":
+            return NSApp.windows.first { $0.title.contains("Settings") && $0.isVisible }
+        case "onboarding":
+            return NSApp.windows.first { $0.title.contains("Welcome") }
+        case "popover":
+            return NSApp.windows.first {
+                String(describing: type(of: $0)).contains("Popover") && $0.isVisible
+            }
+        case "sheet":
+            return NSApp.windows.compactMap(\.attachedSheet).first
+        case "key":
+            return NSApp.keyWindow
+        default:
+            return nil
+        }
+    }
+}
+#endif

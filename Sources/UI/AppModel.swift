@@ -39,6 +39,11 @@ final class AppModel: ObservableObject {
     /// window layer without the model importing it.
     var openMainWindow: (() -> Void)?
     var closePopover: (() -> Void)?
+    var closeOnboarding: (() -> Void)?
+    #if DEBUG
+    /// Debug-only (screenshot staging): show the popover on command.
+    var openPopover: (() -> Void)?
+    #endif
 
     private var unmanagedProjects: [DiscoveredProject] = []
     /// Persisted session records, mirrored from the store on every discovery
@@ -62,6 +67,11 @@ final class AppModel: ObservableObject {
     /// detector behind Waiting/Dead notifications. First observation of a
     /// session records silently; only a real change can notify.
     private var stateMemory: [String: SessionState] = [:]
+    /// Rows that already showed their one-shot section-8 alert (login needed /
+    /// remote-control plan restriction), so a persisting pane can't re-alert
+    /// every poll tick. Pruned alongside `stateMemory`.
+    private var authAlerted = Set<String>()
+    private var rcPlanAlerted = Set<String>()
 
     init(engine: SessionEngine) {
         self.engine = engine
@@ -71,6 +81,17 @@ final class AppModel: ObservableObject {
     /// nil (empty/outline dot) when no session has an active color.
     var aggregateState: SessionState? {
         SessionState.aggregate(rows.map(\.state))
+    }
+
+    /// Sessions CCorn manages (live windows + stopped records) — the primary
+    /// content everywhere. Sorted by last active, like `rows`.
+    var managedRows: [SessionRow] {
+        rows.filter { $0.kind != .unmanaged }
+    }
+
+    /// Sessions discovered on the system but not managed — ambient, secondary.
+    var unmanagedRows: [SessionRow] {
+        rows.filter { $0.kind == .unmanaged }
     }
 
     var onboardingNeeded: Bool { !engine.settings.onboardingComplete }
@@ -191,6 +212,7 @@ final class AppModel: ObservableObject {
             while !hasScanned {
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
+            closeOnboarding?()
             openMainWindow?()
             presentImportSheetIfNeeded()
         }
@@ -305,7 +327,9 @@ final class AppModel: ObservableObject {
                 state: live.state,
                 remoteControlActive: live.remoteControlActive,
                 rcGraceExpired: now.timeIntervalSince(live.startedAt) > 30,
-                lastActive: lastActive
+                lastActive: lastActive,
+                authNotice: live.authNotice,
+                rcPlanNotice: live.rcPlanNotice
             ))
         }
 
@@ -377,20 +401,28 @@ final class AppModel: ObservableObject {
     }
 
     /// Notification edges (5.10): fire only when a watched session
-    /// *transitions into* Waiting or Dead. Keyed by row id (the stable window
-    /// id for managed rows — uuid binding mid-run must not break continuity).
-    /// A session CCorn started this run gets a Running baseline, so a spawn
-    /// that lands directly on a trust/permission prompt still notifies; an
-    /// adopted (reconciled) or record row is first recorded silently —
-    /// whatever state it is first seen in is not a transition CCorn watched.
+    /// *transitions into* Waiting, Dead, or Sign-in required. Keyed by row id
+    /// (the stable window id for managed rows — uuid binding mid-run must not
+    /// break continuity). A session CCorn started this run gets a Running
+    /// baseline, so a spawn that lands directly on a trust/permission/login
+    /// prompt still notifies; an adopted (reconciled) or record row is first
+    /// recorded silently — whatever state it is first seen in is not a
+    /// transition CCorn watched. Also hosts the section-8 one-shot alerts.
     private func emitStateTransitions(_ rows: [SessionRow], adoptedIds: Set<String>) {
         for row in rows where row.kind != .unmanaged {
+            presentRCPlanAlertIfNeeded(row)
             let baseline: SessionState? =
                 (row.isManaged && !adoptedIds.contains(row.id)) ? .running : nil
             let previous = stateMemory[row.id] ?? baseline
             stateMemory[row.id] = row.state
             guard let previous, previous != row.state else { continue }
-            if row.state == .waiting || row.state == .dead {
+            if row.state == .needsAuth {
+                if !presentAuthAlertIfNeeded(row) {
+                    NotificationManager.shared.notify(sessionKey: row.id,
+                                                      title: row.title,
+                                                      state: row.state)
+                }
+            } else if row.state == .waiting || row.state == .dead {
                 NotificationManager.shared.notify(sessionKey: row.id,
                                                   title: row.title,
                                                   state: row.state)
@@ -403,6 +435,51 @@ final class AppModel: ObservableObject {
         if stateMemory.count > rows.count {
             let liveIds = Set(rows.map(\.id))
             stateMemory = stateMemory.filter { liveIds.contains($0.key) }
+            authAlerted = authAlerted.filter { liveIds.contains($0) }
+            rcPlanAlerted = rcPlanAlerted.filter { liveIds.contains($0) }
+        }
+    }
+
+    // MARK: - Section-8 auth alerts
+
+    /// "User not authenticated" (section 8): a login prompt right after a
+    /// CCorn-initiated start gets a modal alert — direct feedback to the
+    /// user's own action, leading with the CLI's error text. A session that
+    /// drifts into the login screen later (token expiry in a set-and-forget
+    /// background session) must NOT steal focus: it gets the notification +
+    /// the row's key indicator instead. Returns true when the alert was shown.
+    @discardableResult
+    private func presentAuthAlertIfNeeded(_ row: SessionRow) -> Bool {
+        guard row.isManaged, !row.rcGraceExpired,
+              !authAlerted.contains(row.id) else { return false }
+        authAlerted.insert(row.id)
+        let content = Self.authAlertContent(notice: row.authNotice)
+        // Deferred a turn: this runs inside rebuildRows on the poll path, and
+        // the rows must publish before a modal can block the main actor.
+        Task { Alerts.sheetOrModal(title: content.title, message: content.message) }
+        return true
+    }
+
+    /// Section-8 copy: lead with the CLI's own error text when captured.
+    static func authAlertContent(notice: String?) -> (title: String, message: String) {
+        var lines = ["Run claude in this project and use /login (or claude auth login), and make sure ANTHROPIC_API_KEY is unset."]
+        if let notice, !notice.isEmpty {
+            lines.insert("Claude Code says: “\(notice)”", at: 0)
+        }
+        return ("Authenticate Claude Code first", lines.joined(separator: "\n\n"))
+    }
+
+    /// Remote-control plan restriction (section 8): the pane reported that
+    /// remote control could not be enabled for plan/credential reasons. Once
+    /// per session, same start-feedback gate as the auth alert.
+    private func presentRCPlanAlertIfNeeded(_ row: SessionRow) {
+        guard let notice = row.rcPlanNotice, row.isManaged, !row.rcGraceExpired,
+              !rcPlanAlerted.contains(row.id) else { return }
+        rcPlanAlerted.insert(row.id)
+        Task {
+            Alerts.sheetOrModal(
+                title: "Remote Control isn't available on this account",
+                message: "Claude Code says: “\(notice)”\n\nRemote Control is available on Pro, Max, Team, and Enterprise plans (Team/Enterprise need an admin to enable it); API keys and inference-only tokens are not supported.")
         }
     }
 
@@ -465,8 +542,7 @@ final class AppModel: ObservableObject {
         guard let directory = Alerts.pickFolder(prompt: "Start Session") else { return }
         let canonical = SessionDiscovery.canonicalize(directory)
         let aliveHere = rows.contains {
-            $0.isManaged && $0.path == canonical
-                && [.running, .working, .waiting, .stale].contains($0.state)
+            $0.isManaged && $0.path == canonical && $0.state.isAliveState
         }
         if aliveHere {
             guard Alerts.confirm(title: "This directory already has an active session",
@@ -549,8 +625,7 @@ final class AppModel: ObservableObject {
     // MARK: - Archive / unarchive (flow 6.9)
 
     func archiveSession(_ row: SessionRow) {
-        let isAlive = [.running, .working, .waiting, .stale].contains(row.state)
-        if isAlive {
+        if row.state.isAliveState {
             guard Alerts.confirm(title: "This session is still running.",
                                  message: "Archive and stop it?",
                                  action: "Archive") else { return }
@@ -672,6 +747,17 @@ final class AppModel: ObservableObject {
     /// scripted engine mutation, same path the real actions use.
     func debugRefresh() async {
         await refreshAfterMutation()
+    }
+
+    /// Screenshot staging (DebugCommandChannel `seed`): stop the live poll and
+    /// FSEvents watcher, then replace the published rows wholesale with a
+    /// curated set. Pure presentation — the engine, store, and tmux session
+    /// are never touched, and nothing restarts the poll afterwards.
+    func debugSeed(rows: [SessionRow], archived: [SessionRow]) {
+        stop()
+        hasScanned = true
+        self.rows = rows
+        self.archivedRows = archived
     }
     #endif
 

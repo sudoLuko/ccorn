@@ -29,6 +29,11 @@ struct SessionRow: Identifiable, Equatable {
     let rcGraceExpired: Bool
     let archived: Bool
     let lastActive: Date?
+    /// CLI-authored lines from detection: the login-prompt error for a
+    /// needsAuth row, and the remote-control plan-restriction failure
+    /// (docs/CCORN_SPEC.md §8). Drive tooltips and the one-shot alerts.
+    let authNotice: String?
+    let rcPlanNotice: String?
 
     init(id: String,
          kind: Kind,
@@ -39,7 +44,9 @@ struct SessionRow: Identifiable, Equatable {
          remoteControlActive: Bool,
          rcGraceExpired: Bool = true,
          archived: Bool = false,
-         lastActive: Date?) {
+         lastActive: Date?,
+         authNotice: String? = nil,
+         rcPlanNotice: String? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -50,6 +57,8 @@ struct SessionRow: Identifiable, Equatable {
         self.rcGraceExpired = rcGraceExpired
         self.archived = archived
         self.lastActive = lastActive
+        self.authNotice = authNotice
+        self.rcPlanNotice = rcPlanNotice
     }
 
     var isManaged: Bool {
@@ -65,13 +74,21 @@ struct SessionRow: Identifiable, Equatable {
     /// Alive states get the warning indicator when remote control has not
     /// come up within the activation grace window (docs/CCORN_SPEC.md
     /// section 4, "Warning indicator visual"; section 8, 30s activation).
+    /// needsAuth is excluded: it carries its own key indicator — sign-in is
+    /// the problem, missing remote control is just its consequence.
     var needsAttention: Bool {
         switch state {
         case .running, .working, .waiting, .stale:
             return !remoteControlActive && rcGraceExpired
-        case .dead, .stopped, .unmanaged:
+        case .needsAuth, .dead, .stopped, .unmanaged:
             return false
         }
+    }
+
+    /// Tooltip for the remote-control warning indicator: the CLI's
+    /// plan-restriction line when one was captured, else the generic reason.
+    var attentionTooltip: String {
+        rcPlanNotice ?? "Remote control is not active on this session"
     }
 
     /// Home-relative display form of `path` ("~/dev/ccorn").

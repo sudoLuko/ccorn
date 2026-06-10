@@ -342,6 +342,8 @@ final class SessionEngine: ObservableObject {
     /// persisted locally only (it becomes the `--rc`-style explicit title).
     func renameSession(windowId: String?, uuid: String, to newName: String) async -> RenameResult {
         let live = windowId.flatMap { liveSessions[$0] }
+        // needsAuth is deliberately NOT in this list: its pane shows the login
+        // screen, so typed `/rename` would go nowhere — persist locally only.
         let isLive = live.map { [.running, .working, .waiting, .stale].contains($0.state) } ?? false
         let tmux = self.tmux
 
