@@ -32,7 +32,9 @@ private struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 CornMarkShape()
-                    .fill(Color.primary)
+                    .stroke(Color.primary, style: StrokeStyle(lineWidth: 1,
+                                                              lineCap: .round,
+                                                              lineJoin: .round))
                     .frame(width: 16, height: 16)
                 Text("CCorn")
                     .font(.subheadline.weight(.medium))

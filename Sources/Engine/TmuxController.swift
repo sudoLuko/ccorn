@@ -27,11 +27,28 @@ struct TmuxController: Sendable {
         runner.run("tmux", ["has-session", "-t", Self.sessionName]).ok
     }
 
+    /// Outcome of `ensureSession`. `strayDefaultWindowId` is set only when the
+    /// session was created fresh: `new-session` always spawns one bare shell
+    /// window alongside it, which would otherwise linger and surface as a
+    /// never-ran-claude row (the "zsh" row). The caller kills it once a real
+    /// window exists — a session whose last window dies is destroyed by tmux,
+    /// so it cannot be killed any earlier.
+    struct EnsureSessionResult: Sendable {
+        let ok: Bool
+        let strayDefaultWindowId: String?
+    }
+
     /// Create the `ccorn` session if it does not already exist. Never recreate.
     @discardableResult
-    func ensureSession() -> Bool {
-        if hasSession() { return true }
-        return runner.run("tmux", ["new-session", "-d", "-s", Self.sessionName]).ok
+    func ensureSession() -> EnsureSessionResult {
+        if hasSession() { return EnsureSessionResult(ok: true, strayDefaultWindowId: nil) }
+        let r = runner.run("tmux", [
+            "new-session", "-d", "-s", Self.sessionName,
+            "-P", "-F", "#{window_id}",
+        ])
+        guard r.ok else { return EnsureSessionResult(ok: false, strayDefaultWindowId: nil) }
+        let id = r.trimmedOut
+        return EnsureSessionResult(ok: true, strayDefaultWindowId: id.isEmpty ? nil : id)
     }
 
     // MARK: Windows
@@ -46,7 +63,20 @@ struct TmuxController: Sendable {
         ])
         guard r.ok else { return nil }
         let id = r.trimmedOut
-        return id.isEmpty ? nil : id
+        guard !id.isEmpty else { return nil }
+        disableRenaming(windowId: id)
+        return id
+    }
+
+    /// Pin a window's name. Without this, tmux's automatic-rename tracks the
+    /// foreground process — a window whose claude exited reads as "zsh" — and
+    /// allow-rename lets pane escape sequences rewrite it. Applied to every
+    /// window CCorn creates and every existing window it adopts on reconcile.
+    /// (Display names come from session titles; the live tmux window name is
+    /// never shown either way.)
+    func disableRenaming(windowId: String) {
+        runner.run("tmux", ["set-option", "-w", "-t", windowId, "automatic-rename", "off"])
+        runner.run("tmux", ["set-option", "-w", "-t", windowId, "allow-rename", "off"])
     }
 
     /// Send a command to a window's pane. The key is sent as a *separate* `Enter`

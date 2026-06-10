@@ -27,6 +27,11 @@ final class AppModel: ObservableObject {
     /// uuid -> transcript (path + mtime), refreshed with discovery; provides the
     /// "last active" timestamp for managed sessions.
     private var transcriptIndex: [String: DiscoveredSession] = [:]
+    /// uuid -> transcript meta (ai-title + cwd) for every row's uuid, resolved
+    /// during discovery (FSEvents fires on transcript writes, so titles stay
+    /// fresh); the 3s poll only reads this cache.
+    private var metaByUUID: [String: TranscriptMeta] = [:]
+    private let metaCache = TranscriptMetaCache()
     private var pollTask: Task<Void, Never>?
     private var watcher: DirectoryWatcher?
     /// Orders overlapping discovery passes: a pass only applies its snapshot if
@@ -81,12 +86,30 @@ final class AppModel: ObservableObject {
         let generation = discoveryGeneration
         let discovery = engine.discovery
         let watchDirs = engine.settings.watchDirectories
-        let (projects, index) = await Task.detached {
-            (discovery.discover(watchDirectories: watchDirs), discovery.transcriptIndex())
+        let metaCache = self.metaCache
+        // Managed sessions' titles also come from their transcripts — snapshot
+        // the uuids on the main actor before hopping off.
+        let managedUUIDs = engine.liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty }
+        let (projects, index, meta) = await Task.detached {
+            () -> ([DiscoveredProject], [String: DiscoveredSession], [String: TranscriptMeta]) in
+            let projects = discovery.discover(watchDirectories: watchDirs)
+            let index = discovery.transcriptIndex()
+            var wanted = Set(managedUUIDs)
+            for project in projects {
+                if let uuid = project.mostRecentSession?.uuid { wanted.insert(uuid) }
+            }
+            var meta: [String: TranscriptMeta] = [:]
+            for uuid in wanted {
+                if let transcript = index[uuid] {
+                    meta[uuid] = metaCache.meta(for: transcript)
+                }
+            }
+            return (projects, index, meta)
         }.value
         guard generation == discoveryGeneration else { return } // superseded
         unmanagedProjects = projects
         transcriptIndex = index
+        metaByUUID = meta
         if !hasScanned { hasScanned = true }
         rebuildRows()
     }
@@ -104,8 +127,14 @@ final class AppModel: ObservableObject {
         for (windowId, live) in engine.liveSessions {
             let uuid = live.sessionUUID
             if !uuid.isEmpty { managedUUIDs.insert(uuid) }
-            if !live.record.path.isEmpty {
-                managedPaths.insert(SessionDiscovery.canonicalize(live.record.path))
+            let meta = uuid.isEmpty ? nil : metaByUUID[uuid]
+            // A managed row must always resolve a directory: the record path
+            // (set at start/resume/reconcile), else the transcript's cwd.
+            let path = live.record.path.isEmpty
+                ? (meta?.cwd).map(SessionDiscovery.canonicalize) ?? ""
+                : live.record.path
+            if !path.isEmpty {
+                managedPaths.insert(SessionDiscovery.canonicalize(path))
             }
             // Prefer the transcript mtime (real Claude activity) over the pane
             // hash-change time; fall back for sessions with no transcript yet.
@@ -113,9 +142,10 @@ final class AppModel: ObservableObject {
             built.append(SessionRow(
                 id: windowId,
                 kind: .managed(windowId: windowId),
-                title: live.record.title,
+                title: Self.displayTitle(explicit: live.record.title,
+                                         aiTitle: meta?.title, path: path),
                 uuid: uuid,
-                path: live.record.path,
+                path: path,
                 state: live.state,
                 remoteControlActive: live.remoteControlActive,
                 lastActive: lastActive
@@ -126,11 +156,14 @@ final class AppModel: ObservableObject {
             guard let path = project.resolvedPath else { continue }
             guard !managedPaths.contains(path) else { continue }
             guard !project.sessions.contains(where: { managedUUIDs.contains($0.uuid) }) else { continue }
+            let uuid = project.mostRecentSession?.uuid ?? ""
             built.append(SessionRow(
                 id: "unmanaged:\(project.encodedKey)",
                 kind: .unmanaged,
-                title: URL(fileURLWithPath: path).lastPathComponent,
-                uuid: project.mostRecentSession?.uuid ?? "",
+                title: Self.displayTitle(explicit: "",
+                                         aiTitle: uuid.isEmpty ? nil : metaByUUID[uuid]?.title,
+                                         path: path),
+                uuid: uuid,
                 path: path,
                 state: .unmanaged,
                 remoteControlActive: false,
@@ -145,6 +178,19 @@ final class AppModel: ObservableObject {
         if let selection, !built.contains(where: { $0.id == selection }) {
             self.selection = nil
         }
+    }
+
+    /// Display-name chain: the title CCorn set explicitly (a real `--rc` title
+    /// that syncs to claude.ai) > the transcript's ai-title (what
+    /// `claude --resume` and claude.ai show for sessions CCorn didn't title) >
+    /// the directory basename. Never a tmux window name — those track the
+    /// foreground process.
+    private static func displayTitle(explicit: String, aiTitle: String?, path: String) -> String {
+        if !explicit.isEmpty { return explicit }
+        if let aiTitle, !aiTitle.isEmpty { return aiTitle }
+        let basename = URL(fileURLWithPath: path).lastPathComponent
+        if !path.isEmpty, !basename.isEmpty { return basename }
+        return "Session"
     }
 
     // MARK: - Actions (milestone 2: read-only set)

@@ -183,6 +183,58 @@ struct SessionDiscovery: Sendable {
         return nil
     }
 
+    /// Title + cwd for a transcript. Cache through `TranscriptMetaCache` on any
+    /// repeated path — this opens the file twice (head for cwd, head+tail for
+    /// the title).
+    static func meta(inTranscript path: String) -> TranscriptMeta {
+        TranscriptMeta(title: lastAITitle(inTranscript: path),
+                       cwd: firstCwd(inTranscript: path))
+    }
+
+    /// The session title: the LAST `ai-title` record's `aiTitle`. Claude
+    /// re-appends the record as the session progresses (verified 2.1.170: the
+    /// final occurrence sat within ~32 KB of EOF in every sampled transcript,
+    /// while early copies go stale), so the last one is current and a bounded
+    /// head + tail read finds it without scanning multi-MB transcripts. Some
+    /// transcripts carry no ai-title at all — callers fall back to the
+    /// directory basename.
+    static func lastAITitle(inTranscript path: String) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        let window = 256 * 1024
+        let head = handle.readData(ofLength: window)
+        var title = lastAITitle(inJSONLData: head, dropLeadingPartialLine: false)
+
+        // File extends past the head window: the current title lives near EOF.
+        if head.count >= window,
+           let size = try? handle.seekToEnd(), size > UInt64(window) {
+            try? handle.seek(toOffset: size - UInt64(window))
+            if let tail = try? handle.read(upToCount: window),
+               // The seek lands mid-line, so the tail's first line is partial.
+               let fromTail = lastAITitle(inJSONLData: tail, dropLeadingPartialLine: true) {
+                title = fromTail
+            }
+        }
+        return title
+    }
+
+    private static func lastAITitle(inJSONLData data: Data, dropLeadingPartialLine: Bool) -> String? {
+        let text = String(decoding: data, as: UTF8.self)
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        if dropLeadingPartialLine, !lines.isEmpty { lines.removeFirst() }
+        // A partial trailing line (truncated head window) simply fails the JSON
+        // parse and is skipped — no separate handling needed.
+        for line in lines.reversed() {
+            guard line.contains("\"ai-title\"") else { continue }
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  obj["type"] as? String == "ai-title",
+                  let title = obj["aiTitle"] as? String,
+                  !title.isEmpty else { continue }
+            return title
+        }
+        return nil
+    }
+
     /// True if the transcript contains a `bridge-session` record (remote-control
     /// linkage, version-independent signal — see docs/RUNTIME_FINDINGS.md C1/C2).
     static func transcriptHasBridgeSession(path: String) -> Bool {

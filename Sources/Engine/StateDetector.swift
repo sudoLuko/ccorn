@@ -137,6 +137,22 @@ struct StateDetector: Sendable {
         return pane.contains(where: { Self.spinnerChars.contains($0) })
     }
 
+    /// True when a pane shows any trace of ever having hosted Claude Code.
+    /// Used by launch reconciliation to tell a died claude session from a bare
+    /// shell window — e.g. the default window `tmux new-session` spawns, which
+    /// automatic-rename labels "zsh". Generous on purpose: a stale TUI frame
+    /// (RUNTIME_FINDINGS T2), a clean-exit `claude --resume` hint, or a typed
+    /// `claude` command all count; only a pane with no claude trace at all is
+    /// treated as never-ran-claude.
+    func showsClaudeEvidence(pane: String) -> Bool {
+        if pane.contains("claude") { return true }   // typed command / resume hint / paths
+        if pane.contains("Claude") { return true }   // TUI brand text
+        if pane.contains(Self.remoteControlMarker) { return true }
+        if pane.contains(Self.liveActivityMarker) { return true }
+        if pane.contains("? for shortcuts") { return true }
+        return false
+    }
+
     func isWaiting(pane: String) -> Bool {
         if Self.waitingPhrases.contains(where: { pane.localizedCaseInsensitiveContains($0) }) {
             return true

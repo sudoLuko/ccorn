@@ -97,6 +97,75 @@ import Testing
     }
 }
 
+/// Session-title extraction (M2 fixes): the display name comes from the LAST
+/// `ai-title` record — `{"type":"ai-title","aiTitle":...}` — which Claude
+/// re-appends as the session progresses, so the final one is current.
+@Suite struct TranscriptTitleTests {
+
+    /// The real fixture transcript carries the title Claude generated for it.
+    @Test func readsTitleFromRealTranscript() {
+        let title = SessionDiscovery.lastAITitle(inTranscript: Fixtures.transcriptPath)
+        #expect(title == "Run sleep command and echo completion")
+        let meta = SessionDiscovery.meta(inTranscript: Fixtures.transcriptPath)
+        #expect(meta.title == "Run sleep command and echo completion")
+        #expect(meta.cwd == "/private/tmp/ccorn-fix-probe")
+    }
+
+    @Test func lastTitleWinsAndMissingTitleIsNil() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("ccorn-title-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+
+        let twoTitles = dir.appendingPathComponent("two.jsonl")
+        try (#"{"type":"ai-title","aiTitle":"stale title","sessionId":"x"}"# + "\n"
+            + #"{"type":"user","cwd":"/tmp","sessionId":"x"}"# + "\n"
+            + #"{"type":"ai-title","aiTitle":"current title","sessionId":"x"}"#)
+            .write(to: twoTitles, atomically: true, encoding: .utf8)
+        #expect(SessionDiscovery.lastAITitle(inTranscript: twoTitles.path) == "current title")
+
+        // No ai-title record at all (such transcripts exist) -> nil, and the
+        // caller falls back to the directory basename.
+        let untitled = dir.appendingPathComponent("untitled.jsonl")
+        try #"{"type":"user","cwd":"/tmp","sessionId":"y"}"#
+            .write(to: untitled, atomically: true, encoding: .utf8)
+        #expect(SessionDiscovery.lastAITitle(inTranscript: untitled.path) == nil)
+        #expect(SessionDiscovery.lastAITitle(inTranscript: "/nonexistent/no.jsonl") == nil)
+    }
+
+    /// The cache re-reads a transcript only when its mtime changes.
+    @Test func metaCacheKeyedByMtime() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("ccorn-metacache-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("s.jsonl")
+
+        func write(title: String, mtime: Date) throws {
+            try #"{"type":"ai-title","aiTitle":"\#(title)","sessionId":"z"}"#
+                .write(to: file, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.modificationDate: mtime], ofItemAtPath: file.path)
+        }
+
+        let t1 = Date(timeIntervalSince1970: 1_000_000)
+        let t2 = Date(timeIntervalSince1970: 2_000_000)
+        let cache = TranscriptMetaCache()
+
+        try write(title: "first", mtime: t1)
+        let ref1 = DiscoveredSession(uuid: "z", transcriptPath: file.path, modified: t1)
+        #expect(cache.meta(for: ref1).title == "first")
+
+        // Same recorded mtime -> cached result, file not re-read.
+        try write(title: "second", mtime: t1)
+        #expect(cache.meta(for: ref1).title == "first")
+
+        // mtime moved -> re-read.
+        try write(title: "second", mtime: t2)
+        let ref2 = DiscoveredSession(uuid: "z", transcriptPath: file.path, modified: t2)
+        #expect(cache.meta(for: ref2).title == "second")
+    }
+}
+
 /// Discovery behaviors that need a synthetic projects tree (path-collision
 /// dedup), built under a unique temp root per test.
 @Suite struct DiscoveryDedupTests {

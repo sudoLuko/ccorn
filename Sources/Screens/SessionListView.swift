@@ -13,9 +13,15 @@ enum SessionColumns {
 struct SessionListView: View {
     @ObservedObject var model: AppModel
 
+    /// Debug-only (CCORN_DEBUG_UI contains "empty"): force the empty state so
+    /// the corn-cob identity moment can be verified without clearing real
+    /// sessions. Same hook family as the AppDelegate's screenshot helpers.
+    private let forceEmpty =
+        ProcessInfo.processInfo.environment["CCORN_DEBUG_UI"]?.contains("empty") == true
+
     var body: some View {
         Group {
-            if model.hasScanned && model.rows.isEmpty {
+            if (model.hasScanned && model.rows.isEmpty) || forceEmpty {
                 EmptyStateView()
             } else {
                 list

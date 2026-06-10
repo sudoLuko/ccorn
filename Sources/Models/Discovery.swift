@@ -8,6 +8,14 @@ struct DiscoveredSession {
     let modified: Date
 }
 
+/// Per-transcript metadata read in one pass: the session title (the LAST
+/// `ai-title` record — what `claude --resume` and claude.ai show) and the
+/// resolved `cwd`. Either is nil when the transcript doesn't carry it.
+struct TranscriptMeta: Sendable, Equatable {
+    var title: String?
+    var cwd: String?
+}
+
 /// A project found under `~/.claude/projects/`. The directory name is an opaque,
 /// lossy-encoded key (see docs/CCORN_SPEC.md "Encoded Path Format") — we never
 /// decode it. The real path comes from the transcript `cwd`.
