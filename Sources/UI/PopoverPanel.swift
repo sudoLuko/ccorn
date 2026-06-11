@@ -38,6 +38,9 @@ final class PopoverPanel: NSPanel {
 final class PopoverPanelController {
     private let panel: PopoverPanel
     private let hosting: NSHostingController<PopoverView>
+    /// For publishing popoverOnScreen (row-motion gating): the panel orders
+    /// out but its SwiftUI tree stays alive, so the marks must be told.
+    private let model: AppModel
     private var sizeObservation: NSKeyValueObservation?
     private var resignKeyObserver: NSObjectProtocol?
     private var globalMonitor: Any?
@@ -64,6 +67,7 @@ final class PopoverPanelController {
     var isVisible: Bool { panel.isVisible }
 
     init(model: AppModel) {
+        self.model = model
         // Built once and kept for the app's lifetime, exactly as the popover's
         // hosting controller was; the model flows in live.
         hosting = NSHostingController(rootView: PopoverView(model: model))
@@ -148,6 +152,7 @@ final class PopoverPanelController {
         // Key without activating (.nonactivatingPanel), as makeKey() did for
         // the popover window: Escape and resign-key dismissal need key.
         panel.makeKeyAndOrderFront(nil)
+        model.popoverOnScreen = true
     }
 
     func close() {
@@ -156,6 +161,8 @@ final class PopoverPanelController {
         removeMonitors()
         panel.orderOut(nil)
         isClosing = false
+        // The tree stays alive in the hidden panel — stop the mark motion.
+        model.popoverOnScreen = false
         // Triage contract: the calm disclosure is collapsed on every open.
         // orderOut keeps the SwiftUI view alive in the panel, so .onAppear
         // does not refire on reopen — reset explicitly instead, here while

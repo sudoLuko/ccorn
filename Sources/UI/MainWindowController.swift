@@ -9,6 +9,10 @@ import SwiftUI
 final class MainWindowController {
     private var window: NSWindow?
     private var observers: [NSObjectProtocol] = []
+    /// For publishing mainWindowOnScreen (row-motion gating): the closed
+    /// window keeps its SwiftUI tree alive (isReleasedWhenClosed = false),
+    /// so the marks must be told when it leaves the screen.
+    private weak var model: AppModel?
 
     init() {
         // Global observers cover the main window, Settings, and any future
@@ -28,6 +32,7 @@ final class MainWindowController {
     }
 
     func show(model: AppModel) {
+        self.model = model
         if window == nil {
             let hosting = NSHostingController(rootView: MainWindowView(model: model))
             let window = NSWindow(contentViewController: hosting)
@@ -46,10 +51,24 @@ final class MainWindowController {
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window
+            // One signal covers close, miniaturize, and full occlusion: the
+            // occlusion state drops .visible for all of them (and regains it
+            // on order-front), driving the row-motion gate.
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification,
+                object: window, queue: .main
+            ) { [weak self, weak window] _ in
+                DispatchQueue.main.async {
+                    guard let self, let window else { return }
+                    self.model?.mainWindowOnScreen =
+                        window.occlusionState.contains(.visible)
+                }
+            })
         }
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        model.mainWindowOnScreen = true
     }
 
     /// `.regular` iff a regular window remains: titled, visible or minimized

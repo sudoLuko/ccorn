@@ -156,14 +156,39 @@ struct StatusMark: View {
     }
 }
 
+/// Whether the window hosting a row is actually on screen. Both surfaces keep
+/// their SwiftUI trees alive while hidden (the popover panel orders out, the
+/// main window closes with isReleasedWhenClosed = false), and a repeatForever
+/// mark animation in a hidden tree keeps the render loop ticking every frame —
+/// several percent CPU per hidden surface, forever (jank-risk 2 in
+/// docs/ANIMATION_AUDIT_VERIFICATION.md). The window controllers publish
+/// visibility through the model into this key; RowStatusIndicator stops its
+/// loops when it goes false. Defaults to true so one-off hosts (debug
+/// previews) keep motion without wiring.
+private struct RowMotionEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var rowMotionEnabled: Bool {
+        get { self[RowMotionEnabledKey.self] }
+        set { self[RowMotionEnabledKey.self] = newValue }
+    }
+}
+
 /// Status mark for list rows, plus the two motions. Waiting keeps its slow
 /// expanding halo exactly as before: the dot never dims — at any frozen
 /// instant the row shows a solid attention dot; the halo ring starts hidden
 /// underneath and drifts outward, so the motion is felt on a scan without
 /// anything flashing. Working gets the optional breath (see WorkingBreath).
-/// State changes fade the mark over briefly.
+/// State changes fade the mark over briefly. Both loops require
+/// rowMotionEnabled: when the hosting window leaves the screen the mark is
+/// rebuilt at its resting solid state (identity flip — see .id below) and
+/// motion restarts on the next show.
 struct RowStatusIndicator: View {
     let presentation: StatusPresentation
+
+    @Environment(\.rowMotionEnabled) private var motionEnabled
 
     @State private var pulsing = false
     @State private var breathing = false
@@ -172,7 +197,7 @@ struct RowStatusIndicator: View {
         StatusMark(presentation: presentation)
             .scaleEffect(breathing ? 1.18 : 1)
             .opacity(breathing ? 0.7 : 1)
-            .animation(presentation == .working && WorkingBreath.enabled
+            .animation(motionEnabled && presentation == .working && WorkingBreath.enabled
                        ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true)
                        : .easeInOut(duration: 0.2),
                        value: breathing)
@@ -183,7 +208,7 @@ struct RowStatusIndicator: View {
                     .frame(width: 7, height: 7)
                     .scaleEffect(pulsing ? 2.6 : 1)
                     .opacity(presentation == .waiting ? (pulsing ? 0 : 0.5) : 0)
-                    .animation(presentation == .waiting
+                    .animation(motionEnabled && presentation == .waiting
                                ? .easeOut(duration: 1.8).repeatForever(autoreverses: false)
                                : nil,
                                value: pulsing)
@@ -194,14 +219,30 @@ struct RowStatusIndicator: View {
                 // repeatForever started while row layout is still pending
                 // captures the position delta too, and the mark animates
                 // between its insertion and settled positions forever.
-                DispatchQueue.main.async { syncMotion() }
+                DispatchQueue.main.async {
+                    syncMotion(presentation: presentation, motionEnabled: motionEnabled)
+                }
             }
-            .onChange(of: presentation) { _ in syncMotion() }
+            // The onChange closure MUST take the changed value from the
+            // parameter: the closure runs against the previous body's view
+            // struct, so reading the property gives the pre-change value.
+            .onChange(of: presentation) {
+                syncMotion(presentation: $0, motionEnabled: motionEnabled)
+            }
+            // Visibility flips swap the mark's IDENTITY, not just its state:
+            // a value write does not cancel an in-flight repeatForever
+            // animator (measured — the hidden tree kept rendering at the
+            // visible rate after pulsing/breathing were retargeted to rest),
+            // but destroying the view kills its animators dead. The fresh
+            // mark starts at rest (@State resets) and its onAppear restarts
+            // motion when the window is back. Presentation changes never
+            // touch identity, so the 0.25s crossfade above is unaffected.
+            .id(motionEnabled)
     }
 
-    private func syncMotion() {
-        pulsing = presentation == .waiting
-        breathing = presentation == .working && WorkingBreath.enabled
+    private func syncMotion(presentation: StatusPresentation, motionEnabled: Bool) {
+        pulsing = motionEnabled && presentation == .waiting
+        breathing = motionEnabled && presentation == .working && WorkingBreath.enabled
     }
 }
 

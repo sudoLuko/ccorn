@@ -18,6 +18,10 @@ struct MainWindowView: View {
         .sheet(item: $model.importFlow) { flow in
             ImportSheetView(flow: flow)
         }
+        // The closed window keeps this tree alive (isReleasedWhenClosed =
+        // false): the row marks gate their repeatForever motion on the
+        // window's actual visibility (close, miniaturize, full occlusion).
+        .environment(\.rowMotionEnabled, model.mainWindowOnScreen)
     }
 }
 

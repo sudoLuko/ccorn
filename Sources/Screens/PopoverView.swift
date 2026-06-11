@@ -42,6 +42,9 @@ struct PopoverView: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(PopoverPalette.divider, lineWidth: 0.5)
         )
+        // The panel orders out but this tree stays alive: the row marks gate
+        // their repeatForever motion on the panel's actual visibility.
+        .environment(\.rowMotionEnabled, model.popoverOnScreen)
         .onAppear { calmExpanded = false }
         .onReceive(NotificationCenter.default.publisher(for: Self.resetTriage)) { _ in
             // Posted while the panel is hidden; disable animations anyway so

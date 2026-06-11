@@ -40,6 +40,7 @@ import SwiftUI
 ///   seed [empty|working|calm] -> stop the poll, stage curated rows (DebugStage)
 ///   appearance <light|dark|system> -> override NSApp.appearance
 ///   show <main|popover>       -> open a surface for screenshots
+///   hide <main|popover>       -> close a surface (row-motion gating checks)
 ///   shoot <target> <path>     -> PNG of a window (main/popover/settings/onboarding/sheet/key)
 ///   authalert                 -> present the section-8 auth alert (sheet on main)
 ///   dismisssheet              -> end any attached sheet
@@ -350,6 +351,17 @@ final class DebugCommandChannel {
             default: return "err unknown surface \(parts[1])"
             }
             return "show \(parts[1])"
+
+        case "hide" where parts.count >= 2:
+            // Scripted stand-ins for Cmd+W / clicking away: drive the same
+            // paths (NSWindow.close, PopoverPanelController.close) so the
+            // hidden-tree motion gate can be verified end to end.
+            switch parts[1] {
+            case "main": NSApp.windows.first { $0.title == "CCorn" }?.close()
+            case "popover": model.closePopover?()
+            default: return "err unknown surface \(parts[1])"
+            }
+            return "hide \(parts[1])"
 
         case "shoot" where parts.count >= 3:
             // Let the runloop settle pending renders before capturing.

@@ -46,6 +46,14 @@ final class AppModel: ObservableObject {
     /// scan when unmanaged sessions were found).
     @Published var importFlow: ImportFlowModel?
 
+    /// Surface visibility, published by the window controllers (the popover's
+    /// show/close, the main window's occlusion changes). Both surfaces keep
+    /// their SwiftUI trees alive while hidden, so the row marks gate their
+    /// repeatForever motion on these via Theme's rowMotionEnabled environment
+    /// key — a hidden tree otherwise re-renders every frame, forever.
+    @Published var popoverOnScreen = false
+    @Published var mainWindowOnScreen = false
+
     /// Set by the AppDelegate so popover/empty-state actions can reach the
     /// window layer without the model importing it.
     var openMainWindow: (() -> Void)?
