@@ -97,6 +97,35 @@ import Testing
         #expect(contrast(StatusPalette.attentionDarkHex, 0x09090B) >= 3.0)
     }
 
+    // MARK: Running green (adaptive faces, per-ground contrast)
+
+    /// Running green: green-600 light face, green-500 dark face — and the
+    /// fixed-dark popover resolves the dark face, which is the point.
+    @Test func runningGreenResolvesPerAppearance() {
+        let color = NSColor(StatusPalette.running)
+        #expect(resolvedHex(of: color, appearance: .aqua)
+                == StatusPalette.runningLightHex)
+        #expect(resolvedHex(of: color, appearance: .darkAqua)
+                == StatusPalette.runningDarkHex)
+    }
+
+    /// The dot is a graphical UI component: 3:1 per face, each on the grounds
+    /// it actually renders over — light face on the light backgrounds, dark
+    /// face on the resolved dark window background and the fixed-dark popover.
+    /// The dark face is deliberately NOT held to the light grounds: green-500
+    /// sits near 2.3:1 on white, which is exactly why it is dark-face only.
+    @Test func runningGreenClearsUIComponentContrastPerGround() {
+        #expect(contrast(StatusPalette.runningLightHex, 0xFFFFFF) >= 3.0)
+        #expect(contrast(StatusPalette.runningLightHex, 0xFAFAFA) >= 3.0)
+        #expect(contrast(StatusPalette.runningDarkHex, 0x1E1E1E) >= 3.0)
+        #expect(contrast(StatusPalette.runningDarkHex, 0x09090B) >= 3.0)
+        if let bg = resolvedHex(of: .windowBackgroundColor, appearance: .darkAqua) {
+            #expect(contrast(StatusPalette.runningDarkHex, bg) >= 3.0)
+        }
+        // The constraint the split exists for:
+        #expect(contrast(StatusPalette.runningDarkHex, 0xFFFFFF) < 3.0)
+    }
+
     // MARK: Hollow grey's one home
 
     /// Stopped outline: fixed grey pair — #8A8A8F on light, zinc-400 on dark,

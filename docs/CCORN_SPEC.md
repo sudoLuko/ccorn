@@ -209,7 +209,12 @@ sits near 3:1 and fails); the dots, rings, and triangles are graphical UI
 components, so each face must clear 3:1 on the backgrounds it renders over:
 
 ```
-Green:           #16a34a                        — running, healthy, remote control active
+Green:           #16A34A light / #22C55E dark   — running, healthy, remote control active;
+                                                  same hue lifted a step on dark (and the
+                                                  fixed-dark popover) so the dot doesn't
+                                                  recede next to the bright dark-face amber;
+                                                  green-500 is dark-face only (~2.3:1 on
+                                                  white fails the 3:1 component floor)
 
 Blue:            #2563eb                        — Claude actively working mid-task
 

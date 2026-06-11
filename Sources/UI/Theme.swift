@@ -29,7 +29,15 @@ extension Color {
 /// Color(lightHex:darkHex:) adapt to appearance (each says why at its
 /// declaration); the rest are identical in light and dark.
 enum StatusPalette {
-    static let running = Color(hex: 0x16A34A)
+    /// Running green — adaptive: green-600 on light; green-500 on dark (and
+    /// therefore the fixed-dark popover) so the healthy dot keeps its weight
+    /// next to the bright dark-face amber instead of receding. Same hue,
+    /// lifted one step. Green-500 is dark-face ONLY: it sits near 2.3:1 on
+    /// white and fails the 3:1 UI-component floor there.
+    static let runningLightHex: UInt32 = 0x16A34A
+    static let runningDarkHex: UInt32 = 0x22C55E
+    static let running = Color(lightHex: runningLightHex,
+                               darkHex: runningDarkHex)
 
     static let working = Color(hex: 0x2563EB)
 
