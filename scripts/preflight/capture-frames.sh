@@ -18,6 +18,15 @@ set -euo pipefail
 SOCKET=ccorn-preflight
 TMUX() { command tmux -L "$SOCKET" "$@"; }
 
+# Run from a Claude Code Bash tool, CLAUDE_CODE_CHILD_SESSION would leak into
+# the tmux server and mark every spawned claude as a nested child session,
+# which skips all local session persistence (RUNTIME_FINDINGS P8) and breaks
+# the registry/transcript/RC contracts this harness verifies. Drop the vars
+# before the first TMUX call starts the server.
+for var in $(env | sed -nE 's/^(CLAUDE[A-Za-z0-9_]*|AI_AGENT)=.*/\1/p' | grep -v '^CLAUDE_BIN$'); do
+    unset "$var"
+done
+
 RUN_DIR=${PREFLIGHT_RUN_DIR:-/tmp/ccorn-preflight}
 OUT="$RUN_DIR/frames"
 # Unique scratch project per run so the first-run trust prompt is reproducible

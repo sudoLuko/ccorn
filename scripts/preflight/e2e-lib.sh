@@ -78,6 +78,16 @@ shot() { # <target> <file>
 # --- app lifecycle ----------------------------------------------------------
 launch_app() {
     log "launching hermetic app instance"
+    # A real user launches CCorn from Finder, where no Claude Code session
+    # vars exist. Run from a Claude Code Bash tool, CLAUDE_CODE_CHILD_SESSION
+    # leaks app -> tmux -> claude, and a claude marked as a child session
+    # SKIPS all local session persistence: no pid registry, no conversation
+    # records, no history entry, resume refuses (RUNTIME_FINDINGS P8). Scrub
+    # everything Claude-Code-shaped so the hermetic app matches production.
+    local scrub
+    scrub=$(env | sed -nE 's/^(CLAUDE[A-Za-z0-9_]*|AI_AGENT)=.*/-u \1/p' | tr '\n' ' ')
+    # shellcheck disable=SC2086  # word-splitting of the -u flags is intended
+    env $scrub \
     CCORN_DEBUG_UI=cmd \
     CCORN_DEBUG_TMUX_SOCKET=$SOCKET \
     CCORN_DEBUG_TMUX_SESSION=$SESSION \
