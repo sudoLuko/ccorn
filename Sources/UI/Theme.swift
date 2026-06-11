@@ -13,10 +13,10 @@ extension Color {
                   blue: Double(hex & 0xFF) / 255)
     }
 
-    /// Appearance-paired solid, only for where the spec names an exact pair
-    /// (§3 "Primary action"). Semantic colors can't express it: Color.primary
-    /// is ~85%-alpha labelColor, which filled into a button renders as a
-    /// washed grey slab.
+    /// Appearance-paired solid, only for where exact per-appearance values
+    /// are required (§3 "Primary action", the attention amber). Semantic
+    /// colors can't express it: Color.primary is ~85%-alpha labelColor, which
+    /// filled into a button renders as a washed grey slab.
     init(lightHex: UInt32, darkHex: UInt32) {
         self.init(nsColor: NSColor(name: nil) { appearance in
             let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -25,23 +25,44 @@ extension Color {
     }
 }
 
-/// Status mark colors — semantic only, identical in light and dark
-/// (docs/CCORN_SPEC.md section 3, with two review revisions: stale is recolored
-/// out of the red/orange family, and the broken tier gets an amber symbol).
+/// Status mark colors (docs/CCORN_SPEC.md section 3). Green, blue, red, and
+/// the unmanaged outline are identical in light and dark; the attention amber
+/// and the stopped outline are the two appearance-adaptive tokens (each says
+/// why below).
 enum StatusPalette {
     static let running = Color(hex: 0x16A34A)
     static let working = Color(hex: 0x2563EB)
-    static let waiting = Color(hex: 0xD97706)
+    /// The ONE attention amber: the waiting dot and its halo, the recoverable
+    /// warning triangles (sign in / no remote), and every amber attention
+    /// word. Appearance-adaptive because the word is body-size TEXT: on light
+    /// it must clear WCAG AA 4.5:1 against the window background — amber-500
+    /// (#F59E0B) and the old waiting #D97706 both sit near 3:1 and fail — so
+    /// it darkens to between amber-700 and -800; on dark and the fixed-dark
+    /// popover the brighter amber reads well (~9:1 on #09090B).
+    static let attentionLightHex: UInt32 = 0xA34A0B
+    static let attentionDarkHex: UInt32 = 0xF59E0B
+    static let attention = Color(lightHex: attentionLightHex,
+                                 darkHex: attentionDarkHex)
     /// Stale is muted and recessive on purpose — a desaturated slate, not the
     /// spec's #EA580C, which reads like Crashed at 7px.
     static let stale = Color(hex: 0x64748B)
     static let dead = Color(hex: 0xDC2626)
-    /// Broken-tier symbol amber (recoverable: sign in / no remote). Brighter
-    /// than the waiting yellow so it stays apart from both that dot and the
-    /// red (terminal) symbol at small sizes.
-    static let amber = Color(hex: 0xF59E0B)
     /// Unmanaged outline — fixed per spec section 4, same in both appearances.
     static let unmanagedOutline = Color(hex: 0x71717A)
+    /// Hollow grey for a stopped session's empty dot, one home for every
+    /// surface. Light: the adaptive semantic grey (tertiaryLabelColor —
+    /// separatorColor is a hairline tone that vanishes at 7px). Dark, and
+    /// therefore the fixed-dark popover: zinc-400 — visibly present,
+    /// recessive, and a step lighter than the unmanaged outline (#71717A) so
+    /// the two hollow dots keep their hierarchy.
+    static let stoppedOutline = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(Color(hex: 0xA1A1AA))
+            : .tertiaryLabelColor
+    })
+    /// Grey fill for the import sheet's not-yet-imported dot (5.4 State 2,
+    /// "Waiting: muted opacity, grey dot").
+    static let importPending = Color.secondary.opacity(0.5)
 }
 
 /// Menu-bar popover palette — the popover is fixed dark regardless of system
@@ -53,11 +74,6 @@ enum PopoverPalette {
     static let primaryText = Color(hex: 0xFAFAFA)
     static let secondaryText = Color(hex: 0x71717A)
     static let footerText = Color(hex: 0xA1A1AA)
-    /// Outline for a stopped session's empty dot on the fixed-dark popover.
-    /// Zinc-400, not the spec's light-mode #E4E4E7, which glares on #09090B —
-    /// visibly present, recessive, and a step lighter than the unmanaged
-    /// outline (#71717A) so the two hollow dots keep their hierarchy.
-    static let stoppedOutline = Color(hex: 0xA1A1AA)
 }
 
 // MARK: - StatusPresentation colors
@@ -68,7 +84,7 @@ extension StatusPresentation {
         switch self {
         case .running: return StatusPalette.running
         case .working: return StatusPalette.working
-        case .waiting: return StatusPalette.waiting
+        case .waiting: return StatusPalette.attention
         case .stale: return StatusPalette.stale
         case .stopped, .unmanaged: return nil
         case .noRemote, .needsAuth, .crashed: return nil
@@ -79,7 +95,7 @@ extension StatusPresentation {
     /// red terminal. nil for the dot states.
     var symbolColor: Color? {
         switch self {
-        case .noRemote, .needsAuth: return StatusPalette.amber
+        case .noRemote, .needsAuth: return StatusPalette.attention
         case .crashed: return StatusPalette.dead
         case .running, .working, .waiting, .stale, .stopped, .unmanaged: return nil
         }
@@ -109,10 +125,6 @@ enum WorkingBreath {
 /// other glyph.
 struct StatusMark: View {
     let presentation: StatusPresentation
-    /// Outline color for the stopped state — tertiary label in the main
-    /// window (separatorColor is a hairline tone that vanishes at 7px), a
-    /// fixed zinc in the popover.
-    var stoppedOutline: Color = Color(.tertiaryLabelColor)
 
     /// Width of the status slot on every surface (the symbol is the widest mark).
     static let slotWidth: CGFloat = 14
@@ -133,7 +145,8 @@ struct StatusMark: View {
                 Circle()
                     .strokeBorder(
                         presentation == .unmanaged
-                            ? StatusPalette.unmanagedOutline : stoppedOutline,
+                            ? StatusPalette.unmanagedOutline
+                            : StatusPalette.stoppedOutline,
                         lineWidth: 1)
                     .frame(width: 7, height: 7)
             }
@@ -151,13 +164,12 @@ struct StatusMark: View {
 /// State changes fade the mark over briefly.
 struct RowStatusIndicator: View {
     let presentation: StatusPresentation
-    var stoppedOutline: Color = Color(.tertiaryLabelColor)
 
     @State private var pulsing = false
     @State private var breathing = false
 
     var body: some View {
-        StatusMark(presentation: presentation, stoppedOutline: stoppedOutline)
+        StatusMark(presentation: presentation)
             .scaleEffect(breathing ? 1.18 : 1)
             .opacity(breathing ? 0.7 : 1)
             .animation(presentation == .working && WorkingBreath.enabled
@@ -166,7 +178,7 @@ struct RowStatusIndicator: View {
                        value: breathing)
             .background(
                 Circle()
-                    .stroke(StatusPalette.waiting, lineWidth: 1)
+                    .stroke(StatusPalette.attention, lineWidth: 1)
                     // The halo tracks the 7px dot, not the wider slot.
                     .frame(width: 7, height: 7)
                     .scaleEffect(pulsing ? 2.6 : 1)
@@ -190,6 +202,29 @@ struct RowStatusIndicator: View {
     private func syncMotion() {
         pulsing = presentation == .waiting
         breathing = presentation == .working && WorkingBreath.enabled
+    }
+}
+
+// MARK: - Attention word
+
+/// The short colored word after the title for the states that need the user —
+/// Needs input, Sign in, No remote, Crashed — and nothing for the silent
+/// states (their word lives in the mark's tooltip). One view shared by the
+/// main-window row and the popover row, so the word reads, colors, and fades
+/// identically on both surfaces; the fade animates under the row's
+/// presentation-scoped animation.
+struct AttentionWord: View {
+    let presentation: StatusPresentation
+
+    var body: some View {
+        if let label = presentation.attentionLabel {
+            Text(label)
+                .font(.caption)
+                .foregroundColor(presentation.labelColor)
+                .lineLimit(1)
+                .fixedSize()
+                .transition(.opacity)
+        }
     }
 }
 

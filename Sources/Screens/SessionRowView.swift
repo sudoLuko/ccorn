@@ -101,13 +101,8 @@ struct SessionRowView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            if !isRenaming, let label = row.presentation.attentionLabel {
-                Text(label)
-                    .font(.caption)
-                    .foregroundColor(row.presentation.labelColor)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .transition(.opacity)
+            if !isRenaming {
+                AttentionWord(presentation: row.presentation)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: row.presentation)

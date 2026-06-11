@@ -92,11 +92,10 @@ struct PopoverView: View {
     @ViewBuilder
     private var aggregateMark: some View {
         if let presentation = model.aggregatePresentation {
-            StatusMark(presentation: presentation,
-                       stoppedOutline: PopoverPalette.stoppedOutline)
+            StatusMark(presentation: presentation)
         } else {
             Circle()
-                .strokeBorder(PopoverPalette.stoppedOutline, lineWidth: 1)
+                .strokeBorder(StatusPalette.stoppedOutline, lineWidth: 1)
                 .frame(width: 7, height: 7)
                 .frame(width: StatusMark.slotWidth)
         }
@@ -205,7 +204,9 @@ struct PopoverView: View {
         .help(calmExpanded ? "Hide quiet sessions" : "Show quiet sessions")
     }
 
-    /// Quiet pointer to the main window for unmanaged discoveries.
+    /// Quiet pointer to the main window for unmanaged discoveries — the same
+    /// word as the main window's DISCOVERED section header; the "not managed"
+    /// detail lives in the tooltip on both surfaces.
     private var discoveredHint: some View {
         Button {
             model.closePopover?()
@@ -216,7 +217,7 @@ struct PopoverView: View {
                     .strokeBorder(StatusPalette.unmanagedOutline, lineWidth: 1)
                     .frame(width: 7, height: 7)
                     .frame(width: StatusMark.slotWidth)
-                Text("\(model.unmanagedRows.count) discovered, not managed")
+                Text("\(model.unmanagedRows.count) discovered")
                     .font(.caption)
                     .foregroundColor(PopoverPalette.secondaryText)
                 Spacer(minLength: 0)
@@ -226,7 +227,7 @@ struct PopoverView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Open CCorn to import them")
+        .help("Sessions found on this Mac that CCorn doesn't manage yet — open CCorn to import them")
     }
 
     // MARK: Footer (36px)
@@ -277,26 +278,20 @@ private struct PopoverRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            RowStatusIndicator(presentation: row.presentation,
-                               stoppedOutline: PopoverPalette.stoppedOutline)
+            RowStatusIndicator(presentation: row.presentation)
                 .help(row.statusTooltip)
             Text(row.title)
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(PopoverPalette.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            if let label = row.presentation.attentionLabel {
-                Text(label)
-                    .font(.caption)
-                    .foregroundColor(row.presentation.labelColor)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
+            AttentionWord(presentation: row.presentation)
             Spacer(minLength: 8)
             Text(LastActiveFormat.string(from: row.lastActive))
                 .font(.caption)
                 .foregroundColor(PopoverPalette.secondaryText)
         }
+        .animation(.easeInOut(duration: 0.25), value: row.presentation)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(hovering ? PopoverPalette.rowHover : .clear)

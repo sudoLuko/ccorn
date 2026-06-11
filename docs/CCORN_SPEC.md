@@ -1,7 +1,7 @@
 # CCorn — Full Build Specification
 
-> Version 1.2 — Reconciled with runtime findings (Claude Code 2.1.169); ready for Claude Code oneshot build  
-> Status: Ready for implementation  
+> Version 1.3 — Reconciled with the shipped design (one mark per row, attention words, adaptive attention amber, triage popover, hidden title-bar text); 1.2 reconciled runtime findings (Claude Code 2.1.169)  
+> Status: Matches the built app  
 > Repo: `ccorn`
 
 -----
@@ -201,14 +201,25 @@ Primary text:   #FAFAFA
 Secondary text: #71717A
 ```
 
-**Status dot colors — semantic only, same in light and dark:**
+**Status mark colors — the only color in the app.** Green, blue, red, and the
+unmanaged outline are identical in light and dark. Two tokens adapt to
+appearance: the attention amber (it doubles as word TEXT, which must clear
+WCAG AA 4.5:1 on the light background — the original #D97706 sits near 3:1
+and fails) and the stopped outline (the light hairline grey would glare or
+vanish on dark):
 
 ```
-Green:  #16a34a  — running, healthy, remote control active
-Blue:   #2563eb  — Claude actively working mid-task
-Yellow: #d97706  — waiting for input or approval
-Orange: #ea580c  — stale, idle past threshold
-Red:    #dc2626  — dead/crashed unexpectedly
+Green:           #16a34a                        — running, healthy, remote control active
+Blue:            #2563eb                        — Claude actively working mid-task
+Attention amber: #A34A0B light / #F59E0B dark   — waiting dot + halo, recoverable warning
+                                                  triangles (sign-in, no-remote), and every
+                                                  amber attention word
+Slate:           #64748b                        — stale, idle past threshold (recessive on
+                                                  purpose; the original #EA580C orange read
+                                                  like Crashed at 7px)
+Red:             #dc2626                        — crashed (triangle + word), rename error
+Stopped outline: tertiaryLabel light / #A1A1AA dark and popover — hollow dot ring
+Unmanaged:       #71717a                        — hollow dot ring, same in both appearances
 ```
 
 ### Typography
@@ -221,7 +232,7 @@ Use SwiftUI semantic text styles, which respect Dynamic Type automatically. The 
 Column headers:     .caption2   11pt  regular   Color.secondary  uppercase via .textCase(.uppercase)
 Timestamps:         .caption    12pt  regular   Color.secondary
 Directory paths:    .caption    12pt  monospaced Color.secondary  (SF Mono via .monospaced())
-Status labels:      .caption    12pt  regular   matches dot color (hardcoded semantic status color)
+Attention words:    .caption    12pt  regular   matches the mark color (attention amber / red)
 Session names:      .subheadline 13pt medium    Color.primary
 Sidebar nav items:  .subheadline 13pt regular   Color.primary    (medium when active)
 Section labels:     .caption    12pt  regular   Color.secondary  uppercase via .textCase(.uppercase)
@@ -277,29 +288,39 @@ Same corn cob silhouette on a rounded-square canvas (standard macOS app icon sha
 
 ## 4. Session States
 
-Seven states. Each row in the session list shows one of these at all times.
+Eight detected states (the original seven plus Needs-auth, section 8), shown
+as nine *presentations*: an alive session whose remote control is not active
+past the 30s activation grace presents as No-remote regardless of its
+underlying activity. Every row shows exactly ONE status mark — a 7px dot for
+the routine states, or the single warning symbol `exclamationmark.triangle.fill`
+(slightly larger than the dot, in the same fixed-width slot) for the broken
+trio — never a dot and a symbol together, never any other status glyph. The
+four presentations that need the user also show a short colored word after
+the title; the routine states keep their word in the mark's tooltip.
 
-|State    |Dot           |Color                |Meaning                                      |
-|---------|--------------|---------------------|---------------------------------------------|
-|Running  |Filled circle |Green `#16a34a`      |Session alive, remote control active, healthy|
-|Working  |Filled circle |Blue `#2563eb`       |Claude actively executing mid-task           |
-|Waiting  |Filled circle |Yellow `#d97706`     |Claude waiting for user input or approval    |
-|Stale    |Filled circle |Orange `#ea580c`     |Idle past user-defined threshold             |
-|Dead     |Filled circle |Red `#dc2626`        |Process crashed or died unexpectedly         |
-|Stopped  |Empty circle  |`#E4E4E7` border only|Manually killed by user, not running         |
-|Unmanaged|Outline circle|`#71717A` border     |Discovered but not yet imported into CCorn   |
+|Presentation|Mark                |Color                                    |Word         |Meaning                                        |
+|------------|--------------------|-----------------------------------------|-------------|-----------------------------------------------|
+|Running     |Filled circle       |Green `#16a34a`                          |—            |Session alive, remote control active, healthy  |
+|Working     |Filled circle       |Blue `#2563eb`                           |—            |Claude actively executing mid-task             |
+|Waiting     |Filled circle + halo|Attention amber `#A34A0B` light / `#F59E0B` dark|"Needs input"|Claude waiting for user input or approval|
+|Stale       |Filled circle       |Slate `#64748b`                          |—            |Idle past user-defined threshold               |
+|Sign in     |Warning triangle    |Attention amber (same token)             |"Sign in"    |Login prompt showing; sign-in is the root cause|
+|No remote   |Warning triangle    |Attention amber (same token)             |"No remote"  |Alive, remote control not active past the grace|
+|Crashed     |Warning triangle    |Red `#dc2626`                            |"Crashed"    |Process crashed or died unexpectedly (Dead)    |
+|Stopped     |Empty circle        |Stopped outline (tertiaryLabel light / `#A1A1AA` dark+popover)|—|Manually killed by user, not running|
+|Unmanaged   |Outline circle      |`#71717A` ring                           |—            |Discovered but not yet imported into CCorn     |
 
-**Dot size:** 7px diameter  
-**Dot position:** Left of session name, 8px gap between dot and name
+**Dot size:** 7px diameter (hollow rings 1px — a 0.5px ring is invisible at 7px)  
+**Dot position:** Left of session name in a fixed-width slot, 8px gap between mark and name
 
 **State detection — implementation:**
 
 Poll each session every 3 seconds with `tmux capture-pane -t <window-id> -p` (the `@N` window ID captured at creation, not the name; see Window Naming and Identity). Capture the visible frame only: Claude Code is a full-screen TUI on the terminal's alternate screen, which keeps no per-app scrollback, so `-S -<n>` would read stale pre-launch output rather than the current view. The visible frame is the current TUI render, which is exactly what these patterns match against (add `-J` to rejoin wrapped lines if needed). Parse the output for these patterns:
 
 - **Working (blue):** Output contains tool invocation strings like `Bash(`, `Read(`, `Write(`, `Edit(`, `Task(`, or contains spinner characters `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`. Rely on pane output patterns — do not use CPU usage from `ps` as it reports lifetime averages, not real-time activity.
-- **Waiting (yellow):** Output ends with Claude’s prompt indicator — typically a `>` or `?` prompt with no spinner, or contains phrases like “Would you like”, “Do you want”, “Please confirm”, “Allow”, or Claude Code’s permission prompt patterns. Process is running but no Working pattern matched.
+- **Waiting (amber):** Output ends with Claude’s prompt indicator — typically a `>` or `?` prompt with no spinner, or contains phrases like “Would you like”, “Do you want”, “Please confirm”, “Allow”, or Claude Code’s permission prompt patterns. Process is running but no Working pattern matched.
 - **Running (green):** Process is alive and remote control is active (see Remote Control in Section 2 for the detection signal and its fallback), but no Working or Waiting pattern matched. This is the default healthy idle state.
-- **Stale (orange):** Running state but pane output hash unchanged for longer than the user-defined threshold. Implementation: store a SHA256 hash of captured pane output each poll cycle. Compare to previous hash — if identical for longer than threshold → stale. Track last-hash-change timestamp per session.
+- **Stale (slate):** Running state but pane output hash unchanged for longer than the user-defined threshold. Implementation: store a SHA256 hash of captured pane output each poll cycle. Compare to previous hash — if identical for longer than threshold → stale. Track last-hash-change timestamp per session.
 - **Dead (red):** The session's tracked PID is gone (`kill -0 <pid>` fails). Confirm against the process list (see Process Identification), matching by PID rather than a grep on the command line.
 - **Stopped (empty circle):** User-initiated kill — set by CCorn, not detected from process state.
 - **Unmanaged (outline):** discovered via `~/.claude/projects/` (a project whose `cwd` resolves into a watch directory), or a live `claude` process running in such a directory, with no window in the `ccorn` session matching this project path. Not detected from a `.claude/` folder (see Session Discovery).
@@ -309,8 +330,15 @@ Poll each session every 3 seconds with `tmux capture-pane -t <window-id> -p` (th
 **Remote control linkage (no URL on 2.1.169):**
 Remote Control on 2.1.169 prints no session URL anywhere, so there is nothing to capture with a regex. Detect that remote control is active via the `Remote Control active` footer string (see the Running state above) or the `bridge-session` record in the session's JSONL. "Open in Browser" opens `https://claude.ai/code`; the user locates the session by its title.
 
-**Warning indicator visual:**
-When a session row needs attention (e.g. remote control not active), show a small SF Symbol `exclamationmark.circle` in `#d97706` (yellow/warning color) immediately to the right of the status dot. Tapping/hovering this icon shows a tooltip with the specific reason. This is separate from the session state dot — it’s an overlay indicator, not a replacement.
+**Warning presentation (one mark per row — no overlay):**
+There is no separate warning indicator next to the dot. A session that is
+broken for the user — sign-in required, remote control not active past the
+30s grace, or crashed — REPLACES its dot with the single warning symbol
+`exclamationmark.triangle.fill`: attention amber for the recoverable pair
+(sign-in, no-remote), red for crashed. The short word after the title names
+the specific problem, and the mark's tooltip carries the full reason
+(including the underlying activity a No-remote session was in). Waiting is
+routine, not broken: it keeps its amber dot plus the "Needs input" word.
 
 -----
 
@@ -454,6 +482,7 @@ First launch only. Never shown again after completion.
 - Centered card on the system window background (`Color(.windowBackgroundColor)`), so onboarding follows light/dark like the rest of the main UI
 - Card: 480px wide, auto height, `Color(.controlBackgroundColor)` surface, 0.5px border `Color(.separatorColor)`, 12px corner radius, 32px padding. Do not hardcode light hex here; it would render as a glaring white card in dark mode
 - Not a sheet: standalone centered window, not resizable. The app is `.accessory` at first launch, so switch to `.regular` before showing this window so it can take focus (see Activation policy)
+- Title-bar TEXT hidden (`titleVisibility = .hidden`), same treatment as the main window — the card body shows the corn lockup, so the title would duplicate it. The title STRING stays `"Welcome to CCorn"` for programmatic lookup (the debug channel finds the window by it)
 
 **Layout top to bottom:**
 
@@ -552,7 +581,7 @@ Appears as an alert over the sheet when CCorn hits an actively-working session:
 
 Opens from the gear icon in the sidebar (open the `Settings` scene programmatically; a menu-bar-only `.accessory` app may not present a standard app menu, so do not rely on a system menu item). Native macOS `Settings` scene, renders as a preferences window automatically.
 
-**Window:** ~480px wide, auto height (grows as directories are added), standard macOS preferences chrome
+**Window:** ~480px wide, auto height (grows as directories are added), standard macOS preferences chrome with the title-bar TEXT hidden (`titleVisibility = .hidden`, matching the main and onboarding windows; the scene-set title string, containing "Settings", stays for programmatic lookup)
 
 **Single screen, three sections using SwiftUI `Form` + `Section`:**
 
@@ -793,7 +822,7 @@ verification with the list's existing tap/right-click stack.
 1. User reviews, unchecks any they don’t want to import
 1. Clicks “Import Selected ([X])”
 1. CCorn processes sequentially — one at a time:
-   a. For idle sessions: sends `SIGTERM` to existing terminal process PID, waits 5 seconds, `SIGKILL` if still running. Creates new tmux window, runs `claude --resume <uuid> --rc`, monitors for remote control URL.
+   a. For idle sessions: sends `SIGTERM` to existing terminal process PID, waits 5 seconds, `SIGKILL` if still running. Creates new tmux window, runs `claude --resume <uuid> --rc`, confirms remote control is active (the `Remote Control active` footer string or a `bridge-session` JSONL record — no URL exists to capture).
    b. For active sessions: pauses, shows warning alert — user chooses “Wait for Idle” (polls every 10s) or “Import Anyway” (proceeds immediately with same kill flow)
 1. Progress shown per row — waiting → importing spinner → green checkmark
 1. On completion: “All done” state, user clicks Close
@@ -811,7 +840,7 @@ verification with the list's existing tap/right-click stack.
 1. Captures the session's PID for liveness and kill (see PID Tracking)
 1. Confirms remote control is active by detecting the `Remote Control active` footer string in the captured pane, or a `bridge-session` record in the session's JSONL
 1. Session appears in list immediately with green dot
-1. If remote control does not become active (no `Remote Control active` string and no `bridge-session` record) → yellow dot with warning indicator on row
+1. If remote control does not become active within the 30s grace (no `Remote Control active` string and no `bridge-session` record) → the row presents No-remote: amber warning triangle plus the "No remote" word (see Section 4)
 
 ### 6.4 Open Session in Browser
 
@@ -844,7 +873,7 @@ verification with the list's existing tap/right-click stack.
 1. If directory no longer exists → alert: “The project directory no longer exists.”
 1. If a tmux window for this project still exists (a crashed session often leaves its window and shell), reuse it (respawn in place) or kill it first; only create a new window if none exists, to avoid an orphaned dead window plus a `-2` duplicate. Otherwise: `tmux new-window -t ccorn -n <sanitized-name> -c <directory> -P -F "#{window_id}"` (store the returned window ID; see Window Naming and Identity)
 1. Runs `claude --resume <uuid> --rc` — resumes session with remote control enabled
-1. Monitors pane output for remote control URL, captures and stores it
+1. Confirms remote control is active (footer string or `bridge-session` record — no URL exists to capture)
 1. Row updates to green dot
 
 ### 6.8 Rename Session
@@ -879,7 +908,7 @@ verification with the list's existing tap/right-click stack.
 1. Sends `SIGTERM` to existing process PID, waits 5 seconds, sends `SIGKILL` if still running
 1. Creates new tmux window: `tmux new-window -t ccorn -n <folder-name> -c <directory>`
 1. Runs `claude --resume <uuid> --rc` — resumes with remote control enabled
-1. Monitors pane output for remote control URL, captures and stores it
+1. Confirms remote control is active (footer string or `bridge-session` record — no URL exists to capture)
 1. Row updates — unmanaged badge removed, dot fills to correct state
 1. User closes old terminal window
 
@@ -888,7 +917,7 @@ verification with the list's existing tap/right-click stack.
 - If “Auto-restart sessions on launch” toggle is enabled in settings
 - On app launch: finds all sessions in stopped or dead state
 - Sequentially restarts each: reads session ID from JSONL, runs `claude --resume <uuid> --rc` in correct directory
-- Monitors pane output for remote control URL, captures and stores for each session
+- Confirms remote control becomes active for each (footer string or `bridge-session` record)
 - Shows progress — dot animates from empty circle to green as each restarts
 
 -----
@@ -955,7 +984,7 @@ verification with the list's existing tap/right-click stack.
 |`claude` binary not in PATH                    |Alert: “Claude Code is not installed” with link to installation docs                                                                                                                                        |
 |Watch directory doesn’t exist                  |Skip silently on scan, remove from settings list                                                                                                                                                            |
 |Session directory deleted or moved             |Show error on restart: “Project directory not found”                                                                                                                                                        |
-|Remote control fails to activate within 30s    |Yellow dot + warning indicator on row                                                                                                                                                                       |
+|Remote control fails to activate within 30s    |Row presents No-remote: the amber warning triangle replaces the dot, "No remote" word after the title (Section 4)                                                                                           |
 |Remote control activation fails with auth error|Alert: “Remote Control is available on Pro, Max, Team, and Enterprise plans (Team/Enterprise need an admin to enable it); API keys and inference-only tokens are not supported.”                                                                                                              |
 |Remote control lost: sustained ~10min outage    |Process has exited (the timeout kills the process). Detection marks it Dead via PID; recover with Restart (`claude --resume <uuid> --rc`). Do not send `/rc` to a timed-out session, nothing is there to receive it. Short drops reconnect on their own (see Remote Control in Section 2).|
 |User not authenticated with Claude Code CLI    |Detect by checking pane output for login prompts after starting session. Show alert: “Authenticate Claude Code first: run `claude` then `/login` (or `claude auth login`), and unset ANTHROPIC_API_KEY. Surface the CLI's own error text rather than a hard-coded string.”                                                |
@@ -969,7 +998,7 @@ verification with the list's existing tap/right-click stack.
 |User adds directory with no sessions           |Empty state shown, no error                                                                                                                                                                                 |
 |App quit with sessions running                 |Sessions continue running in tmux — that’s the point                                                                                                                                                        |
 |Machine reboots                                |tmux and sessions die. tmux-resurrect not included in v1 — note for future                                                                                                                                  |
-|Remote control not active on session           |Grey warning indicator on dot, Open in Browser greyed out                                                                                                                                                   |
+|Remote control not active on session           |No-remote presentation (amber triangle + word); Open in Browser greyed out                                                                                                                                  |
 |Active session during first run import         |Pause on that session, show warning alert                                                                                                                                                                   |
 |`ccorn` tmux session already exists on launch  |Detected via `tmux has-session -t ccorn` — attach to existing, do not recreate                                                                                                                              |
 |~/.claude.json doesn’t exist                   |No action needed. CCorn does not write a global remote-control key (none is documented); it uses `--rc` per session.                                                                                                                                                           |
@@ -1012,7 +1041,7 @@ Process manager only — no chat interface.
 - Always enable remote control via the `--rc` flag on sessions CCorn starts or restarts
 - Use `tmux send-keys` for all programmatic interaction; send the key as a separate `Enter` argument, never an embedded `\n`
 - Use FSEvents not polling for directory watching
-- On launch, reconcile with existing tmux windows (re-derive PIDs; previous URLs are gone)
+- On launch, reconcile with existing tmux windows (re-derive PIDs and state; prior-run runtime values are meaningless)
 
 ## Design rules
 - Zinc neutral color palette — see CCORN_SPEC.md section 3 for exact hex values
@@ -1064,9 +1093,9 @@ Process manager only — no chat interface.
 3. Watch directory scanning + FSEvents
 4. Session discovery and status detection (pane capture polling every 3s)
 5. Main app window — sidebar + list view
-6. New session flow (claude --rc, URL capture)
+6. New session flow (claude --rc "<title>", RC-active detection)
 7. Import/resume session flow (SIGTERM/SIGKILL, claude --resume --rc)
-8. Remote control URL capture and storage
+8. Remote-control-active detection (footer string / bridge-session record; no URL exists)
 9. Context menu actions
 10. Rename inline interaction
 11. Settings screen (with remove directory warning)
@@ -1104,9 +1133,9 @@ Build in this order for early testability. Each phase should be runnable and tes
 
 **Phase 3 — Core actions (day 2-3)**
 
-- New session flow — folder picker → tmux window → `claude --rc` → URL capture
+- New session flow — folder picker → tmux window → `claude --rc "<title>"` → RC-active detection
 - Kill session — confirmation → SIGTERM → SIGKILL fallback → dot updates
-- Restart session — resume by ID → `claude --resume <uuid> --rc` → URL capture → dot updates
+- Restart session — resume by ID → `claude --resume <uuid> --rc` → RC-active detection → dot updates
 - Open in Terminal — osascript tmux attach
 - Open in Browser — opens claude.ai/code (no per-session URL exists); find the session by title
 
@@ -1120,7 +1149,7 @@ Build in this order for early testability. Each phase should be runnable and tes
 **Phase 5 — Polish (day 4-5)**
 
 - Real onboarding screen (replaces hardcoded directory from Phase 2)
-- Remote control detection and auto-enable
+- Remote-control-active detection (per-session `--rc`; there is no global auto-enable)
 - Rename inline interaction
 - Archive/unarchive
 - Settings screen

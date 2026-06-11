@@ -158,7 +158,7 @@ private struct ImportRowView: View {
                 .frame(width: 7, height: 7)
         case (_, .pending):
             Circle()
-                .fill(Color.secondary.opacity(0.5))
+                .fill(StatusPalette.importPending)
                 .frame(width: 7, height: 7)
         case (_, .waitingForIdle), (_, .importing):
             ProgressView()
@@ -178,7 +178,7 @@ private struct ImportRowView: View {
     @ViewBuilder
     private var badge: some View {
         if item.phase == .waitingForIdle {
-            pill(text: "Waiting for idle", fill: StatusPalette.waiting)
+            pill(text: "Waiting for idle", fill: StatusPalette.attention)
         } else {
             pill(text: item.working ? "Working" : "Idle",
                  fill: item.working ? StatusPalette.working : StatusPalette.running)
