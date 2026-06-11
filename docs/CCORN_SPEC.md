@@ -216,7 +216,10 @@ Green:           #16A34A light / #22C55E dark   — running, healthy, remote con
                                                   green-500 is dark-face only (~2.3:1 on
                                                   white fails the 3:1 component floor)
 
-Blue:            #2563eb                        — Claude actively working mid-task
+Blue:            #2563EB light / #3B82F6 dark   — Claude actively working mid-task; same hue
+                                                  lifted a step on dark (and the fixed-dark
+                                                  popover) so working reads active and
+                                                  separates from the muted stale slate
 
 Attention amber: #A34A0B light / #F59E0B dark   — waiting dot + halo, recoverable warning
                                                   triangles (sign-in, no-remote), and every

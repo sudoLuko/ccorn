@@ -149,4 +149,28 @@ import Testing
         // The regression this guards against:
         #expect(contrast(0xBDBDBD, 0xFFFFFF) < 3.0)
     }
+
+    // MARK: Working blue (adaptive faces, per-ground contrast)
+
+    /// Working blue: blue-600 light face, blue-500 dark face — and the
+    /// fixed-dark popover resolves the dark face, which is the point.
+    @Test func workingBlueResolvesPerAppearance() {
+        let color = NSColor(StatusPalette.working)
+        #expect(resolvedHex(of: color, appearance: .aqua)
+                == StatusPalette.workingLightHex)
+        #expect(resolvedHex(of: color, appearance: .darkAqua)
+                == StatusPalette.workingDarkHex)
+    }
+
+    /// Same per-ground floors as the running green: 3:1 per face on the
+    /// grounds it actually renders over.
+    @Test func workingBlueClearsUIComponentContrastPerGround() {
+        #expect(contrast(StatusPalette.workingLightHex, 0xFFFFFF) >= 3.0)
+        #expect(contrast(StatusPalette.workingLightHex, 0xFAFAFA) >= 3.0)
+        #expect(contrast(StatusPalette.workingDarkHex, 0x1E1E1E) >= 3.0)
+        #expect(contrast(StatusPalette.workingDarkHex, 0x09090B) >= 3.0)
+        if let bg = resolvedHex(of: .windowBackgroundColor, appearance: .darkAqua) {
+            #expect(contrast(StatusPalette.workingDarkHex, bg) >= 3.0)
+        }
+    }
 }

@@ -39,7 +39,13 @@ enum StatusPalette {
     static let running = Color(lightHex: runningLightHex,
                                darkHex: runningDarkHex)
 
-    static let working = Color(hex: 0x2563EB)
+    /// Working blue — adaptive: blue-600 on light; blue-500 on dark (and
+    /// therefore the fixed-dark popover) so working reads active and
+    /// separates from the muted stale slate. Same hue, lifted one step.
+    static let workingLightHex: UInt32 = 0x2563EB
+    static let workingDarkHex: UInt32 = 0x3B82F6
+    static let working = Color(lightHex: workingLightHex,
+                               darkHex: workingDarkHex)
 
     /// The ONE attention amber: the waiting dot and its halo, the recoverable
     /// warning triangles (sign in / no remote), and every amber attention
