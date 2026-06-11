@@ -8,7 +8,7 @@ scripts/preflight/run.sh                  # CLI pane-contract test (below)
 scripts/preflight/e2e-auth.sh             # section-8 auth pipeline in the real app
 scripts/preflight/e2e-chaos.sh            # tmux failure modes against the real app
 scripts/preflight/e2e-node.sh             # npm-installed claude lifecycle
-scripts/preflight/release-gatecheck.sh    # Release artifact vs Gatekeeper + workaround
+scripts/preflight/release-gatecheck.sh    # debug surface compiled out + notarized-artifact validation
 ```
 
 The e2e scripts run a **hermetic debug app instance**: its own tmux server

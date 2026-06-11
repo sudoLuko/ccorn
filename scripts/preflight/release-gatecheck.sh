@@ -1,33 +1,39 @@
 #!/bin/bash
-# Release-artifact Gatekeeper check: builds the Release app, packages it the
-# way a GitHub release would, stamps the quarantine xattr a browser download
-# gets, and reports exactly what a downloader will face — plus validates the
-# README workaround (remove quarantine -> app runs).
+# Release-artifact gatecheck. Two jobs:
 #
-# Deliberately never `open`s the quarantined app: that raises GUI dialogs on
-# whatever screen this runs on. `spctl --assess` gives the same verdict
-# programmatically.
+#   1. Always: build Release and assert the debug surface is compiled out (no
+#      CCORN_DEBUG strings in the binary), then launch-smoke the freshly built
+#      app in a throwaway world. The smoke runs the RELEASE binary (which has
+#      no debug isolation seams, by design) — so it gets a throwaway HOME and
+#      TMUX_TMPDIR: discovery, the session store, and the default tmux server
+#      all resolve inside the staging dir, never the real ones.
 #
-# The post-workaround launch smoke runs the RELEASE binary (which has no
-# debug isolation seams, by design) — so it gets a throwaway HOME and
-# TMUX_TMPDIR: discovery, the session store, and the default tmux server all
-# resolve inside the staging dir, never the real ones.
+#   2. With a notarized artifact (pass the stapled .app as $1, or run
+#      scripts/release.sh which leaves dist/CCorn.app and invokes this): prove
+#      what a downloader faces — codesign --verify --strict passes, spctl
+#      accepts the app even carrying a browser-style quarantine stamp, and the
+#      notarization ticket is stapled (stapler validate, so the verdict holds
+#      offline too). Deliberately never `open`s the app via LaunchServices:
+#      that raises GUI dialogs on whatever screen this runs on; spctl gives
+#      the same verdict programmatically.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 STAMP=$(date +%Y%m%d-%H%M%S)
 STAGE=/tmp/ccorn-gatecheck/run-$STAMP
 APP=build-release/Build/Products/Release/CCorn.app
-ZIP="$STAGE/CCorn.zip"
+ARTIFACT="${1:-}"
+[[ -z "$ARTIFACT" && -d dist/CCorn.app ]] && ARTIFACT=dist/CCorn.app
 REPORT="$STAGE/report.md"
-mkdir -p "$STAGE/download" "$STAGE/home" "$STAGE/tmux"
+mkdir -p "$STAGE/home" "$STAGE/tmux"
 
 FAILS=0
 pass() { echo "PASS  $*"; }
 fail() { echo "FAIL  $*"; FAILS=$((FAILS + 1)); }
+skip() { echo "SKIP  $*"; }
 log()  { echo "[gatecheck] $*"; }
 
-# --- build the release artifact -------------------------------------------------
+# --- build the release binary ----------------------------------------------------
 log "building Release"
 xcodegen generate > /dev/null
 xcodebuild -project CCorn.xcodeproj -scheme CCorn -configuration Release \
@@ -44,71 +50,73 @@ else
     pass "release binary carries no debug surface"
 fi
 
-SIGNATURE=$(codesign -dv "$APP" 2>&1 | grep -E "Signature|TeamIdentifier" | tr '\n' ' ')
-log "signature: $SIGNATURE"
-
-# --- package + fake the browser download ----------------------------------------
-ditto -c -k --keepParent "$APP" "$ZIP"
-ditto -x -k "$ZIP" "$STAGE/download"
-DLAPP="$STAGE/download/CCorn.app"
-# The quarantine stamp a browser writes (flags;epoch-hex;agent;uuid).
-xattr -w com.apple.quarantine "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" "$DLAPP"
-# Propagate to the bundle contents the way real downloads carry it.
-find "$DLAPP" -exec xattr -w com.apple.quarantine "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" {} \; 2>/dev/null || true
-
-# --- what the downloader faces ----------------------------------------------------
-VERDICT=$(spctl --assess --type execute -vv "$DLAPP" 2>&1 || true)
-log "spctl verdict on quarantined download: $VERDICT"
-if grep -q "rejected" <<<"$VERDICT"; then
-    pass "Gatekeeper rejects the quarantined ad-hoc app (as expected for an unsigned release)"
-else
-    fail "expected Gatekeeper rejection, got: $VERDICT"
-fi
-
-# --- the documented workaround -----------------------------------------------------
-log "applying the README workaround: xattr -dr com.apple.quarantine"
-xattr -dr com.apple.quarantine "$DLAPP"
-if xattr -l "$DLAPP" | grep -q quarantine; then
-    fail "quarantine xattr survived removal"
-else
-    pass "quarantine removed"
-fi
+SIGNATURE=$(codesign -dv "$APP" 2>&1 | grep -E "Signature|TeamIdentifier|flags" | tr '\n' ' ')
+log "built-app signature: $SIGNATURE"
 
 # Launch smoke in a throwaway world (real HOME / real tmux server untouched).
-log "launch smoke of the de-quarantined release app (isolated HOME/TMUX_TMPDIR)"
+log "launch smoke of the built Release app (isolated HOME/TMUX_TMPDIR)"
 HOME="$STAGE/home" TMUX_TMPDIR="$STAGE/tmux" \
-    "$DLAPP/Contents/MacOS/CCorn" > "$STAGE/app.log" 2>&1 &
+    "$BIN" > "$STAGE/app.log" 2>&1 &
 APP_PID=$!
 disown   # keep bash from reporting our own SIGTERM as a job failure
 sleep 8
 if kill -0 "$APP_PID" 2>/dev/null; then
-    pass "release app launched and stayed up for 8s after the workaround"
+    pass "release app launched and stayed up for 8s under the hardened runtime"
 else
     fail "release app did not survive launch (see $STAGE/app.log)"
 fi
 kill "$APP_PID" 2>/dev/null || true
 TMUX_TMPDIR="$STAGE/tmux" tmux kill-server 2>/dev/null || true
 
+# --- notarized-artifact validation ----------------------------------------------
+NVERDICT="(no artifact)"
+if [[ -z "$ARTIFACT" ]]; then
+    skip "no notarized artifact to validate — run scripts/release.sh first, or pass the stapled .app as \$1"
+else
+    log "validating notarized artifact: $ARTIFACT"
+    # Work on a copy stamped the way a real browser download arrives.
+    DLAPP="$STAGE/download/CCorn.app"
+    mkdir -p "$STAGE/download"
+    ditto "$ARTIFACT" "$DLAPP"
+    find "$DLAPP" -exec xattr -w com.apple.quarantine \
+        "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" {} \; 2>/dev/null || true
+
+    if codesign --verify --strict --verbose=2 "$DLAPP" 2>&1; then
+        pass "codesign --verify --strict accepts the artifact"
+    else
+        fail "codesign --verify --strict rejected the artifact"
+    fi
+
+    NVERDICT=$(spctl --assess --type execute -vv "$DLAPP" 2>&1 || true)
+    log "spctl verdict on quarantined artifact: $NVERDICT"
+    if grep -q "accepted" <<<"$NVERDICT" && grep -q "Notarized Developer ID" <<<"$NVERDICT"; then
+        pass "Gatekeeper accepts the quarantined artifact as Notarized Developer ID"
+    else
+        fail "expected spctl 'accepted / Notarized Developer ID', got: $NVERDICT"
+    fi
+
+    if xcrun stapler validate "$DLAPP" > /dev/null 2>&1; then
+        pass "notarization ticket is stapled (valid offline)"
+    else
+        fail "stapler validate failed — ticket missing or not stapled"
+    fi
+fi
+
 # --- report -------------------------------------------------------------------------
 {
     echo "# Release gatecheck"
     echo
     echo "- date: $(date '+%Y-%m-%d %H:%M:%S')  · macOS $(sw_vers -productVersion)"
-    echo "- artifact: $ZIP ($(du -h "$ZIP" | cut -f1))"
-    echo "- signature: $SIGNATURE"
-    echo "- spctl on quarantined download: \`${VERDICT//$'\n'/ · }\`"
+    echo "- artifact: ${ARTIFACT:-none (built app only)}"
+    echo "- built-app signature: $SIGNATURE"
+    echo "- spctl on quarantined artifact: \`${NVERDICT//$'\n'/ · }\`"
     echo
     echo "## What a downloader sees"
     echo
-    echo "Double-clicking the downloaded app is blocked by Gatekeeper (unsigned/ad-hoc)."
-    echo "Since macOS 15, right-click → Open no longer bypasses this; the supported"
-    echo "paths are System Settings → Privacy & Security → \"Open Anyway\", or:"
-    echo
-    echo '```sh'
-    echo "xattr -dr com.apple.quarantine /Applications/CCorn.app"
-    echo '```'
-    echo
-    echo "Both validated here: quarantine removal -> the app launches cleanly."
+    echo "The artifact is signed with a Developer ID and notarized: Gatekeeper"
+    echo "accepts it straight from a browser download. No overrides, no xattr"
+    echo "workarounds — the only first-open prompt is the standard"
+    echo "\"downloaded from the Internet\" confirmation."
 } > "$REPORT"
 
 echo
