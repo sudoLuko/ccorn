@@ -4,7 +4,9 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private let popover = NSPopover()
+    /// Lazy: the model must exist first, and the panel is only needed once
+    /// the status item is clicked (or a debug hook shows it).
+    private lazy var popoverPanel = PopoverPanelController(model: model)
     private let windowController = MainWindowController()
     private let onboarding = OnboardingWindowController()
     /// Created in init (not didFinishLaunching) so the SwiftUI `Settings` scene
@@ -25,14 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         model.openMainWindow = { [weak self] in self?.openMainWindow() }
-        model.closePopover = { [weak self] in self?.popover.performClose(nil) }
+        model.closePopover = { [weak self] in self?.popoverPanel.close() }
         model.closeOnboarding = { [weak self] in self?.onboarding.close() }
         #if DEBUG
         model.openPopover = { [weak self] in self?.showPopover() }
         #endif
 
         configureStatusItem()
-        configurePopover()
 
         Task { await launchSequence() }
 
@@ -153,15 +154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    private func configurePopover() {
-        popover.behavior = .transient
-        // The popover is fixed dark regardless of system appearance.
-        popover.appearance = NSAppearance(named: .darkAqua)
-        let hosting = NSHostingController(rootView: PopoverView(model: model))
-        hosting.sizingOptions = .preferredContentSize
-        popover.contentViewController = hosting
-    }
-
     @objc private func statusItemClicked() {
         // Right-click OR control-click (the system-wide secondary-click alias)
         // opens the main window; plain left click toggles the popover.
@@ -171,8 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openMainWindow()
             return
         }
-        if popover.isShown {
-            popover.performClose(nil)
+        if popoverPanel.isVisible {
+            popoverPanel.close()
         } else {
             showPopover()
         }
@@ -180,14 +172,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPopover() {
         guard let button = statusItem?.button else { return }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKey()
+        popoverPanel.show(relativeTo: button)
     }
 
     /// Before onboarding completes there is no usable main window — route every
     /// "open" request to the onboarding card instead (it is the required flow).
     private func openMainWindow() {
-        popover.performClose(nil)
+        popoverPanel.close()
         if model.onboardingNeeded {
             onboarding.show(model: model)
             return

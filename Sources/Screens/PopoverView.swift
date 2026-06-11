@@ -15,8 +15,11 @@ struct PopoverView: View {
     private let rowHeight: CGFloat = 32
     private let maxVisibleRows = 8
 
-    /// Calm sessions expanded under the disclosure. Reset on every popover
+    /// Calm sessions expanded under the disclosure. Collapsed again on every
     /// open: triage starts from the summary, never from yesterday's state.
+    /// The panel keeps this view alive across orderOut/orderFront, so
+    /// .onAppear does not refire on reopen — PopoverPanelController posts
+    /// `resetTriage` from its close path instead.
     @State private var calmExpanded = false
     @State private var disclosureHovering = false
 
@@ -31,7 +34,22 @@ struct PopoverView: View {
         .padding(12)
         .frame(width: 280)
         .background(PopoverPalette.background)
+        // The hosting panel is borderless and clear, so the content supplies
+        // its own chrome: the rounded clip shapes the window (and its
+        // shadow); the hairline keeps the 0.5px-never-1px border rule.
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(PopoverPalette.divider, lineWidth: 0.5)
+        )
         .onAppear { calmExpanded = false }
+        .onReceive(NotificationCenter.default.publisher(for: Self.resetTriage)) { _ in
+            // Posted while the panel is hidden; disable animations anyway so
+            // a reopen never shows a collapse.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { calmExpanded = false }
+        }
         #if DEBUG
         // Scripted stand-in for clicking the calm disclosure
         // (DebugCommandChannel `popovercalm`), so the expanded state can be
@@ -41,6 +59,9 @@ struct PopoverView: View {
         }
         #endif
     }
+
+    /// Posted by PopoverPanelController after every close (see calmExpanded).
+    static let resetTriage = Notification.Name("ccorn.popover.reset-triage")
 
     #if DEBUG
     static let debugToggleCalm = Notification.Name("ccorn.debug.popover.toggle-calm")
