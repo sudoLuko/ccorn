@@ -22,8 +22,12 @@ struct SessionListView: View {
     /// Debug-only (CCORN_DEBUG_UI contains "empty"): force the empty state so
     /// the corn-cob identity moment can be verified without clearing real
     /// sessions. Same hook family as the AppDelegate's screenshot helpers.
+    #if DEBUG
     private let forceEmpty =
         ProcessInfo.processInfo.environment["CCORN_DEBUG_UI"]?.contains("empty") == true
+    #else
+    private let forceEmpty = false
+    #endif
 
     private var archived: Bool { nav == .archived }
 

@@ -39,20 +39,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Debug-only hook so screenshot-based verification can open the UI
         // without clicking the status item (no effect unless the env var is set).
+        // The whole block compiles out of Release: the gatecheck asserts the
+        // shipped binary carries no CCORN_DEBUG strings.
+        #if DEBUG
         let debugUI = ProcessInfo.processInfo.environment["CCORN_DEBUG_UI"] ?? ""
         if debugUI.contains("light") { NSApp.appearance = NSAppearance(named: .aqua) }
-        #if DEBUG
         if debugUI.contains("cmd") {
             debugChannel = DebugCommandChannel(model: model)
             debugChannel?.start()
         }
-        #endif
         if debugUI.contains("window") { openMainWindow() }
         if debugUI.contains("popover") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 self?.showPopover()
             }
         }
+        #endif
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
