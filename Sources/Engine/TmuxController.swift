@@ -71,14 +71,33 @@ struct TmuxController: Sendable {
     /// Create the `ccorn` session if it does not already exist. Never recreate.
     @discardableResult
     func ensureSession() -> EnsureSessionResult {
-        if hasSession() { return EnsureSessionResult(ok: true, strayDefaultWindowId: nil) }
+        if hasSession() {
+            scrubNestedSessionMarkers()
+            return EnsureSessionResult(ok: true, strayDefaultWindowId: nil)
+        }
         let r = tmux([
             "new-session", "-d", "-s", Self.sessionName,
             "-P", "-F", "#{window_id}",
         ])
         guard r.ok else { return EnsureSessionResult(ok: false, strayDefaultWindowId: nil) }
+        scrubNestedSessionMarkers()
         let id = r.trimmedOut
         return EnsureSessionResult(ok: true, strayDefaultWindowId: id.isEmpty ? nil : id)
+    }
+
+    /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
+    /// child session and skips ALL local session persistence — no pid
+    /// registry, no conversation records, `--resume` refuses the session
+    /// (docs/RUNTIME_FINDINGS.md P8). That breaks identity binding, restart,
+    /// and RC detection for every session CCorn spawns. The var can reach our
+    /// windows when the tmux server (or CCorn itself, in dev) was started
+    /// from inside a Claude Code shell, so mark it for removal from the
+    /// session environment; new panes then never inherit it. Runs on every
+    /// ensure, covering servers and sessions CCorn did not create.
+    private func scrubNestedSessionMarkers() {
+        for name in ["CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID"] {
+            tmux(["set-environment", "-t", Self.sessionName, "-r", name])
+        }
     }
 
     // MARK: Windows
