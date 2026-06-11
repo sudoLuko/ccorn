@@ -99,20 +99,25 @@ import Testing
 
     // MARK: Hollow grey's one home
 
-    /// Stopped outline: adaptive semantic grey on light, fixed zinc-400 on
-    /// dark — which is exactly what the fixed-dark popover resolves to, so
-    /// no per-surface parameter exists anymore.
+    /// Stopped outline: fixed grey pair — #8A8A8F on light, zinc-400 on dark,
+    /// which is exactly what the fixed-dark popover resolves to, so no
+    /// per-surface parameter exists anymore.
     @Test func stoppedOutlineResolvesPerAppearance() {
         let color = NSColor(StatusPalette.stoppedOutline)
-        #expect(resolvedHex(of: color, appearance: .darkAqua) == 0xA1A1AA)
-        // Light face matches the system tertiary label (including alpha).
-        var expected: NSColor?
-        var actual: NSColor?
-        NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
-            expected = NSColor.tertiaryLabelColor.usingColorSpace(.sRGB)
-            actual = color.usingColorSpace(.sRGB)
-        }
-        #expect(actual != nil)
-        #expect(actual == expected)
+        #expect(resolvedHex(of: color, appearance: .aqua)
+                == StatusPalette.stoppedOutlineLightHex)
+        #expect(resolvedHex(of: color, appearance: .darkAqua)
+                == StatusPalette.stoppedOutlineDarkHex)
+    }
+
+    /// The stopped ring is a UI component, so its light face needs 3:1 on the
+    /// light row backgrounds — pure white and the spec's #FAFAFA. The old
+    /// light face (system tertiaryLabelColor, ~#BDBDBD on white) managed only
+    /// ~1.6:1 and the ring all but disappeared; that is why it became fixed.
+    @Test func stoppedOutlineLightFaceClearsUIComponentContrast() {
+        #expect(contrast(StatusPalette.stoppedOutlineLightHex, 0xFFFFFF) >= 3.0)
+        #expect(contrast(StatusPalette.stoppedOutlineLightHex, 0xFAFAFA) >= 3.0)
+        // The regression this guards against:
+        #expect(contrast(0xBDBDBD, 0xFFFFFF) < 3.0)
     }
 }

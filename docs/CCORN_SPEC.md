@@ -201,24 +201,36 @@ Primary text:   #FAFAFA
 Secondary text: #71717A
 ```
 
-**Status mark colors — the only color in the app.** Green, blue, red, and the
-unmanaged outline are identical in light and dark. Two tokens adapt to
-appearance: the attention amber (it doubles as word TEXT, which must clear
-WCAG AA 4.5:1 on the light background — the original #D97706 sits near 3:1
-and fails) and the stopped outline (the light hairline grey would glare or
-vanish on dark):
+**Status mark colors — the only color in the app.** Tokens listed below with
+a light / dark pair adapt to appearance; single-value tokens are identical in
+both. Contrast floors: the attention amber doubles as word TEXT, so its light
+face must clear WCAG AA 4.5:1 on the light background (the original #D97706
+sits near 3:1 and fails); the dots, rings, and triangles are graphical UI
+components, so each face must clear 3:1 on the backgrounds it renders over:
 
 ```
 Green:           #16a34a                        — running, healthy, remote control active
+
 Blue:            #2563eb                        — Claude actively working mid-task
+
 Attention amber: #A34A0B light / #F59E0B dark   — waiting dot + halo, recoverable warning
                                                   triangles (sign-in, no-remote), and every
                                                   amber attention word
+
 Slate:           #64748b                        — stale, idle past threshold (recessive on
                                                   purpose; the original #EA580C orange read
                                                   like Crashed at 7px)
+
 Red:             #dc2626                        — crashed (triangle + word), rename error
-Stopped outline: tertiaryLabel light / #A1A1AA dark and popover — hollow dot ring
+
+Stopped outline: #8A8A8F light / #A1A1AA dark   — hollow dot ring (dark face also the fixed-dark
+                                                  popover); the light face is fixed because the
+                                                  original tertiaryLabel resolved near #BDBDBD,
+                                                  ~1.6:1 on white, and the ring all but vanished —
+                                                  #8A8A8F is ~3.4:1 and still lighter than the
+                                                  unmanaged #71717A, so stopped stays the quieter
+                                                  hollow dot
+
 Unmanaged:       #71717a                        — hollow dot ring, same in both appearances
 ```
 

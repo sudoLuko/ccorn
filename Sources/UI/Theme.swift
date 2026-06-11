@@ -14,9 +14,9 @@ extension Color {
     }
 
     /// Appearance-paired solid, only for where exact per-appearance values
-    /// are required (§3 "Primary action", the attention amber). Semantic
-    /// colors can't express it: Color.primary is ~85%-alpha labelColor, which
-    /// filled into a button renders as a washed grey slab.
+    /// are required (§3 "Primary action" and the appearance-adaptive status
+    /// tokens). Semantic colors can't express it: Color.primary is ~85%-alpha
+    /// labelColor, which filled into a button renders as a washed grey slab.
     init(lightHex: UInt32, darkHex: UInt32) {
         self.init(nsColor: NSColor(name: nil) { appearance in
             let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -25,13 +25,14 @@ extension Color {
     }
 }
 
-/// Status mark colors (docs/CCORN_SPEC.md section 3). Green, blue, red, and
-/// the unmanaged outline are identical in light and dark; the attention amber
-/// and the stopped outline are the two appearance-adaptive tokens (each says
-/// why below).
+/// Status mark colors (docs/CCORN_SPEC.md section 3). Tokens built with
+/// Color(lightHex:darkHex:) adapt to appearance (each says why at its
+/// declaration); the rest are identical in light and dark.
 enum StatusPalette {
     static let running = Color(hex: 0x16A34A)
+
     static let working = Color(hex: 0x2563EB)
+
     /// The ONE attention amber: the waiting dot and its halo, the recoverable
     /// warning triangles (sign in / no remote), and every amber attention
     /// word. Appearance-adaptive because the word is body-size TEXT: on light
@@ -50,16 +51,17 @@ enum StatusPalette {
     /// Unmanaged outline — fixed per spec section 4, same in both appearances.
     static let unmanagedOutline = Color(hex: 0x71717A)
     /// Hollow grey for a stopped session's empty dot, one home for every
-    /// surface. Light: the adaptive semantic grey (tertiaryLabelColor —
-    /// separatorColor is a hairline tone that vanishes at 7px). Dark, and
-    /// therefore the fixed-dark popover: zinc-400 — visibly present,
-    /// recessive, and a step lighter than the unmanaged outline (#71717A) so
-    /// the two hollow dots keep their hierarchy.
-    static let stoppedOutline = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(Color(hex: 0xA1A1AA))
-            : .tertiaryLabelColor
-    })
+    /// surface. Light: fixed #8A8A8F — a 1px ring is a UI component and needs
+    /// 3:1 (this is ~3.4:1 on white; the previous tertiaryLabelColor resolved
+    /// near #BDBDBD, ~1.6:1, and the ring all but vanished), while staying
+    /// lighter than the unmanaged #71717A so stopped remains the quieter of
+    /// the two hollow dots. Dark, and therefore the fixed-dark popover:
+    /// zinc-400 — visibly present, recessive, and a step lighter than the
+    /// unmanaged outline so the hierarchy holds there too.
+    static let stoppedOutlineLightHex: UInt32 = 0x8A8A8F
+    static let stoppedOutlineDarkHex: UInt32 = 0xA1A1AA
+    static let stoppedOutline = Color(lightHex: stoppedOutlineLightHex,
+                                      darkHex: stoppedOutlineDarkHex)
     /// Grey fill for the import sheet's not-yet-imported dot (5.4 State 2,
     /// "Waiting: muted opacity, grey dot").
     static let importPending = Color.secondary.opacity(0.5)
