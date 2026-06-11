@@ -31,6 +31,17 @@ final class AppModel: ObservableObject {
     /// A commit is in flight (the 3s pane error-watch); the field locks.
     @Published var renameInFlight = false
 
+    /// User-defined groups (docs/CCORN_SPEC.md 5.11), mirrored from
+    /// settings so the sidebar re-renders on every mutation. Definitions
+    /// live in settings; membership lives on the session records.
+    @Published private(set) var groups: [SessionGroup] = []
+    /// Inline group-name editing in the sidebar — the session-rename
+    /// pattern. `editingGroupIsNew` marks a group just created by
+    /// "+ New Group": escape (or an empty commit) then removes it instead of
+    /// reverting the name.
+    @Published var editingGroupId: String?
+    private var editingGroupIsNew = false
+
     /// Non-nil while the first-run import sheet is up (set after onboarding's
     /// scan when unmanaged sessions were found).
     @Published var importFlow: ImportFlowModel?
@@ -75,12 +86,15 @@ final class AppModel: ObservableObject {
 
     init(engine: SessionEngine) {
         self.engine = engine
+        self.groups = engine.settings.groups
     }
 
-    /// The popover header's aggregate dot: worst active state across all rows,
-    /// nil (empty/outline dot) when no session has an active color.
-    var aggregateState: SessionState? {
-        SessionState.aggregate(rows.map(\.state))
+    /// The popover header's aggregate mark: worst presentation across all
+    /// rows (same per-row resolution the lists use, so a broken-tier worst
+    /// shows the warning symbol), nil (empty/outline dot) when no session has
+    /// an active color.
+    var aggregatePresentation: StatusPresentation? {
+        StatusPresentation.aggregate(rows.map(\.presentation))
     }
 
     /// Sessions CCorn manages (live windows + stopped records) — the primary
@@ -298,6 +312,10 @@ final class AppModel: ObservableObject {
         var managedPaths = Set<String>()
         var managedUUIDs = Set<String>()
         let recordUUIDs = Set(records.map(\.uuid))
+        // Group membership for managed rows: their record is skipped below
+        // (the live window is the row), so look its membership up by uuid.
+        let groupsByUUID = Dictionary(records.map { ($0.uuid, $0.groupIDs) },
+                                      uniquingKeysWith: { first, _ in first })
         let now = Date()
 
         var adoptedIds = Set<String>()
@@ -329,7 +347,8 @@ final class AppModel: ObservableObject {
                 rcGraceExpired: now.timeIntervalSince(live.startedAt) > 30,
                 lastActive: lastActive,
                 authNotice: live.authNotice,
-                rcPlanNotice: live.rcPlanNotice
+                rcPlanNotice: live.rcPlanNotice,
+                groupIDs: uuid.isEmpty ? [] : (groupsByUUID[uuid] ?? [])
             ))
         }
 
@@ -347,7 +366,8 @@ final class AppModel: ObservableObject {
                 state: .stopped,
                 remoteControlActive: false,
                 archived: record.archived,
-                lastActive: transcriptIndex[record.uuid]?.modified
+                lastActive: transcriptIndex[record.uuid]?.modified,
+                groupIDs: record.groupIDs
             )
             if record.archived {
                 archived.append(row)
@@ -710,6 +730,145 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Groups (docs/CCORN_SPEC.md 5.11)
+
+    /// Rows for a group view: record-backed (never unmanaged), non-archived
+    /// rows whose record carries the group id — same derivation family as
+    /// `managedRows`/`archivedRows`, same shared sort. Archived members keep
+    /// their membership but surface only in the Archived view.
+    func groupRows(id: String) -> [SessionRow] {
+        rows.filter { $0.kind != .unmanaged && $0.groupIDs.contains(id) }
+    }
+
+    /// Persist the (ordered) group definitions to settings and republish.
+    private func saveGroups(_ updated: [SessionGroup]) {
+        groups = updated
+        var settings = engine.settings
+        settings.groups = updated
+        engine.updateSettings(settings)
+    }
+
+    @discardableResult
+    func createGroup(named name: String) -> SessionGroup {
+        let group = SessionGroup(name: name)
+        saveGroups(groups + [group])
+        return group
+    }
+
+    /// "+ New Group" in the sidebar: create with a placeholder name and open
+    /// the inline editor on it (Books pattern). Escape or an empty commit
+    /// removes the placeholder again.
+    func beginNewGroup() {
+        let group = createGroup(named: SessionGroup.defaultName(existing: groups))
+        editingGroupId = group.id
+        editingGroupIsNew = true
+    }
+
+    func beginGroupRename(_ id: String) {
+        editingGroupId = id
+        editingGroupIsNew = false
+    }
+
+    /// Enter in the inline editor: a real name commits; an empty name cancels
+    /// (removing a just-created placeholder, reverting an existing group).
+    func commitGroupName(_ id: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            cancelGroupEdit()
+            return
+        }
+        editingGroupId = nil
+        editingGroupIsNew = false
+        guard let idx = groups.firstIndex(where: { $0.id == id }) else { return }
+        var updated = groups
+        updated[idx].name = trimmed
+        saveGroups(updated)
+    }
+
+    /// Escape: a just-created placeholder group vanishes (it has no members
+    /// yet); an existing group keeps its old name.
+    func cancelGroupEdit() {
+        if editingGroupIsNew, let id = editingGroupId {
+            saveGroups(groups.filter { $0.id != id })
+        }
+        editingGroupId = nil
+        editingGroupIsNew = false
+    }
+
+    /// Delete a group: the definition goes, every record's membership is
+    /// cleared of the id — sessions themselves are NEVER deleted or archived.
+    func deleteGroup(_ id: String) {
+        guard let group = groups.first(where: { $0.id == id }) else { return }
+        guard Alerts.confirm(
+            title: "Delete “\(group.name)”?",
+            message: "Sessions in this group are not deleted; they just leave the group.",
+            action: "Delete") else { return }
+        performGroupDelete(id)
+    }
+
+    /// Confirmation-free core of deleteGroup (the debug channel calls this
+    /// directly — modals cannot be scripted, same split as kill).
+    func performGroupDelete(_ id: String) {
+        saveGroups(groups.filter { $0.id != id })
+        if sidebarNav == .group(id) { sidebarNav = .allSessions }
+        if editingGroupId == id {
+            editingGroupId = nil
+            editingGroupIsNew = false
+        }
+        let store = engine.store
+        Task {
+            await Task.detached { store.removeGroupID(id) }.value
+            await refreshAfterMutation()
+        }
+    }
+
+    /// Toggle a session's membership (the Groups submenu checkmark items —
+    /// one control adds, removes, and shows membership inline).
+    func toggleGroupMembership(_ row: SessionRow, groupId: String) {
+        var ids = row.groupIDs
+        if ids.contains(groupId) {
+            ids.removeAll { $0 == groupId }
+        } else {
+            ids.append(groupId)
+        }
+        setGroupIDs(ids, for: row)
+    }
+
+    /// Direct removal, surfaced in the menu while a group view is active.
+    func removeFromGroup(_ row: SessionRow, groupId: String) {
+        guard row.groupIDs.contains(groupId) else { return }
+        setGroupIDs(row.groupIDs.filter { $0 != groupId }, for: row)
+    }
+
+    /// "New Group…" in a session's menu: create and assign in one step, then
+    /// open the sidebar's inline editor for naming. Not flagged as new:
+    /// escape keeps the group (it already has a member).
+    func createGroupAndAssign(_ row: SessionRow) {
+        guard SessionGroup.canAssign(uuid: row.uuid) else { return }
+        let group = createGroup(named: SessionGroup.defaultName(existing: groups))
+        setGroupIDs(row.groupIDs + [group.id], for: row)
+        editingGroupId = group.id
+        editingGroupIsNew = false
+    }
+
+    /// Membership writes merge into the record by uuid, exactly like the
+    /// archived flag (created if absent; nil fields untouched — the title is
+    /// deliberately not passed, or a derived display title would be promoted
+    /// to an explicit one). Gated on a bound uuid: a brand-new session has
+    /// none until its transcript binds.
+    private func setGroupIDs(_ ids: [String], for row: SessionRow) {
+        guard SessionGroup.canAssign(uuid: row.uuid) else { return }
+        let store = engine.store
+        let uuid = row.uuid
+        let path = row.path.isEmpty ? nil : row.path
+        Task {
+            await Task.detached {
+                store.mergeRecord(uuid: uuid, path: path, groupIDs: ids)
+            }.value
+            await refreshAfterMutation()
+        }
+    }
+
     // MARK: - Auto-restart on launch (flow 6.11)
 
     /// Sequentially restart every stopped/dead session: dead live windows
@@ -752,12 +911,17 @@ final class AppModel: ObservableObject {
     /// Screenshot staging (DebugCommandChannel `seed`): stop the live poll and
     /// FSEvents watcher, then replace the published rows wholesale with a
     /// curated set. Pure presentation — the engine, store, and tmux session
-    /// are never touched, and nothing restarts the poll afterwards.
-    func debugSeed(rows: [SessionRow], archived: [SessionRow]) {
+    /// are never touched, and nothing restarts the poll afterwards. Seeded
+    /// groups replace only the PUBLISHED list; settings are not written.
+    func debugSeed(rows: [SessionRow], archived: [SessionRow],
+                   groups: [SessionGroup]? = nil) {
         stop()
         hasScanned = true
         self.rows = rows
         self.archivedRows = archived
+        if let groups {
+            self.groups = groups
+        }
     }
     #endif
 

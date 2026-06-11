@@ -85,6 +85,16 @@ struct StubPanes: PaneSource {
         #expect(classifyFresh(pane) == .waiting)
     }
 
+    /// REAL first-run trust prompt captured on 2.1.172 by the preflight
+    /// harness (RUNTIME_FINDINGS P2): the wording moved to "Quick safety
+    /// check: … ❯ 1. Yes, I trust this folder", and it must keep classifying
+    /// Waiting via the option-picker chrome, not any version-pinned literal.
+    @Test func trustPrompt2172FixtureIsWaiting() {
+        let pane = Fixtures.paneText("waiting-trust-2172.txt")
+        #expect(detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .waiting)
+    }
+
     /// A confirmation prompt that just rendered (pane changed) is Waiting
     /// immediately — the prompt outranks the pane-changed Working signal.
     @Test func freshlyRenderedPromptIsWaitingNotWorking() {
