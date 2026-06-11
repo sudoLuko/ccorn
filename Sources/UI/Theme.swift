@@ -117,6 +117,14 @@ enum WorkingBreath {
     static let enabled = true
 }
 
+/// Shared motion token for the hover wash: the one 0.18s curve every
+/// hover-driven background uses — main-window rows, popover rows, the calm
+/// disclosure. The layout (0.2s) and presentation (0.25s) standards stay
+/// inline at their few deliberate sites (F8: two standards, both sanctioned).
+enum Motion {
+    static let hover = Animation.easeInOut(duration: 0.18)
+}
+
 /// The single status mark every row shows, in a shared fixed-width slot so
 /// titles line up across rows and surfaces: a 7px dot for routine states
 /// (filled when active, hairline outline for stopped/unmanaged), or the one

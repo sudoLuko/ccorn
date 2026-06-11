@@ -85,6 +85,12 @@ struct SessionListView: View {
             .animation(.easeInOut(duration: 0.2),
                        value: (managedRows + discoveredRows).map(\.id))
         }
+        // Fresh identity per sidebar view (F2): a nav switch swaps the whole
+        // row set, and without this the ids animation above plays it as a
+        // cross-view slide. New subtree = instant swap; within-view row
+        // changes still animate. Scroll position resetting on a nav change
+        // is the correct behavior, not a cost.
+        .id(nav)
     }
 
     private var rowDivider: some View {

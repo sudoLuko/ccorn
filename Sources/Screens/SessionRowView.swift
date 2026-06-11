@@ -58,7 +58,7 @@ struct SessionRowView: View {
             }
             .allowsHitTesting(!isRenaming)
         )
-        .animation(.easeInOut(duration: 0.18), value: hovering)
+        .animation(Motion.hover, value: hovering)
     }
 
     private var rowContent: some View {

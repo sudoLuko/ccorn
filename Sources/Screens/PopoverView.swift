@@ -104,6 +104,11 @@ struct PopoverView: View {
             BrandLockup(textColor: PopoverPalette.primaryText)
             Spacer()
             aggregateMark
+                // Crossfade worst-presentation swaps like the row marks do
+                // (F5); the mark sits in a fixed 14pt slot, so no layout
+                // moves with it.
+                .animation(.easeInOut(duration: 0.25),
+                           value: model.aggregatePresentation)
         }
         .frame(height: 32)
         .padding(.horizontal, 8)
@@ -176,8 +181,15 @@ struct PopoverView: View {
                 }
             }
         }
+        // The DISPLAYED sequence, not the managed set (F1): a tier crossing
+        // moves an id between the two sub-arrays, so the row's move between
+        // sections animates like the calm toggle does — while within-section
+        // state flips (running -> working) change nothing and stay quiet.
+        // Severity reorders inside the attention section animate too.
         .animation(.easeInOut(duration: 0.2),
-                   value: model.managedRows.map(\.id) + [calmExpanded ? "+" : "-"])
+                   value: attentionRows.map(\.id)
+                       + [calmExpanded ? "+" : "-"]
+                       + calmRows.map(\.id))
     }
 
     private func popoverRow(_ row: SessionRow) -> some View {
@@ -225,6 +237,7 @@ struct PopoverView: View {
         }
         .buttonStyle(.plain)
         .onHover { disclosureHovering = $0 }
+        .animation(Motion.hover, value: disclosureHovering)
         .help(calmExpanded ? "Hide quiet sessions" : "Show quiet sessions")
     }
 
@@ -321,6 +334,7 @@ private struct PopoverRowView: View {
         .background(hovering ? PopoverPalette.rowHover : .clear)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(Motion.hover, value: hovering)
         .onTapGesture(perform: action)
     }
 }
