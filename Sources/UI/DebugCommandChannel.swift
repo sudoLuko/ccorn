@@ -34,11 +34,21 @@ import SwiftUI
 final class DebugCommandChannel {
     private let model: AppModel
     private var task: Task<Void, Never>?
-    private let cmdPath = "/tmp/ccorn-debug-cmd"
-    private let outPath = "/tmp/ccorn-debug-out"
+    /// Default paths serve the single-instance case; CCORN_DEBUG_CHANNEL_DIR
+    /// gives a concurrent instance (hermetic e2e next to a normal debug run)
+    /// its own channel so two apps never race on one cmd file.
+    private let cmdPath: String
+    private let outPath: String
 
     init(model: AppModel) {
         self.model = model
+        if let dir = ProcessInfo.processInfo.environment["CCORN_DEBUG_CHANNEL_DIR"] {
+            cmdPath = dir + "/cmd"
+            outPath = dir + "/out"
+        } else {
+            cmdPath = "/tmp/ccorn-debug-cmd"
+            outPath = "/tmp/ccorn-debug-out"
+        }
     }
 
     func start() {
@@ -275,6 +285,7 @@ final class DebugCommandChannel {
                 "rc": row.remoteControlActive,
                 "archived": archivedList,
                 "windowId": row.windowId ?? "",
+                "authNotice": row.authNotice ?? "",
             ]
         }
         let all = rows.map { encode($0, archivedList: false) }
