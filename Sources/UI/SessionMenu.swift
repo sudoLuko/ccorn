@@ -32,7 +32,8 @@ final class ActionMenuItem: NSMenuItem {
 
 /// Builds the per-row context menu (docs/CCORN_SPEC.md section 5.7). Native
 /// NSMenu, no custom styling. Four variants: live, dead/stopped, archived,
-/// unmanaged.
+/// unmanaged. Every record-backed variant carries the Groups submenu (5.11);
+/// unmanaged rows do not — they have no record, and Import is the doorway.
 @MainActor
 enum SessionMenu {
     static func menu(for row: SessionRow, model: AppModel) -> NSMenu {
@@ -44,11 +45,25 @@ enum SessionMenu {
             model?.copySessionID(row)
         }
 
+        // While a group view is active, removal from THIS group is one click
+        // (membership row.groupIDs is always [] for unmanaged rows, and
+        // archived rows never render inside a group view).
+        if case let .group(groupId) = model.sidebarNav,
+           let group = model.groups.first(where: { $0.id == groupId }),
+           row.groupIDs.contains(groupId) {
+            menu.addItem(ActionMenuItem(title: "Remove from “\(group.name)”") { [weak model] in
+                model?.removeFromGroup(row, groupId: groupId)
+            })
+            menu.addItem(.separator())
+        }
+
         // Archived rows are stopped, so check the flag before the state.
         if row.archived {
             menu.addItem(ActionMenuItem(title: "Unarchive") { [weak model] in
                 model?.unarchiveSession(row)
             })
+            menu.addItem(.separator())
+            menu.addItem(groupsItem(for: row, model: model))
             menu.addItem(.separator())
             menu.addItem(copyItem)
             return menu
@@ -70,6 +85,7 @@ enum SessionMenu {
             menu.addItem(ActionMenuItem(title: "Rename") { [weak model] in
                 model?.beginRename(row)
             })
+            menu.addItem(groupsItem(for: row, model: model))
             menu.addItem(.separator())
             menu.addItem(ActionMenuItem(title: "Kill Session", destructive: true) { [weak model] in
                 model?.killSession(row)
@@ -90,6 +106,7 @@ enum SessionMenu {
             menu.addItem(ActionMenuItem(title: "Rename") { [weak model] in
                 model?.beginRename(row)
             })
+            menu.addItem(groupsItem(for: row, model: model))
             menu.addItem(.separator())
             menu.addItem(ActionMenuItem(title: "Archive") { [weak model] in
                 model?.archiveSession(row)
@@ -107,6 +124,40 @@ enum SessionMenu {
             menu.addItem(copyItem)
         }
         return menu
+    }
+
+    /// The "Groups" submenu (5.11): one check-state item per group — the one
+    /// control that assigns, unassigns, and shows membership inline — plus
+    /// "New Group…", which creates a group, assigns the session, and opens
+    /// the sidebar's inline editor for naming. Gated until the session's
+    /// uuid has bound: membership keys on the uuid, and a brand-new session
+    /// has none until its first transcript (the Restart-on-missing-path
+    /// gating family).
+    private static func groupsItem(for row: SessionRow, model: AppModel) -> NSMenuItem {
+        let assignable = SessionGroup.canAssign(uuid: row.uuid)
+        let parent = NSMenuItem(title: "Groups", action: nil, keyEquivalent: "")
+        parent.isEnabled = assignable
+        if !assignable {
+            parent.toolTip = "Available once the session has started its first conversation"
+        }
+
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        for group in model.groups {
+            let item = ActionMenuItem(title: group.name, enabled: assignable) { [weak model] in
+                model?.toggleGroupMembership(row, groupId: group.id)
+            }
+            item.state = row.groupIDs.contains(group.id) ? .on : .off
+            submenu.addItem(item)
+        }
+        if !model.groups.isEmpty {
+            submenu.addItem(.separator())
+        }
+        submenu.addItem(ActionMenuItem(title: "New Group…", enabled: assignable) { [weak model] in
+            model?.createGroupAndAssign(row)
+        })
+        parent.submenu = submenu
+        return parent
     }
 }
 

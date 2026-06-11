@@ -28,6 +28,7 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
+        .background(WindowTitleTextHider())
         .onAppear(perform: snapLegacyThreshold)
     }
 
@@ -180,4 +181,22 @@ struct SettingsView: View {
                 .foregroundColor(.accentColor)
         }
     }
+}
+
+/// The Settings scene's window is created by SwiftUI, so there is no
+/// controller to configure chrome on: this reaches the hosting window and
+/// hides the title-bar TEXT — the same treatment as the main and onboarding
+/// windows, whose identity lives in their content, not the titlebar. The
+/// title STRING stays whatever the scene set (it contains "Settings"), so
+/// DebugStage's window lookup keeps working.
+private struct WindowTitleTextHider: NSViewRepresentable {
+    final class HidingView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titleVisibility = .hidden
+        }
+    }
+
+    func makeNSView(context: Context) -> HidingView { HidingView() }
+    func updateNSView(_ nsView: HidingView, context: Context) {}
 }

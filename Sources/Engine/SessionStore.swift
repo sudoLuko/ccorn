@@ -108,7 +108,8 @@ final class SessionStore: @unchecked Sendable {
     func mergeRecord(uuid: String,
                      path: String? = nil,
                      title: String? = nil,
-                     archived: Bool? = nil) {
+                     archived: Bool? = nil,
+                     groupIDs: [String]? = nil) {
         guard !uuid.isEmpty else { return }
         queue.sync {
             var records = loadRecordsLocked()
@@ -117,12 +118,30 @@ final class SessionStore: @unchecked Sendable {
             if let path { record.path = path }
             if let title { record.title = title }
             if let archived { record.archived = archived }
+            if let groupIDs { record.groupIDs = groupIDs }
             if let idx = records.firstIndex(where: { $0.uuid == uuid }) {
                 records[idx] = record
             } else {
                 records.append(record)
             }
             saveRecordsLocked(records)
+        }
+    }
+
+    /// Clear a deleted group's id from every record's membership (the
+    /// definition lives in settings; this removes the dangling references).
+    /// Records — and therefore sessions — are never deleted or archived here.
+    func removeGroupID(_ groupID: String) {
+        queue.sync {
+            var records = loadRecordsLocked()
+            var changed = false
+            for idx in records.indices where records[idx].groupIDs.contains(groupID) {
+                records[idx].groupIDs.removeAll { $0 == groupID }
+                changed = true
+            }
+            if changed {
+                saveRecordsLocked(records)
+            }
         }
     }
 

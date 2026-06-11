@@ -158,7 +158,7 @@ private struct ImportRowView: View {
                 .frame(width: 7, height: 7)
         case (_, .pending):
             Circle()
-                .fill(Color.secondary.opacity(0.5))
+                .fill(StatusPalette.importPending)
                 .frame(width: 7, height: 7)
         case (_, .waitingForIdle), (_, .importing):
             ProgressView()
@@ -178,7 +178,7 @@ private struct ImportRowView: View {
     @ViewBuilder
     private var badge: some View {
         if item.phase == .waitingForIdle {
-            pill(text: "Waiting for idle", fill: StatusPalette.waiting)
+            pill(text: "Waiting for idle", fill: StatusPalette.attention)
         } else {
             pill(text: item.working ? "Working" : "Idle",
                  fill: item.working ? StatusPalette.working : StatusPalette.running)
@@ -193,33 +193,5 @@ private struct ImportRowView: View {
             .padding(.vertical, 2)
             .background(fill)
             .cornerRadius(4)
-    }
-}
-
-/// Primary-action filled button (Color.primary fill, knockout text) shared by
-/// the sheet, onboarding, and the empty state.
-struct FilledButton: View {
-    let title: String
-    var disabled = false
-    var fullWidth = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                // Knockout text on the primary fill: dark-on-light in dark
-                // mode, light-on-dark in light mode. Color.white would vanish
-                // on the white fill dark mode produces.
-                .foregroundColor(Color(.windowBackgroundColor))
-                .padding(.horizontal, 14)
-                .frame(height: 28)
-                .frame(maxWidth: fullWidth ? .infinity : nil)
-                .background(Color.primary)
-                .cornerRadius(6)
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.4 : 1)
     }
 }

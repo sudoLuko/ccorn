@@ -126,12 +126,14 @@ import Testing
 
     // MARK: Aggregate severity
 
-    /// needsAuth slots between Dead and Waiting: blocked-on-sign-in outranks
-    /// blocked-on-input, and a crash still outranks everything.
+    /// needsAuth slots between Crashed and No remote: blocked-on-sign-in
+    /// outranks the degraded no-remote condition and blocked-on-input, and a
+    /// crash still outranks everything.
     @Test func needsAuthAggregateSeverity() {
-        #expect(SessionState.aggregate([.running, .waiting, .needsAuth]) == .needsAuth)
-        #expect(SessionState.aggregate([.needsAuth, .dead]) == .dead)
-        #expect(SessionState.aggregate([.stale, .needsAuth]) == .needsAuth)
+        #expect(StatusPresentation.aggregate([.running, .waiting, .needsAuth]) == .needsAuth)
+        #expect(StatusPresentation.aggregate([.needsAuth, .crashed]) == .crashed)
+        #expect(StatusPresentation.aggregate([.stale, .needsAuth]) == .needsAuth)
+        #expect(StatusPresentation.aggregate([.noRemote, .needsAuth]) == .needsAuth)
     }
 
     /// needsAuth counts as an alive state (a claude process is showing the

@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// One 36px session row. The status dot leads (as in the popover); the textual
-/// state word lives in the dot's tooltip, except for the states that need the
-/// user — Waiting, Sign-in required, Crashed — which get a short colored label
-/// next to the name so they pop in a list of calm rows. Single click selects;
-/// double click = Open in Browser (disabled when remote control is inactive);
-/// right-click / `…` shows the NSMenu. Rename swaps the name for an inline
-/// TextField (5.8) with the error caption below. Archived rows render muted
-/// with the empty dot (5.9); unmanaged rows render de-emphasized — discovered
-/// context, not managed content.
+/// One 36px session row. Exactly one status mark leads in a fixed-width slot
+/// (dot for routine states, the warning symbol for the broken tier); the
+/// textual state word lives in the mark's tooltip, except for the states that
+/// need the user — Waiting, Sign in, No remote, Crashed — which get a short
+/// colored label next to the name so they pop in a list of calm rows. Single
+/// click selects; double click = Open in Browser (disabled when remote
+/// control is inactive); right-click / `…` shows the NSMenu. Rename swaps the
+/// name for an inline TextField (5.8) with the error caption below. Archived
+/// rows render muted with the empty dot (5.9); unmanaged rows render
+/// de-emphasized — discovered context, not managed content.
 struct SessionRowView: View {
     let row: SessionRow
     @ObservedObject var model: AppModel
@@ -33,7 +34,7 @@ struct SessionRowView: View {
                     .font(.caption)
                     .foregroundColor(StatusPalette.dead)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, 31) // dot (7) + gap (8) + left padding (16)
+                    .padding(.leading, 38) // status slot (14) + gap (8) + left padding (16)
                     .padding(.bottom, 6)
             }
         }
@@ -88,19 +89,8 @@ struct SessionRowView: View {
 
     private var nameColumn: some View {
         HStack(spacing: 8) {
-            RowStatusIndicator(state: row.state)
-            if row.state == .needsAuth {
-                Image(systemName: "key.fill")
-                    .font(.system(size: 10))
-                    .foregroundColor(StatusPalette.waiting)
-                    .help(row.authNotice ?? "Claude Code is not signed in")
-            }
-            if row.needsAttention {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 11))
-                    .foregroundColor(StatusPalette.warning)
-                    .help(row.attentionTooltip)
-            }
+            RowStatusIndicator(presentation: row.presentation)
+                .help(row.statusTooltip)
             if isRenaming {
                 renameField
             } else {
@@ -111,16 +101,11 @@ struct SessionRowView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            if !isRenaming, let label = row.state.attentionLabel {
-                Text(label)
-                    .font(.caption)
-                    .foregroundColor(row.state.labelColor)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .transition(.opacity)
+            if !isRenaming {
+                AttentionWord(presentation: row.presentation)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: row.state)
+        .animation(.easeInOut(duration: 0.25), value: row.presentation)
     }
 
     /// Inline rename (5.8): same font/position, subtle border, pre-selected

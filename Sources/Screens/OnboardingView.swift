@@ -20,16 +20,31 @@ struct OnboardingView: View {
         }
         .frame(width: 600)
         .fixedSize(horizontal: false, vertical: true)
+        #if DEBUG
+        // Scripted stand-in for the NSOpenPanel (DebugCommandChannel
+        // `onboarddir`), so the Start Scanning disabled->enabled gate can be
+        // exercised end to end. Duplicates ignored, same as addDirectory().
+        .onReceive(NotificationCenter.default.publisher(for: Self.debugAddDirectory)) { note in
+            if let dir = note.object as? String, !directories.contains(dir) {
+                directories.append(dir)
+            }
+        }
+        #endif
     }
+
+    #if DEBUG
+    static let debugAddDirectory = Notification.Name("ccorn.debug.onboarding.add-directory")
+    #endif
 
     private var card: some View {
         VStack(spacing: 0) {
-            CornCobShape()
-                .stroke(Color.primary, style: StrokeStyle(lineWidth: 1.5,
-                                                          lineCap: .round,
-                                                          lineJoin: .round))
-                .frame(width: 48, height: 48)
+            // The in-app brand mark is the corn emoji (review item 3); vector
+            // assets are reserved for the app icon and menu-bar glyph.
+            Text("🌽")
+                .font(.system(size: 44))
+                .frame(height: 48)
                 .padding(.bottom, 8)
+                .accessibilityHidden(true)
 
             Text("CCorn")
                 .font(.title2.weight(.medium))
@@ -60,20 +75,15 @@ struct OnboardingView: View {
                 .foregroundColor(.secondary)
                 .padding(.bottom, 24)
 
-            Button {
+            // Real primary button (review item 2): solid accent fill with
+            // knockout text when actionable, a legible intentional disabled
+            // state until a directory is added.
+            FilledButton(title: "Start Scanning",
+                         disabled: directories.isEmpty,
+                         fullWidth: true,
+                         height: 36) {
                 onComplete(directories)
-            } label: {
-                Text("Start Scanning")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundColor(Color(.windowBackgroundColor))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .background(Color.primary)
-                    .cornerRadius(6)
             }
-            .buttonStyle(.plain)
-            .disabled(directories.isEmpty)
-            .opacity(directories.isEmpty ? 0.4 : 1)
             .padding(.bottom, 8)
 
             Text("Add more directories later in Settings")
