@@ -7,8 +7,19 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: AppModel
 
+    /// Explicit visibility binding: every collapse/expand path routes through
+    /// the model (persisted, and restorable from the titlebar toggle). An
+    /// unbound NavigationSplitView owns this state itself, and with no toolbar
+    /// or menu command a collapse had no recovery affordance at all.
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { model.sidebarVisible ? .all : .detailOnly },
+            set: { model.sidebarVisible = ($0 != .detailOnly) }
+        )
+    }
+
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: columnVisibility) {
             SidebarView(model: model, nav: $model.sidebarNav)
                 .navigationSplitViewColumnWidth(200)
         } detail: {

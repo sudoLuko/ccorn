@@ -11,5 +11,40 @@ struct CCornApp: App {
         Settings {
             SettingsView(model: appDelegate.model)
         }
+        .commands {
+            SidebarToggleCommands(model: appDelegate.model)
+        }
+    }
+}
+
+/// View ▸ Show/Hide Sidebar (⌘⌃S). The menu bar is present whenever the
+/// activation policy is .regular (any regular window open). The main window
+/// is an AppKit-hosted window, not a SwiftUI scene, so SwiftUI's built-in
+/// SidebarCommands (focused-scene based) can't reach it — this drives the
+/// model directly, the same state the split view and titlebar toggle bind to.
+struct SidebarToggleCommands: Commands {
+    let model: AppModel
+
+    var body: some Commands {
+        CommandGroup(before: .sidebar) {
+            Button {
+                model.toggleSidebar()
+            } label: {
+                // Observation lives in the LABEL view, not the Commands body:
+                // the menu bridge re-renders item labels on model change, but
+                // a Commands body is not reliably re-evaluated, which would
+                // freeze the title at its launch value.
+                SidebarToggleTitle(model: model)
+            }
+            .keyboardShortcut("s", modifiers: [.command, .control])
+        }
+    }
+
+    private struct SidebarToggleTitle: View {
+        @ObservedObject var model: AppModel
+
+        var body: some View {
+            Text(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
+        }
     }
 }

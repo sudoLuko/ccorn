@@ -22,6 +22,8 @@ import SwiftUI
 ///   onboarddir <dir>          -> add a directory to the onboarding card (gate check)
 ///   popovercalm               -> toggle the popover's calm disclosure (triage)
 ///   nav group <id-or-name>    -> select a group view in the sidebar
+///   sidebar <show|hide|toggle> -> drive main-window sidebar visibility
+///   menu <menu> <item...>     -> perform a main-menu item (real menu wiring)
 ///   groups                    -> JSON of the group definitions
 ///   groupcreate <name...>     -> createGroup
 ///   groupnew                  -> beginNewGroup (placeholder + inline editor)
@@ -203,6 +205,54 @@ final class DebugCommandChannel {
                 model.sidebarNav = .allSessions
             }
             return "nav \(model.sidebarNav)"
+
+        case "sidebar" where parts.count >= 2:
+            switch parts[1] {
+            case "show": model.sidebarVisible = true
+            case "hide": model.sidebarVisible = false
+            case "toggle": model.toggleSidebar()
+            default: return "err unknown sidebar \(parts[1])"
+            }
+            return "sidebar \(model.sidebarVisible ? "visible" : "hidden")"
+
+        case "menu" where parts.count >= 3:
+            // Find <menu> <item title...> in NSApp.mainMenu and perform its
+            // action: exercises the real menu wiring (SwiftUI Commands bridge,
+            // target/action, enablement) without assistive access, which
+            // scripted runs don't have.
+            let itemTitle = parts[2...].joined(separator: " ")
+            guard let top = NSApp.mainMenu?.items.first(where: { $0.title == parts[1] }),
+                  let submenu = top.submenu else {
+                let menus = (NSApp.mainMenu?.items.map(\.title) ?? []).joined(separator: ",")
+                return "err no-menu \(parts[1]) [\(menus)]"
+            }
+            submenu.update()
+            guard let index = submenu.items.firstIndex(where: { $0.title == itemTitle }) else {
+                return "err no-item [\(submenu.items.map(\.title).joined(separator: ","))]"
+            }
+            let item = submenu.items[index]
+            var mods = ""
+            if item.keyEquivalentModifierMask.contains(.control) { mods += "ctrl+" }
+            if item.keyEquivalentModifierMask.contains(.option) { mods += "opt+" }
+            if item.keyEquivalentModifierMask.contains(.shift) { mods += "shift+" }
+            if item.keyEquivalentModifierMask.contains(.command) { mods += "cmd+" }
+            submenu.performActionForItem(at: index)
+            return "menu performed '\(item.title)' key=\(mods)\(item.keyEquivalent) enabled=\(item.isEnabled)"
+
+        case "menupop" where parts.count >= 2:
+            // Pop the top-level menu for real (menu tracking, the groupsmenu
+            // pattern): the SwiftUI commands bridge refreshes item content on
+            // tracking begin, which update() alone does not exercise.
+            guard let top = NSApp.mainMenu?.items.first(where: { $0.title == parts[1] }),
+                  let submenu = top.submenu else {
+                return "err no-menu \(parts[1])"
+            }
+            let timer = Timer(timeInterval: 1.5, repeats: false) { _ in
+                submenu.cancelTracking()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            submenu.popUp(positioning: nil, at: NSPoint(x: 240, y: 700), in: nil)
+            return "menupop [\(submenu.items.map(\.title).joined(separator: ","))]"
 
         // MARK: Groups (5.11)
 

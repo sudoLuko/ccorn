@@ -50,6 +50,16 @@ final class MainWindowController {
             window.setContentSize(NSSize(width: 860, height: 540))
             window.isReleasedWhenClosed = false
             window.center()
+            // Sidebar toggle in the titlebar, next to the traffic lights:
+            // window chrome is the one region that can never collapse, so the
+            // restore control survives a hidden sidebar (and a persisted-hidden
+            // relaunch), and its position is identical in both states.
+            let toggleHost = NSHostingView(rootView: SidebarToggleButton(model: model))
+            toggleHost.frame = NSRect(x: 0, y: 0, width: 32, height: 24)
+            let accessory = NSTitlebarAccessoryViewController()
+            accessory.view = toggleHost
+            accessory.layoutAttribute = .leading
+            window.addTitlebarAccessoryViewController(accessory)
             self.window = window
             // One signal covers close, miniaturize, and full occlusion: the
             // occlusion state drops .visible for all of them (and regains it
@@ -69,6 +79,29 @@ final class MainWindowController {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         model.mainWindowOnScreen = true
+    }
+
+    /// Titlebar sidebar toggle. Lives in window chrome, NEVER inside the
+    /// collapsible column, so hiding the sidebar cannot hide its own restore
+    /// control — the stuck state this exists to prevent. Drives the same
+    /// model state as the View menu and ⌘⌃S.
+    private struct SidebarToggleButton: View {
+        @ObservedObject var model: AppModel
+
+        var body: some View {
+            Button {
+                model.toggleSidebar()
+            } label: {
+                Image(systemName: "sidebar.leading")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .frame(width: 26, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
+            .accessibilityLabel(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
+        }
     }
 
     /// `.regular` iff a regular window remains: titled, visible or minimized

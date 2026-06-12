@@ -23,6 +23,14 @@ final class AppModel: ObservableObject {
     /// Sidebar navigation (All Sessions / Archived) — model-owned so actions
     /// (and verification) can switch views.
     @Published var sidebarNav: SidebarNav = .allSessions
+    /// Main-window sidebar visibility — model-owned so the titlebar toggle,
+    /// the View menu (⌘⌃S), and verification all drive the same state, and
+    /// persisted so the choice survives relaunch. Recovery from a persisted
+    /// hidden launch is the always-visible titlebar toggle, never amnesia.
+    @Published var sidebarVisible: Bool {
+        didSet { UserDefaults.standard.set(sidebarVisible, forKey: Self.sidebarVisibleKey) }
+    }
+    private static let sidebarVisibleKey = "sidebarVisible"
 
     /// Inline rename state (docs/CCORN_SPEC.md 5.8): the row being edited and
     /// the inline error shown under it ("That name is already taken").
@@ -95,6 +103,16 @@ final class AppModel: ObservableObject {
     init(engine: SessionEngine) {
         self.engine = engine
         self.groups = engine.settings.groups
+        self.sidebarVisible =
+            UserDefaults.standard.object(forKey: Self.sidebarVisibleKey) as? Bool ?? true
+    }
+
+    /// Toggle the main-window sidebar (titlebar button, View menu, ⌘⌃S).
+    /// Animated so collapse/expand is a clean slide, never a sliver.
+    func toggleSidebar() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            sidebarVisible.toggle()
+        }
     }
 
     /// The popover header's aggregate mark: worst presentation across all
