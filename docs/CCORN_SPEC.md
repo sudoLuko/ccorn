@@ -285,14 +285,12 @@ Secondary text: #71717A
 
 ### Reference Screenshots
 
-> Save these to `docs/design-references/` in the repo.
-
-- `sidebar-reference.png` — Plane left sidebar (section labels, nav items, indented sub-items, no borders)
-- `list-rows-reference.png` — Vercel deployments list (name dominant, status dot only on left, metadata right, timestamp far right — dot only, no text label next to dot)
-- `popover-reference.png` — Docker Desktop popover (dark background, status at top, actions below, tight spacing)
-- `onboarding-reference.png` — Craft modal (centered card, icon top, title, subtitle, action button full width)
-- `empty-state-reference.png` — Linear empty state (centered illustration, title, subtitle, two action buttons)
-- `settings-reference.png` — ElevenLabs settings (single screen, no tabs, form sections with toggles, clean native feel)
+- Plane left sidebar (section labels, nav items, indented sub-items, no borders)
+- Vercel deployments list (name dominant, status dot only on left, metadata right, timestamp far right — dot only, no text label next to dot)
+- Docker Desktop popover (dark background, status at top, actions below, tight spacing)
+- Craft modal (centered card, icon top, title, subtitle, action button full width)
+- Linear empty state (centered illustration, title, subtitle, two action buttons)
+- ElevenLabs settings (single screen, no tabs, form sections with toggles, clean native feel)
 
 ### CCorn Icon
 
@@ -404,8 +402,6 @@ Bottom pinned:
 
 No borders between sidebar items. Hierarchy through indentation and weight only.
 
-> Reference: `docs/design-references/sidebar-reference.png`
-
 **Main Panel:**
 
 Column header row (28px, `Color(.controlBackgroundColor)` background, 0.5px bottom border `Color(.separatorColor)`):
@@ -433,8 +429,6 @@ Row states:
 - 0.5px row dividers using `Color(.separatorColor)`
 
 Sorted by last active, most recent first.
-
-> Reference: `docs/design-references/list-rows-reference.png`
 
 -----
 
@@ -489,8 +483,6 @@ popover-local — the main window keeps its full recency-ordered list.
 - `+ New Session` — left, `.caption` medium `#A1A1AA`
 - `Open CCorn` — right, `.caption` medium `#A1A1AA`
 
-> Reference: `docs/design-references/popover-reference.png`
-
 -----
 
 ### 5.3 Onboarding Screen
@@ -529,8 +521,6 @@ First launch only. Never shown again after completion.
 - Duplicate directory silently ignored
 - Onboarding is required — there is no dismiss or skip option. The app is not usable without at least one watch directory. The window cannot be closed until “Start Scanning” is clicked with at least one directory added.
 - Start Scanning → scans, transitions to main window + first run import sheet if sessions found
-
-> Reference: `docs/design-references/onboarding-reference.png`
 
 -----
 
@@ -625,8 +615,6 @@ Section 3 — “About”:
 
 No tabs. No second sidebar.
 
-> Reference: `docs/design-references/settings-reference.png`
-
 -----
 
 ### 5.6 Empty State
@@ -642,8 +630,6 @@ Shown in main panel when watch directories have been scanned but no Claude Code 
 - Two buttons side by side:
   - “New Session” — filled `Color.primary` bg, `Color.white` text
   - “Add Directory” — outline style, `Color(.separatorColor)` border, `Color.primary` text
-
-> Reference: `docs/design-references/empty-state-reference.png`
 
 -----
 
@@ -1051,7 +1037,6 @@ Process manager only — no chat interface.
 
 ## Key files to understand first
 - `CCORN_SPEC.md` — full spec, read this before writing any code
-- `docs/design-references/` — reference screenshots for every screen
 
 ## Architecture rules
 - Spawned commands need a resolved PATH (GUI apps do not inherit the shell PATH): run via a login shell or absolute paths. App Sandbox must be OFF or exec/FSEvents/AppleEvents are blocked (see CCORN_SPEC.md Process Execution Environment)

@@ -20,7 +20,7 @@ TMUX() { command tmux -L "$SOCKET" "$@"; }
 
 # Run from a Claude Code Bash tool, CLAUDE_CODE_CHILD_SESSION would leak into
 # the tmux server and mark every spawned claude as a nested child session,
-# which skips all local session persistence (RUNTIME_FINDINGS P8) and breaks
+# which skips all local session persistence (runtime findings P8) and breaks
 # the registry/transcript/RC contracts this harness verifies. Drop the vars
 # before the first TMUX call starts the server.
 for var in $(env | sed -nE 's/^(CLAUDE[A-Za-z0-9_]*|AI_AGENT)=.*/\1/p' | grep -v '^CLAUDE_BIN$'); do
@@ -116,7 +116,7 @@ WIN=$(TMUX new-window -t preflight -n probe -c "$PROJ" -P -F '#{window_id}')
 type_line "$CLAUDE_BIN --rc \"CCorn Preflight Probe\""
 
 # Trust wording changed across CLI versions: 2.1.170 asked "Do you trust the
-# files in this folder?" (RUNTIME_FINDINGS G1); 2.1.172 renders "Quick safety
+# files in this folder?" (runtime findings G1); 2.1.172 renders "Quick safety
 # check: … ❯ 1. Yes, I trust this folder". Match either.
 if wait_for_any 25 "Do you trust" "trust this folder"; then
     snap trust-prompt
@@ -159,7 +159,7 @@ TMUX kill-window -t "$WIN"
 
 # Record the probe session's transcript path: run.sh asserts remote control
 # engaged via footer OR bridge-session record (the engine ORs the same two
-# signals). The project dir encodes per RUNTIME_FINDINGS C5.
+# signals). The project dir encodes per runtime findings C5.
 ENCODED=$(sed 's/[^A-Za-z0-9]/-/g' <<<"/private${PROJ}")
 ls -t ~/.claude/projects/"$ENCODED"/*.jsonl 2>/dev/null | head -1 \
     > "$OUT/probe-transcript.path" || true

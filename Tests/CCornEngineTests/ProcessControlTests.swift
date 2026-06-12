@@ -11,7 +11,7 @@ import Testing
 
     /// Native install: the binary is version-named, so argv[0] and the exec path
     /// basename are the version (e.g. `2.1.169`) — we must still match via the
-    /// `/claude/versions/` exec path and the `--rc` argument (RUNTIME_FINDINGS C3).
+    /// `/claude/versions/` exec path and the `--rc` argument (runtime findings C3).
     @Test func matchesNativeVersionNamedBinary() {
         #expect(ProcessControl.looksLikeClaude(
             execPath: "/Users/x/.local/share/claude/versions/2.1.169",

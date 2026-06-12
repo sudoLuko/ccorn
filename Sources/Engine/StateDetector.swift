@@ -78,7 +78,7 @@ struct BridgeSessionCache: Sendable, Equatable {
 
 /// Detects a session's state from a `tmux capture-pane` snapshot, PID liveness,
 /// and the remote-control signal. See docs/CCORN_SPEC.md section 4 and
-/// docs/RUNTIME_FINDINGS.md T1/T2/T5.
+/// runtime findings T1/T2/T5.
 ///
 /// Precedence for a managed session:
 ///   1. no live `claude` pid (after re-deriving from the pane shell) -> Dead,
@@ -95,14 +95,14 @@ struct BridgeSessionCache: Sendable, Equatable {
 struct StateDetector: Sendable {
 
     /// The exact footer literal printed by Claude Code 2.1.169/2.1.170
-    /// (RUNTIME_FINDINGS C2).
+    /// (runtime findings C2).
     static let remoteControlMarker = "Remote Control active"
 
     /// Rendered ONLY while Claude is actively executing (verified on 2.1.169 and
     /// 2.1.170): the `esc to interrupt` hint accompanies the live spinner/status
     /// line and disappears the moment the turn finishes. Tool-call markers like
     /// `Bash(` and the `✻ <verb>ed for Ns` glyph lines persist in finished-but-idle
-    /// frames, so they must NOT be used as a Working signal (RUNTIME_FINDINGS T5).
+    /// frames, so they must NOT be used as a Working signal (runtime findings T5).
     static let liveActivityMarker = "esc to interrupt"
 
     /// Braille spinner frames older/newer renderers may use. Dead on
@@ -164,7 +164,7 @@ struct StateDetector: Sendable {
     /// True when the pane shows Claude actively executing *right now*: the
     /// `esc to interrupt` hint (2.1.169/2.1.170) or a braille spinner frame
     /// (forward-compat). Deliberately ignores tool-call markers, which persist
-    /// after the call finishes (RUNTIME_FINDINGS T5).
+    /// after the call finishes (runtime findings T5).
     func showsLiveActivity(pane: String) -> Bool {
         if pane.contains(Self.liveActivityMarker) { return true }
         return pane.contains(where: { Self.spinnerChars.contains($0) })
@@ -174,7 +174,7 @@ struct StateDetector: Sendable {
     /// Used by launch reconciliation to tell a died claude session from a bare
     /// shell window — e.g. the default window `tmux new-session` spawns, which
     /// automatic-rename labels "zsh". Generous on purpose: a stale TUI frame
-    /// (RUNTIME_FINDINGS T2), a clean-exit `claude --resume` hint, or a typed
+    /// (runtime findings T2), a clean-exit `claude --resume` hint, or a typed
     /// `claude` command all count; only a pane with no claude trace at all is
     /// treated as never-ran-claude.
     func showsClaudeEvidence(pane: String) -> Bool {
@@ -243,7 +243,7 @@ struct StateDetector: Sendable {
     ///
     /// Dead is decided from PID liveness, never from pane content: an exited
     /// window keeps stale `Bash(` / `Remote Control active` markers
-    /// (RUNTIME_FINDINGS T2). When the tracked pid is missing or gone, the pid is
+    /// (runtime findings T2). When the tracked pid is missing or gone, the pid is
     /// re-derived from the pane's shell (claude may have just spawned, or been
     /// restarted manually in the window); only if no claude child exists — and the
     /// pane shell is older than the spawn grace window — is the session Dead.

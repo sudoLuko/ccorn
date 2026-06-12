@@ -2,7 +2,7 @@ import Foundation
 
 /// Reads Claude Code's per-process session registry: `~/.claude/sessions/<pid>.json`,
 /// written by each running `claude` process for itself (verified on 2.1.170 —
-/// docs/RUNTIME_FINDINGS.md, milestone-2 fix findings). It carries the session
+/// milestone-2 fix findings). It carries the session
 /// UUID and cwd for a live pid, which lets launch reconciliation bind an
 /// adopted window to its session exactly, instead of guessing from pane
 /// contents or directory matching.

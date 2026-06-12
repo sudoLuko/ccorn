@@ -31,7 +31,7 @@ struct StubPanes: PaneSource {
     /// True mid-task frame: live spinner/status line plus the `esc to interrupt`
     /// hint -> Working. (2.1.169/2.1.170 render `·✢✳✶✻✽` status glyphs, not the
     /// braille spinner the spec assumed; the esc-to-interrupt hint is the live
-    /// signal, RUNTIME_FINDINGS T1/T5.)
+    /// signal, runtime findings T1/T5.)
     @Test func midTaskFixtureIsWorking() {
         let pane = Fixtures.paneText("working-midtask.txt")
         #expect(pane.contains("esc to interrupt"))
@@ -86,7 +86,7 @@ struct StubPanes: PaneSource {
     }
 
     /// REAL first-run trust prompt captured on 2.1.172 by the preflight
-    /// harness (RUNTIME_FINDINGS P2): the wording moved to "Quick safety
+    /// harness (runtime findings P2): the wording moved to "Quick safety
     /// check: … ❯ 1. Yes, I trust this folder", and it must keep classifying
     /// Waiting via the option-picker chrome, not any version-pinned literal.
     @Test func trustPrompt2172FixtureIsWaiting() {
@@ -177,7 +177,7 @@ struct StubPanes: PaneSource {
     /// active` markers. The classifier no longer mistakes it for Working — but
     /// pane content alone still reads as a healthy Running session, which is
     /// exactly why Dead must be decided from PID liveness, never from the pane
-    /// (RUNTIME_FINDINGS T2).
+    /// (runtime findings T2).
     @Test func exitedPaneStillMisleadsByContent() {
         let pane = Fixtures.paneText("dead-exited.txt")
         #expect(pane.contains("Bash("))

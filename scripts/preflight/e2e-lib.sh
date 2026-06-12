@@ -82,7 +82,7 @@ launch_app() {
     # vars exist. Run from a Claude Code Bash tool, CLAUDE_CODE_CHILD_SESSION
     # leaks app -> tmux -> claude, and a claude marked as a child session
     # SKIPS all local session persistence: no pid registry, no conversation
-    # records, no history entry, resume refuses (RUNTIME_FINDINGS P8). Scrub
+    # records, no history entry, resume refuses (runtime findings P8). Scrub
     # everything Claude-Code-shaped so the hermetic app matches production.
     local scrub
     scrub=$(env | sed -nE 's/^(CLAUDE[A-Za-z0-9_]*|AI_AGENT)=.*/-u \1/p' | tr '\n' ' ')

@@ -544,7 +544,7 @@ final class AppModel: ObservableObject {
 
     // MARK: - Read-only actions
 
-    /// No per-session URL exists (RUNTIME_FINDINGS C1): open the claude.ai/code
+    /// No per-session URL exists (runtime findings C1): open the claude.ai/code
     /// session list; the user finds the session by its title.
     func openInBrowser(_ row: SessionRow) {
         guard let url = URL(string: "https://claude.ai/code") else { return }

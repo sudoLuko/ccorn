@@ -1,7 +1,7 @@
 # Preflight test suite
 
 Pre-release verification that automated agents can run end to end. Findings
-land in docs/RUNTIME_FINDINGS.md (P-series). Run everything before a release:
+are recorded as P-series runtime findings. Run everything before a release:
 
 ```sh
 scripts/preflight/run.sh                  # CLI pane-contract test (below)
@@ -22,7 +22,7 @@ suite may run `kill-server`. They need a Debug build at
 
 Answers one question: **does the installed Claude Code CLI still render the
 pane text CCorn's state detection is built on?** Every detection contract
-(docs/RUNTIME_FINDINGS.md C/T/G/P series) is pinned to specific CLI renders;
+(runtime findings C/T/G/P series) is pinned to specific CLI renders;
 this harness re-verifies them against whatever `claude` is installed right now.
 
 ```sh
@@ -54,7 +54,7 @@ Exit 0 = all hard assertions pass. Output lands in `/tmp/ccorn-preflight/`
 4. `run.sh` classifies every frame and asserts. **Hard** assertions are
    contracts verified on a real CLI — a miss is a regression and fails the
    run. **Soft** ones (`FINDING`) are hypotheses about CLI behavior we have
-   not pinned; a miss is information for docs/RUNTIME_FINDINGS.md, not a
+   not pinned; a miss is information, not a
    failure.
 
 ## Side effects (intentional, small)
@@ -71,5 +71,5 @@ Exit 0 = all hard assertions pass. Output lands in `/tmp/ccorn-preflight/`
 
 A hard failure means the CLI changed a render CCorn depends on. Capture the
 frame from `/tmp/ccorn-preflight/frames/`, fix the detector (or record the
-shift in docs/RUNTIME_FINDINGS.md), and promote the frame into
+shift as a new runtime finding), and promote the frame into
 `Tests/CCornEngineTests/Fixtures/panes/` so the unit suite pins it too.

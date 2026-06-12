@@ -88,7 +88,7 @@ struct TmuxController: Sendable {
     /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
     /// child session and skips ALL local session persistence — no pid
     /// registry, no conversation records, `--resume` refuses the session
-    /// (docs/RUNTIME_FINDINGS.md P8). That breaks identity binding, restart,
+    /// (runtime findings P8). That breaks identity binding, restart,
     /// and RC detection for every session CCorn spawns. The var can reach our
     /// windows when the tmux server (or CCorn itself, in dev) was started
     /// from inside a Claude Code shell, so mark it for removal from the

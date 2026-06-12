@@ -22,7 +22,7 @@ struct PaneClassify {
         }
 
         // --bridge: the engine's other remote-control signal. Prints true/false
-        // using the production transcript check (RUNTIME_FINDINGS C1/C2).
+        // using the production transcript check (runtime findings C1/C2).
         if paths.first == "--bridge" {
             paths.removeFirst()
             guard paths.count == 1 else {

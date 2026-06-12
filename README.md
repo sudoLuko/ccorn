@@ -64,7 +64,6 @@ The `.xcodeproj` is generated — edit `project.yml`, not the project file. A fu
 ## More
 
 - [Full build spec](docs/CCORN_SPEC.md) — architecture, design language, every screen and flow.
-- [Runtime findings](docs/RUNTIME_FINDINGS.md) — verified Claude Code CLI behavior the implementation depends on.
 - [Releasing](RELEASING.md) — how maintainers cut a signed, notarized build.
 
 ## License

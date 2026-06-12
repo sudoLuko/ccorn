@@ -15,7 +15,7 @@ import Testing
         #expect(SessionDiscovery.canonicalize("/private/tmp") == "/tmp")
     }
 
-    /// RUNTIME_FINDINGS T3 fix: Foundation strips `/private` only when the leaf
+    /// runtime findings T3 fix: Foundation strips `/private` only when the leaf
     /// exists, which made canonicalization existence-dependent — a deleted (or
     /// never-created) project dir under one spelling silently stopped matching
     /// the other. Both spellings must converge for missing paths too.

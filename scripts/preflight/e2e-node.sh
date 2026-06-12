@@ -1,5 +1,5 @@
 #!/bin/bash
-# Node-wrapped claude verification: RUNTIME_FINDINGS' standing caveat is that
+# Node-wrapped claude verification: runtime findings' standing caveat is that
 # every process-identity fact was verified only against the NATIVE install
 # (version-named Mach-O at ~/.local/share/claude/versions/<v>). This test
 # installs @anthropic-ai/claude-code via npm into a throwaway prefix and runs
@@ -36,7 +36,7 @@ if [[ ! -x "$NPM_BIN/claude" ]]; then
         > "$E2E/npm-install.log" 2>&1
 fi
 [[ -x "$NPM_BIN/claude" ]] || { echo "FATAL: npm install produced no .bin/claude"; exit 1; }
-# As of 2.1.172 the npm package ships a NATIVE binary (RUNTIME_FINDINGS P6);
+# As of 2.1.172 the npm package ships a NATIVE binary (runtime findings P6);
 # older releases shipped a node cli.js shim. Record what this run exercised.
 log "npm bin type: $(file -b "$(readlink -f "$NPM_BIN/claude")" | head -c 80)"
 
@@ -70,8 +70,8 @@ assert_row_state "$PROJ" running 60 "node-wrapped session reaches Running"
 sleep 11
 assert_row_state "$PROJ" running 10 "still Running past the spawn grace (matcher held)"
 
-# Record the actual process shape we matched — the evidence RUNTIME_FINDINGS
-# needs for the node-wrapped caveat.
+# Record the actual process shape we matched — the evidence the
+# node-wrapped caveat needs.
 CLAUDE_PID=$(cmd pids | tr ' ' '\n' | awk -F= -v w="$WIN" '$1 == w {print $2}')
 if [[ -n "$CLAUDE_PID" && "$CLAUDE_PID" != "-" ]]; then
     SHAPE=$(ps -p "$CLAUDE_PID" -o comm= -o args= | head -1)

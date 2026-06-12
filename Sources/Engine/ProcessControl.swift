@@ -4,7 +4,7 @@ import Darwin
 /// Identifies and controls the `claude` process for a session.
 ///
 /// Critical matching rule (verified on native claude 2.1.169, see
-/// docs/RUNTIME_FINDINGS.md C3): the executable is *version-named*
+/// runtime findings C3): the executable is *version-named*
 /// (`~/.local/share/claude/versions/2.1.169`), so the kernel `p_comm` /
 /// `proc_name()` / `ps -o ucomm` all return `2.1.169`, NOT `claude`. We must
 /// therefore match by **argv** (argv[0] basename == `claude`, or args contain

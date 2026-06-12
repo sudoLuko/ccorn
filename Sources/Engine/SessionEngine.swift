@@ -78,7 +78,7 @@ final class SessionEngine: ObservableObject {
     /// claude.ai/mobile and disambiguates two sessions in the same folder
     /// (M3's new-session UI may override it). The session UUID is bound right
     /// here via the claude child's registry file and the record is persisted
-    /// immediately: the `--rc` title exists nowhere locally (RUNTIME_FINDINGS
+    /// immediately: the `--rc` title exists nowhere locally (runtime findings
     /// F2), so a record that survives relaunch is the only thing keeping the
     /// displayed name in sync with what claude.ai/mobile shows. Returns the
     /// window id and the captured claude PID.

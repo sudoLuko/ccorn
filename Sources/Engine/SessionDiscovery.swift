@@ -3,7 +3,7 @@ import Foundation
 /// Discovers Claude Code projects/sessions from `~/.claude/projects/`.
 ///
 /// Rules (docs/CCORN_SPEC.md "Session Discovery" / "Encoded Path Format",
-/// docs/RUNTIME_FINDINGS.md C4/C5):
+/// runtime findings C4/C5):
 /// - Enumerate every subdirectory of `~/.claude/projects/`. Each is a project.
 /// - The directory name is an opaque, lossy key — NEVER decode it.
 /// - Resolve the real path from the first transcript line that carries `cwd`
@@ -240,7 +240,7 @@ struct SessionDiscovery: Sendable {
     }
 
     /// True if the transcript contains a `bridge-session` record (remote-control
-    /// linkage, version-independent signal — see docs/RUNTIME_FINDINGS.md C1/C2).
+    /// linkage, version-independent signal — see runtime findings C1/C2).
     static func transcriptHasBridgeSession(path: String) -> Bool {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let text = String(decoding: data, as: UTF8.self)
@@ -257,7 +257,7 @@ struct SessionDiscovery: Sendable {
     /// the encoded form, which is built from the resolved path).
     ///
     /// Foundation normalizes toward the shorter `/tmp` form, but ONLY when the
-    /// leaf exists on disk (RUNTIME_FINDINGS T3) — so without the manual strip
+    /// leaf exists on disk (runtime findings T3) — so without the manual strip
     /// below, `/private/tmp/<deleted>` and `/tmp/<deleted>` would canonicalize
     /// differently and a deleted-or-symlinked project dir would silently stop
     /// matching its watch directory. The strip makes the mapping unconditional:

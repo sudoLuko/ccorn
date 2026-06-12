@@ -108,7 +108,7 @@ import Testing
 
     // MARK: - UnmanagedClaudeFinder registry filtering
 
-    /// Registry files for dead pids linger (RUNTIME_FINDINGS F3) — they must
+    /// Registry files for dead pids linger (runtime findings F3) — they must
     /// never produce a candidate.
     @Test func registryRejectsDeadPidFiles() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())

@@ -2,8 +2,6 @@
 
 ## Read first
 - `docs/CCORN_SPEC.md`: the full build spec. Read the sections relevant to your task before writing code.
-- `docs/RUNTIME_FINDINGS.md`: runtime facts verified on this machine (Claude Code 2.1.169). Where it differs from the spec or from any assumption, it wins.
-- `docs/design-references/`: reference screenshots for every screen.
 
 ## Current state
 All three milestones are built and verified: engine (M1), menu bar + main window (M2), and the full interaction surface (M3 — new session, import, kill/restart/archive, rename, onboarding, settings, archived view, notifications). After adding Swift files, run `xcodegen generate` before `xcodebuild`. Debug builds expose a file-based command channel for scripted verification (`CCORN_DEBUG_UI=cmd`, see Sources/UI/DebugCommandChannel.swift); it is compiled out of release builds.
@@ -70,7 +68,7 @@ Native macOS menu-bar app. Swift/SwiftUI. Manages Claude Code sessions in tmux. 
 - Process kill: SIGTERM first, wait 5s, SIGKILL if still running.
 
 ## Build milestones
-Build sequentially. Each milestone must build, launch, and verify before the next, and gets its own commit. The exact per-milestone prompts are in MILESTONE_PROMPTS.md.
+Build sequentially. Each milestone must build, launch, and verify before the next, and gets its own commit.
 1. Engine (no UI): command runner, tmux orchestration, discovery, encoded-path handling, process identification + PID tracking, state detection, session resume, launch reconciliation, persisted session record.
 2. Menu bar + main window: popover, list rows, status dots, aggregate dot, empty state, context menu, Open in Browser/Terminal. Wired to the engine, read-only on real data.
 3. Flows + secondary screens: new session, import/resume, kill/archive/restart, rename, onboarding, settings, archived view, notifications, then a polish pass.

@@ -6,7 +6,7 @@ import Foundation
 /// session by definition has no CCorn shell above it.
 ///
 /// Registry-first: every running claude writes `~/.claude/sessions/<pid>.json`
-/// with its pid, sessionId, and cwd (RUNTIME_FINDINGS F3). Files for dead pids
+/// with its pid, sessionId, and cwd (runtime findings F3). Files for dead pids
 /// linger, so a hit counts only if the pid is alive AND still claude-shaped by
 /// argv/exec-path (`ProcessControl.looksLikeClaude`) — never by process name.
 /// Fallback when the registry has no match: walk the process table for

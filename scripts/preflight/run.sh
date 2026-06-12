@@ -14,7 +14,7 @@
 #
 # Exit code: 0 all hard assertions pass; 1 otherwise. Soft assertions report
 # FINDING, never fail the run — they are hypotheses about unverified CLI
-# behavior (see docs/RUNTIME_FINDINGS.md), and a miss is information.
+# behavior, and a miss is information.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -185,7 +185,7 @@ echo "[classify] classifying captured frames"
 echo
 echo "=== contract assertions ==="
 
-# Verified contracts (RUNTIME_FINDINGS C2/T1/T2/T5, fixture probe) — hard.
+# Verified contracts (runtime findings C2/T1/T2/T5, fixture probe) — hard.
 assert_state idle-fresh running
 assert_state idle-finished running
 assert_state login-screen needsAuth

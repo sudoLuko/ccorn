@@ -3,7 +3,7 @@ import Testing
 
 /// Login-prompt and remote-control plan-restriction detection
 /// (docs/CCORN_SPEC.md section 8). The login fixture is SYNTHETIC — the probe
-/// machine was authenticated (RUNTIME_FINDINGS: Claude Max OAuth), so no real
+/// machine was authenticated (runtime findings: Claude Max OAuth), so no real
 /// unauthenticated frame could be captured. It is modeled on the 2.1.x login
 /// picker, whose option list ("❯ 1.", "Enter to confirm") is exactly what
 /// used to mislabel an unauthenticated session as Waiting.
@@ -38,7 +38,7 @@ import Testing
     }
 
     /// REAL invalid-key error render, captured on 2.1.172 by the preflight
-    /// harness (RUNTIME_FINDINGS P3): an approved-but-invalid env key fails on
+    /// harness (runtime findings P3): an approved-but-invalid env key fails on
     /// the first send with "Invalid API key · Fix external API key". The
     /// "Please run /login" suffix of older versions is gone; the "Invalid API
     /// key" phrase is what must keep matching.
@@ -49,7 +49,7 @@ import Testing
     }
 
     /// REAL signed-out login screen (fresh CLAUDE_CONFIG_DIR first run),
-    /// captured on 2.1.172 by the preflight harness (RUNTIME_FINDINGS P4) —
+    /// captured on 2.1.172 by the preflight harness (runtime findings P4) —
     /// the live counterpart of the modeled needs-auth-login fixture.
     @Test func realFreshLoginScreenIsNeedsAuth() {
         let pane = Fixtures.paneText("needs-auth-fresh-login-2172.txt")
