@@ -1,47 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <!-- CCorn app icon. Vectorized from the approved Grok reference
-       (reference-grok.jpg) with the agreed coloring fixes: calm green/blue
-       center, exactly one red kernel (the tip, never the top), one slate,
-       two ambers. Status palette hexes are exact, husk is #15803D.
+       (reference-grok.jpg); geometry measured off the reference via
+       per-color connected components and scaled 1.3x to fill the canvas.
+       Coloring per the agreed fixes: calm green/blue weighting, exactly
+       one red kernel (the tip, never the top), one slate, one amber.
+       Status palette hexes are exact, husk is #15803D.
        The background group is separable for Icon Composer; no frame,
        corners, or shadow are baked in (macOS applies its own mask). -->
   <g id="background">
     <rect width="1024" height="1024" fill="#FFFFFF"/>
   </g>
   <g id="corn">
-    <!-- husk: one path — two pointed tips, outer edges sweeping to a rounded
-         center bottom, inner edges forming the V notch that cradles the tip -->
+    <!-- husk: one path — two up-curled pointed tips, undersides sweeping
+         to a rounded bowl bottom, top edges cradling the cob around the
+         V notch that the red tip hangs into -->
     <g id="husk" fill="#15803D">
-      <path d="M 234 674
-               C 206 700 255 765 302 803
-               C 370 880 430 944 512 944
-               C 594 944 654 880 722 803
-               C 769 765 818 700 790 674
-               C 664 692 544 740 512 818
-               C 480 740 360 692 234 674
+      <path d="M 150 662
+               C 175 677 216 695 242 741
+               C 270 795 360 915 512 948
+               C 664 915 754 795 782 741
+               C 808 695 849 677 874 662
+               C 859 650 828 646 803 648
+               C 694 660 569 715 512 808
+               C 455 715 330 660 221 648
+               C 196 646 165 650 150 662
                Z"/>
     </g>
     <g id="cob">
-      <!-- dome row: rounded-top kernels, center peaks higher -->
-      <path fill="#22C55E" d="M 334 189 A 52 52 0 0 1 438 189 A 16 16 0 0 1 422 205 L 350 205 A 16 16 0 0 1 334 189 Z"/>
-      <path fill="#3B82F6" d="M 460 181 L 460 130 A 52 52 0 0 1 564 130 L 564 181 A 24 24 0 0 1 540 205 L 484 205 A 24 24 0 0 1 460 181 Z"/>
-      <path fill="#22C55E" d="M 586 189 A 52 52 0 0 1 690 189 A 16 16 0 0 1 674 205 L 602 205 A 16 16 0 0 1 586 189 Z"/>
-      <!-- row 2 -->
-      <rect fill="#3B82F6" x="334" y="227" width="104" height="104" rx="26"/>
-      <rect fill="#22C55E" x="460" y="227" width="104" height="104" rx="26"/>
-      <rect fill="#F59E0B" x="586" y="227" width="104" height="104" rx="26"/>
+      <!-- dome: tall center kernel, narrower side kernels tucked inward -->
+      <path fill="#3B82F6" d="M 349 219 L 349 187 A 41 41 0 0 1 431 187 L 431 219 A 20 20 0 0 1 411 239 L 369 239 A 20 20 0 0 1 349 219 Z"/>
+      <path fill="#22C55E" d="M 453 192 L 453 134 A 59 59 0 0 1 571 134 L 571 192 A 26 26 0 0 1 545 218 L 479 218 A 26 26 0 0 1 453 192 Z"/>
+      <path fill="#3B82F6" d="M 593 219 L 593 187 A 41 41 0 0 1 675 187 L 675 219 A 20 20 0 0 1 655 239 L 613 239 A 20 20 0 0 1 593 219 Z"/>
+      <!-- row 2: full-height center, shorter shoulder kernels -->
+      <rect fill="#22C55E" x="313" y="260" width="118" height="98" rx="30"/>
+      <rect fill="#3B82F6" x="453" y="239" width="118" height="119" rx="30"/>
+      <rect fill="#F59E0B" x="593" y="260" width="118" height="98" rx="30"/>
       <!-- row 3 -->
-      <rect fill="#22C55E" x="334" y="353" width="104" height="104" rx="26"/>
-      <rect fill="#3B82F6" x="460" y="353" width="104" height="104" rx="26"/>
-      <rect fill="#22C55E" x="586" y="353" width="104" height="104" rx="26"/>
-      <!-- row 4 -->
-      <rect fill="#F59E0B" x="334" y="479" width="104" height="104" rx="26"/>
-      <rect fill="#22C55E" x="460" y="479" width="104" height="104" rx="26"/>
-      <rect fill="#64748B" x="586" y="479" width="104" height="104" rx="26"/>
-      <!-- bottom row: rounded-bottom outers, pointed center tip -->
-      <path fill="#3B82F6" d="M 334 631 A 26 26 0 0 1 360 605 L 412 605 A 26 26 0 0 1 438 631 L 438 678 C 438 706 426 720 404 716 C 372 710 334 706 334 680 Z"/>
-      <path fill="#DC2626" d="M 460 683 L 460 631 A 26 26 0 0 1 486 605 L 538 605 A 26 26 0 0 1 564 631 L 564 683 C 564 725 530 750 512 791 C 494 750 460 725 460 683 Z"/>
-      <path fill="#22C55E" d="M 690 631 A 26 26 0 0 0 664 605 L 612 605 A 26 26 0 0 0 586 631 L 586 678 C 586 706 598 720 620 716 C 652 710 690 706 690 680 Z"/>
+      <rect fill="#64748B" x="313" y="380" width="118" height="118" rx="30"/>
+      <rect fill="#22C55E" x="453" y="380" width="118" height="118" rx="30"/>
+      <rect fill="#3B82F6" x="593" y="380" width="118" height="118" rx="30"/>
+      <!-- bottom row: tall outers with undersides slanting toward the
+           center, long pointed tip kernel -->
+      <path fill="#3B82F6" d="M 313 550 A 30 30 0 0 1 343 520 L 401 520 A 30 30 0 0 1 431 550 L 431 650 C 431 680 419 694 397 690 C 360 683 313 676 313 642 Z"/>
+      <path fill="#DC2626" d="M 453 678 L 453 550 A 30 30 0 0 1 483 520 L 541 520 A 30 30 0 0 1 571 550 L 571 678 C 571 720 535 740 512 781 C 489 740 453 720 453 678 Z"/>
+      <path fill="#22C55E" d="M 711 550 A 30 30 0 0 0 681 520 L 623 520 A 30 30 0 0 0 593 550 L 593 650 C 593 680 605 694 627 690 C 664 683 711 676 711 642 Z"/>
     </g>
   </g>
 </svg>
