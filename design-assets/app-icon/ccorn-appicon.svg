@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- CCorn app icon. Vectorized from the approved Grok reference
+       (reference-grok.jpg) with the agreed coloring fixes: calm green/blue
+       center, exactly one red kernel (the tip, never the top), one slate,
+       two ambers. Status palette hexes are exact, husk is #15803D.
+       The background group is separable for Icon Composer; no frame,
+       corners, or shadow are baked in (macOS applies its own mask). -->
+  <g id="background">
+    <rect width="1024" height="1024" fill="#FFFFFF"/>
+  </g>
+  <g id="corn">
+    <!-- husk: one path — two pointed tips, outer edges sweeping to a rounded
+         center bottom, inner edges forming the V notch that cradles the tip -->
+    <g id="husk" fill="#15803D">
+      <path d="M 234 674
+               C 206 700 255 765 302 803
+               C 370 880 430 944 512 944
+               C 594 944 654 880 722 803
+               C 769 765 818 700 790 674
+               C 664 692 544 740 512 818
+               C 480 740 360 692 234 674
+               Z"/>
+    </g>
+    <g id="cob">
+      <!-- dome row: rounded-top kernels, center peaks higher -->
+      <path fill="#22C55E" d="M 334 189 A 52 52 0 0 1 438 189 A 16 16 0 0 1 422 205 L 350 205 A 16 16 0 0 1 334 189 Z"/>
+      <path fill="#3B82F6" d="M 460 181 L 460 130 A 52 52 0 0 1 564 130 L 564 181 A 24 24 0 0 1 540 205 L 484 205 A 24 24 0 0 1 460 181 Z"/>
+      <path fill="#22C55E" d="M 586 189 A 52 52 0 0 1 690 189 A 16 16 0 0 1 674 205 L 602 205 A 16 16 0 0 1 586 189 Z"/>
+      <!-- row 2 -->
+      <rect fill="#3B82F6" x="334" y="227" width="104" height="104" rx="26"/>
+      <rect fill="#22C55E" x="460" y="227" width="104" height="104" rx="26"/>
+      <rect fill="#F59E0B" x="586" y="227" width="104" height="104" rx="26"/>
+      <!-- row 3 -->
+      <rect fill="#22C55E" x="334" y="353" width="104" height="104" rx="26"/>
+      <rect fill="#3B82F6" x="460" y="353" width="104" height="104" rx="26"/>
+      <rect fill="#22C55E" x="586" y="353" width="104" height="104" rx="26"/>
+      <!-- row 4 -->
+      <rect fill="#F59E0B" x="334" y="479" width="104" height="104" rx="26"/>
+      <rect fill="#22C55E" x="460" y="479" width="104" height="104" rx="26"/>
+      <rect fill="#64748B" x="586" y="479" width="104" height="104" rx="26"/>
+      <!-- bottom row: rounded-bottom outers, pointed center tip -->
+      <path fill="#3B82F6" d="M 334 631 A 26 26 0 0 1 360 605 L 412 605 A 26 26 0 0 1 438 631 L 438 678 C 438 706 426 720 404 716 C 372 710 334 706 334 680 Z"/>
+      <path fill="#DC2626" d="M 460 683 L 460 631 A 26 26 0 0 1 486 605 L 538 605 A 26 26 0 0 1 564 631 L 564 683 C 564 725 530 750 512 791 C 494 750 460 725 460 683 Z"/>
+      <path fill="#22C55E" d="M 690 631 A 26 26 0 0 0 664 605 L 612 605 A 26 26 0 0 0 586 631 L 586 678 C 586 706 598 720 620 716 C 652 710 690 706 690 680 Z"/>
+    </g>
+  </g>
+</svg>
