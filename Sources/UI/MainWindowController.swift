@@ -162,7 +162,10 @@ private class ToolbarDelegate: NSObject, NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        return [Self.cornIconID]
+        // Leading flexible space pushes the corn glyph to the trailing (right)
+        // edge, balancing it against the traffic lights and sidebar toggle on
+        // the left.
+        return [.flexibleSpace, Self.cornIconID]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
