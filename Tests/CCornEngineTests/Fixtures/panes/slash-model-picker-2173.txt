@@ -1,0 +1,50 @@
+/Users/luke/.nvm/versions/node/v22.22.2/bin/claude --rc 'model probe'
+dev@host ccorn-probe % /Users/luke/.nvm/versions/node/v22.22.2/bin/claude --rc 'model probe'
+╭─── Claude Code v2.1.173 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                                                                │
+│                 Welcome back!                 │ Ask Claude to create a new app or clone a repository                                                    │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                              │
+│                      ▝▜█████▛▘                     │ Session titles are now generated in the language of your conversation (set the `language` setting to p… │
+│                        ▘▘ ▝▝                       │ Added `footerLinksRegexes` setting for regex-matched link badges in the footer row, configurable via u… │
+│     Opus 4.8 with xhigh effort · Claude Max ·      │ Improved Bedrock credential caching: credentials from `awsCredentialExport` are now cached until their… │
+│     dev@example.com's Organization          │ /release-notes for more                                                                                 │
+│        /private/tmp/ccorn-probe         │                                                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ /model
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Select model
+  Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model.
+
+    1. Default (recommended)  Opus 4.8 with 1M context · Best for everyday, complex tasks
+    2. Sonnet                 Sonnet 4.6 · Efficient for routine tasks
+    3. Sonnet (1M context)    Sonnet 4.6 with 1M context · Draws from usage credits · $3/$15 per Mtok
+    4. Haiku                  Haiku 4.5 · Fastest for quick answers
+  ❯ 5. Opus ✔                 Opus 4.8 · Best for everyday, complex tasks
+    6. Fable (disabled)       Claude Fable 5 is currently unavailable. Learn more: https://www.anthropic.com/news/fable-mythos-access
+
+  ◉ xHigh effort ←/→ to adjust
+
+  Use /fast to turn on Fast mode (Opus 4.8).
+
+  Enter to set as default · s to use this session only · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

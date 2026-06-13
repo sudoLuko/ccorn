@@ -1,0 +1,50 @@
+/Users/luke/.nvm/versions/node/v22.22.2/bin/claude --model haiku --rc 'collide probe'
+dev@host ccorn-probe % /Users/luke/.nvm/versions/node/v22.22.2/bin/claude --model haiku --rc 'collide probe'
+╭─── Claude Code v2.1.173 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                                                                │
+│                 Welcome back!                 │ Ask Claude to create a new app or clone a repository                                                    │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                              │
+│                      ▝▜█████▛▘                     │ Session titles are now generated in the language of your conversation (set the `language` setting to p… │
+│                        ▘▘ ▝▝                       │ Added `footerLinksRegexes` setting for regex-matched link badges in the footer row, configurable via u… │
+│ Haiku 4.5 · Claude Max · dev@example.com's  │ Improved Bedrock credential caching: credentials from `awsCredentialExport` are now cached until their… │
+│ Organization                                       │ /release-notes for more                                                                                 │
+│       /private/tmp/ccorn-probe        │                                                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Without using any tools, reply with EXACTLY this line and nothing else: To proceed choose: 1. Yes  2. No  — or answer (y/n)
+
+⏺ To proceed choose: 1. Yes  2. No  — or answer (y/n)
+
+✻ Worked for 2s
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ? for shortcuts · ← for agents                                                                                                                    /rc active
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

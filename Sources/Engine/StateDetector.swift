@@ -125,21 +125,24 @@ struct StateDetector: Sendable {
     /// false-positive on current versions because braille never renders.
     static let spinnerChars = Set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
-    /// Permission / confirmation phrases that mean Claude is waiting on the user.
-    /// Anchored to real prompt renders (the trust dialog, tool-permission and
-    /// plan-mode prompts); the persistent `>` input box is NOT a Waiting signal —
-    /// it is present even when idle. Single risky words (e.g. "approve") are
-    /// matched with word boundaries via `waitingWordPattern`, never as bare
-    /// substrings — "approved"/"approval" in ordinary output must not flag Waiting.
+    /// Structural prompt affordances that only the live confirmation UI renders:
+    /// the option picker (`❯ 1.`, a numbered `1. Yes` choice), an explicit y/n
+    /// affordance, or the `Enter to confirm` hint. These are the chrome of the
+    /// trust dialog, tool-permission, and plan-mode prompts (see the
+    /// `waiting-*`/`needs-auth-*` fixtures); every real prompt renders at least
+    /// one of them alongside its question.
+    ///
+    /// Deliberately NOT here: natural-language phrasings like "Do you want…",
+    /// "Would you like…", or "Approve …". They read identically in ordinary
+    /// assistant prose that lingers in an idle scrollback frame ("Do you want to
+    /// rename a session to …?"), so matching them as bare substrings false-flagged
+    /// finished, idle sessions as needs-input (the `idle-conversational-*`
+    /// fixture). Because a genuine prompt always carries the structural chrome
+    /// above, dropping the prose costs no real detection. The persistent `>`
+    /// input box is likewise not a signal — it is present even when idle.
     static let waitingPhrases = [
-        "Would you like", "Do you want", "Please confirm",
-        "Allow this", "Enter to confirm",
-        "(y/n)", "[y/N]", "❯ 1.", "1. Yes",
+        "❯ 1.", "1. Yes", "(y/n)", "[y/N]", "Enter to confirm",
     ]
-
-    /// Word-bounded regex for confirmation verbs that are too short to match as
-    /// substrings. `\b` keeps "approved"/"approval" from matching.
-    static let waitingWordPattern = #"\bapprove\b"#
 
     /// Login-prompt phrases (docs/CCORN_SPEC.md section 8, "User not
     /// authenticated"). Anchored to whole UI/error renders — the login picker,
@@ -215,12 +218,34 @@ struct StateDetector: Sendable {
         return false
     }
 
+    /// A captured-frame line is a horizontal rule (an input-box border or the top
+    /// of a prompt dialog) when it is mostly box-drawing horizontals. The 20-char
+    /// floor sits well above any incidental `─` run in conversation text yet below
+    /// the width of every real border.
+    private static func isRuleLine(_ line: Substring) -> Bool {
+        line.filter { $0 == "─" || $0 == "━" }.count >= 20
+    }
+
+    /// The bottom "live UI" region of a captured frame: the suffix from the last
+    /// horizontal-rule line onward. A confirmation prompt replaces the input box
+    /// and renders as the bottom-most rule-delimited block — verified on 2.1.173
+    /// for the trust dialog and the tool-permission dialog (see the `waiting-*`
+    /// fixtures) — so the real prompt chrome lives here, while finished
+    /// conversation (a pasted option list, a `(y/n)` written in prose) sits in the
+    /// scrollback above. Scoping the Waiting scan to this region keeps that
+    /// lingering chrome from flagging an idle session (the
+    /// `idle-marker-in-scrollback` fixture). With no rule line at all — a bare
+    /// pane, never a real live TUI — it returns the whole pane: conservative, so a
+    /// genuine prompt is never missed.
+    static func livePromptRegion(_ pane: String) -> String {
+        let lines = pane.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let lastRule = lines.lastIndex(where: { isRuleLine($0) }) else { return pane }
+        return lines[lastRule...].joined(separator: "\n")
+    }
+
     func isWaiting(pane: String) -> Bool {
-        if Self.waitingPhrases.contains(where: { pane.localizedCaseInsensitiveContains($0) }) {
-            return true
-        }
-        return pane.range(of: Self.waitingWordPattern,
-                          options: [.regularExpression, .caseInsensitive]) != nil
+        let region = Self.livePromptRegion(pane)
+        return Self.waitingPhrases.contains { region.localizedCaseInsensitiveContains($0) }
     }
 
     /// The CLI's auth-error/login line if the pane shows a login prompt, nil

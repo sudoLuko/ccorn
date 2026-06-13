@@ -107,14 +107,22 @@ struct StubPanes: PaneSource {
         #expect(state == .waiting)
     }
 
-    /// The 3b regression: "approve" must be word-bounded. "approved"/"approval"
-    /// in ordinary conversation output must NOT flag Waiting; a real
-    /// confirmation prompt still must.
-    @Test func waitingRequiresWordBoundaries() {
+    /// THE needs-input false-positive fix: a Waiting verdict requires the
+    /// structural prompt chrome (option picker / y-n / "Enter to confirm"), never
+    /// natural-language phrasing. Prose like "Do you want to rename…" or
+    /// "Approve this tool call?" that lingers in an idle scrollback frame must NOT
+    /// flag needs-input; the same question carrying the real prompt chrome still must.
+    @Test func waitingRequiresStructuralPrompt() {
+        // Prose only — the kind of assistant text that stays on screen when idle.
+        #expect(!detector.isWaiting(pane: "⏺ Do you want to rename a session to \"hello world\"?"))
+        #expect(!detector.isWaiting(pane: "Do you want to proceed?"))
+        #expect(!detector.isWaiting(pane: "Would you like me to continue?"))
+        #expect(!detector.isWaiting(pane: "Approve this tool call?"))
         #expect(!detector.isWaiting(pane: "⏺ The PR was approved and merged."))
         #expect(!detector.isWaiting(pane: "Waiting on approval from CI."))
-        #expect(detector.isWaiting(pane: "Approve this tool call?"))
-        #expect(detector.isWaiting(pane: "Do you want to proceed?"))
+        // The same question rendered with the real prompt chrome -> Waiting.
+        #expect(detector.isWaiting(pane: "Do you want to proceed?\n ❯ 1. Yes\n   2. No\n Enter to confirm · Esc to cancel"))
+        #expect(detector.isWaiting(pane: "Continue? (y/n)"))
     }
 
     /// An idle frame containing approval-ish words stays Running end to end.
@@ -122,6 +130,166 @@ struct StubPanes: PaneSource {
         let pane = Fixtures.paneText("running-idle.txt")
             + "\n⏺ The change was approved; approval recorded.\n"
         #expect(classifyFresh(pane) == .running)
+    }
+
+    /// REAL 2.1.173 idle frame that reproduced the needs-input false positive: a
+    /// finished, idle session whose last assistant turn asked "Do you want to
+    /// rename a session to "hello world"?…". That prose tripped the old substring
+    /// matcher. With Waiting anchored to structural prompt chrome (none here), the
+    /// session classifies Running.
+    @Test func idleConversationalDoYouWantStaysRunning() {
+        let pane = Fixtures.paneText("idle-conversational-doyouwant-2173.txt")
+        #expect(pane.contains("Do you want"))            // the prose that used to trip it
+        #expect(!detector.showsLiveActivity(pane: pane))
+        #expect(!detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .running)
+    }
+
+    // MARK: Waiting — the structural-marker contract
+
+    /// Every KEPT marker independently means Waiting, both as a raw signal and
+    /// end to end through the classifier (embedded in an otherwise-idle frame so
+    /// only the marker can be the cause).
+    @Test(arguments: ["❯ 1.", "1. Yes", "(y/n)", "[y/N]", "Enter to confirm"])
+    func eachStructuralMarkerFlagsWaiting(marker: String) {
+        let pane = "⏺ Ran the command.\n \(marker)\n"
+        #expect(detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .waiting)
+    }
+
+    /// Every DROPPED natural-language phrasing must NOT flag Waiting on its own —
+    /// this is the regression that produced the false positive. Each is the exact
+    /// prose the old `waitingPhrases`/`approve` rules matched.
+    @Test(arguments: [
+        "Would you like me to continue?",
+        "Do you want to proceed?",
+        "Please confirm the details below.",
+        "Allow this change to the config?",
+        "Approve this tool call?",
+        "The PR was approved; approval recorded.",
+    ])
+    func droppedProsePhrasesDoNotFlagWaiting(prose: String) {
+        let pane = "⏺ \(prose)\n"
+        #expect(!detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .running)
+    }
+
+    /// Markers match case-insensitively (the matcher is
+    /// `localizedCaseInsensitiveContains`), so a lowercased render still counts.
+    @Test func structuralMarkersAreCaseInsensitive() {
+        #expect(detector.isWaiting(pane: "Continue? (Y/N)"))
+        #expect(detector.isWaiting(pane: "press enter to confirm"))
+    }
+
+    /// Live activity outranks a prompt: an option list streamed mid-turn (Claude
+    /// quoting a menu, a tool drawing one) must not block a busy session.
+    @Test func liveActivityPreemptsWaitingPrompt() {
+        let pane = Fixtures.paneText("working-midtask.txt")
+            + "\n ❯ 1. Yes\n   2. No\n Enter to confirm · Esc to cancel\n"
+        #expect(detector.showsLiveActivity(pane: pane))
+        #expect(classifyFresh(pane) == .working)
+    }
+
+    /// Full `detect()` pass on the real false-positive frame: alive pid + idle
+    /// conversational pane -> Running, and the `/rc active` chip is still read as
+    /// remote-control engaged (the fix touches Waiting only, not RC detection).
+    @Test func detectClassifiesConversationalFrameRunningWithRC() {
+        let input = DetectionInput(windowId: "@1", pid: getpid())
+        let panes = StubPanes(pane: Fixtures.paneText("idle-conversational-doyouwant-2173.txt"),
+                              shellPID: nil)
+        let result = detector.detect(input: input, panes: panes, transcript: nil,
+                                     staleThreshold: 600, now: t0)
+        #expect(result.state == .running)
+        #expect(result.remoteControlActive)
+    }
+
+    // MARK: Waiting — region scoping (Layer 2)
+
+    /// REAL 2.1.173 tool-permission dialog captured live: `⏺ Bash(…)` / `⎿
+    /// Waiting…` scrollback, then a rule, then `❯ 1. Yes / 2. … / 3. No` and
+    /// `Esc to cancel · Tab to amend` (note: NOT "Enter to confirm" — that is
+    /// trust/login-only). It must classify Waiting via the picker chrome.
+    @Test func toolPermissionDialog2173IsWaiting() {
+        let pane = Fixtures.paneText("waiting-tool-permission-2173.txt")
+        #expect(!detector.showsLiveActivity(pane: pane))
+        #expect(detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .waiting)
+    }
+
+    /// REAL 2.1.173 plan-mode (ExitPlanMode) approval, captured live — a prompt
+    /// whose structure differs from the others and is the key false-negative
+    /// guard. The plan BODY sits in a DASHED-rule (`╌`) box that `isRuleLine`
+    /// ignores, and the `❯ 1. Yes…` picker sits below the last SOLID rule, so
+    /// region scoping lands on the picker (Waiting) while excluding the plan body
+    /// (where prompt-like text could otherwise live). A real "needs input" prompt
+    /// must never read calm.
+    @Test func planModeApprovalPrompt2173IsWaiting() {
+        let pane = Fixtures.paneText("waiting-plan-mode-2173.txt")
+        #expect(!detector.showsLiveActivity(pane: pane))
+        #expect(detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .waiting)
+        let region = StateDetector.livePromptRegion(pane)
+        #expect(region.contains("❯ 1."))                  // picker is in the live region
+        #expect(!region.contains("Here is Claude's plan")) // plan body is excluded
+    }
+
+    /// REAL 2.1.173 Write-tool permission, captured live. The file-content diff
+    /// sits in a dashed-rule box and the `❯ 1. Yes` picker is below the last solid
+    /// rule; both fall in the live region, which is correct — the prompt IS
+    /// blocking, and the verdict is Waiting because the picker is real (even with
+    /// marker-like text inside the diff).
+    @Test func writeFilePermission2173IsWaiting() {
+        let pane = Fixtures.paneText("waiting-write-permission-2173.txt")
+        #expect(!detector.showsLiveActivity(pane: pane))
+        #expect(detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .waiting)
+    }
+
+    /// A `/model` selection menu (captured live) is intentionally NOT needs-input:
+    /// its cursor sits on the current model (`❯ 5. Opus`), not `❯ 1.`, and it
+    /// offers "Enter to set as default", not a confirm/Yes affordance — so no
+    /// waiting marker matches and it reads Running. Scope decision: CCorn flags
+    /// Claude-blocked approval prompts (trust/permission/plan), not a user-opened
+    /// settings menu. Pins that a bare numbered list does not mean Waiting.
+    @Test func slashModelPickerIsNotWaiting() {
+        let pane = Fixtures.paneText("slash-model-picker-2173.txt")
+        #expect(pane.contains("❯ 5. Opus"))       // a picker is on screen…
+        #expect(!detector.isWaiting(pane: pane))   // …but a settings menu, not an approval
+        #expect(classifyFresh(pane) == .running)
+    }
+
+    /// THE Layer-2 win, on a REAL capture: Claude echoed `1. Yes … (y/n)` in its
+    /// reply, then went idle (empty input box at the bottom). Whole-frame matching
+    /// (Layer 1) would call this Waiting; region scoping reads the idle session it
+    /// is, because that chrome is in the scrollback, not the live region.
+    @Test func markerInScrollbackAboveInputBoxIsNotWaiting() {
+        let pane = Fixtures.paneText("idle-marker-in-scrollback-2173.txt")
+        // The chrome really is present in the frame — just not in the live region.
+        #expect(pane.contains("1. Yes"))
+        #expect(pane.contains("(y/n)"))
+        #expect(!detector.isWaiting(pane: pane))
+        #expect(classifyFresh(pane) == .running)
+    }
+
+    /// `livePromptRegion` keeps the bottom rule-delimited block and drops the
+    /// scrollback above it — the mechanism the cases above rely on.
+    @Test func livePromptRegionIsTheBottomRuleBlock() {
+        let scrollbackChrome = Fixtures.paneText("idle-marker-in-scrollback-2173.txt")
+        let region = StateDetector.livePromptRegion(scrollbackChrome)
+        #expect(!region.contains("1. Yes"))          // scrollback chrome dropped
+        #expect(region.contains("/rc active"))        // bottom footer kept
+        // A real prompt's chrome survives because it *is* the bottom block.
+        let prompt = Fixtures.paneText("waiting-tool-permission-2173.txt")
+        #expect(StateDetector.livePromptRegion(prompt).contains("❯ 1. Yes"))
+    }
+
+    /// Fallback: with no rule line (a bare pane that a live TUI never produces)
+    /// there is no region to scope to, so detection scans the whole string —
+    /// better a rare false positive than a missed prompt.
+    @Test func noRuleStructureFallsBackToFullFrame() {
+        let bare = "⏺ Ready.\n ❯ 1. Yes\n   2. No\n"
+        #expect(StateDetector.livePromptRegion(bare) == bare)
+        #expect(detector.isWaiting(pane: bare))
     }
 
     // MARK: Running / remote control

@@ -1,0 +1,50 @@
+/Users/luke/.nvm/versions/node/v22.22.2/bin/claude --model haiku --rc 'perm probe'
+dev@host ccorn-probe % /Users/luke/.nvm/versions/node/v22.22.2/bin/claude --model haiku --rc 'perm probe'
+╭─── Claude Code v2.1.173 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                                                                │
+│                 Welcome back!                 │ Ask Claude to create a new app or clone a repository                                                    │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                              │
+│                      ▝▜█████▛▘                     │ Session titles are now generated in the language of your conversation (set the `language` setting to p… │
+│                        ▘▘ ▝▝                       │ Added `footerLinksRegexes` setting for regex-matched link badges in the footer row, configurable via u… │
+│ Haiku 4.5 · Claude Max · dev@example.com's  │ Improved Bedrock credential caching: credentials from `awsCredentialExport` are now cached until their… │
+│ Organization                                       │ /release-notes for more                                                                                 │
+│        /private/tmp/ccorn-probe         │                                                                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Run /bin/echo ccorn-permprobe using the Bash tool. Nothing else.
+
+⏺ Bash(/bin/echo ccorn-permprobe)
+  ⎿  Waiting…
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   /bin/echo ccorn-permprobe
+   Run /bin/echo ccorn-permprobe
+
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: /bin/echo ccorn-permprobe *
+   3. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
