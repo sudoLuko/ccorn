@@ -75,6 +75,7 @@ targets:
       - path: Sources/Engine/SessionEngine.swift
       - path: Sources/Engine/SessionStore.swift
       - path: Sources/Engine/UnmanagedClaudeFinder.swift
+      - path: Sources/Engine/DiscoveryMerge.swift
       - path: Sources/Models/SessionState.swift
       # Theme rides along for the status-token tests (the palette and its
       # presentation routing); it needs only SessionState from above.

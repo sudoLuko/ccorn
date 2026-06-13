@@ -73,6 +73,11 @@ final class AppModel: ObservableObject {
     #endif
 
     private var unmanagedProjects: [DiscoveredProject] = []
+    /// Live external (non-CCorn) Claude sessions, registry-derived and scoped to
+    /// the watch dirs on each discovery pass. Each becomes its own UUID-keyed
+    /// discovered row, so two sessions sharing a directory never collapse into
+    /// one flipping row (see DiscoveryMerge).
+    private var liveUnmanaged: [UnmanagedClaudeFinder.Candidate] = []
     /// Persisted session records, mirrored from the store on every discovery
     /// pass and after every mutation. Source of the Stopped/Archived rows.
     private var records: [SessionRecord] = []
@@ -284,10 +289,20 @@ final class AppModel: ObservableObject {
         // Managed sessions' titles also come from their transcripts — snapshot
         // the uuids on the main actor before hopping off.
         let managedUUIDs = engine.liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty }
-        let (projects, index, meta, loadedRecords) = await Task.detached {
-            () -> ([DiscoveredProject], [String: DiscoveredSession],
-                   [String: TranscriptMeta], [SessionRecord]) in
+        let (projects, live, index, meta, loadedRecords) = await Task.detached {
+            () -> ([DiscoveredProject], [UnmanagedClaudeFinder.Candidate],
+                   [String: DiscoveredSession], [String: TranscriptMeta], [SessionRecord]) in
             let projects = discovery.discover(watchDirectories: watchDirs)
+            // Live external sessions, scoped to the watch dirs (registry cwds are
+            // already canonical). This is the per-session liveness signal that
+            // makes the discovered surface session-granular instead of
+            // directory-granular.
+            let watch = watchDirs
+                .map { SessionDiscovery.canonicalize(SessionDiscovery.expandTilde($0)) }
+                .filter { FileManager.default.fileExists(atPath: $0) }
+            let live = UnmanagedClaudeFinder.registryCandidates().filter { candidate in
+                watch.contains { SessionDiscovery.isPath(candidate.cwd, inside: $0) }
+            }
             let index = discovery.transcriptIndex()
             // Drop meta-cache entries for transcripts that no longer exist,
             // or the cache grows monotonically across session churn.
@@ -297,6 +312,9 @@ final class AppModel: ObservableObject {
             for project in projects {
                 if let uuid = project.mostRecentSession?.uuid { wanted.insert(uuid) }
             }
+            for candidate in live {
+                if let uuid = candidate.sessionId { wanted.insert(uuid) }
+            }
             for record in records { wanted.insert(record.uuid) }
             var meta: [String: TranscriptMeta] = [:]
             for uuid in wanted {
@@ -304,10 +322,11 @@ final class AppModel: ObservableObject {
                     meta[uuid] = metaCache.meta(for: transcript)
                 }
             }
-            return (projects, index, meta, records)
+            return (projects, live, index, meta, records)
         }.value
         guard generation == discoveryGeneration else { return } // superseded
         unmanagedProjects = projects
+        liveUnmanaged = live
         transcriptIndex = index
         metaByUUID = meta
         records = loadedRecords
@@ -378,9 +397,23 @@ final class AppModel: ObservableObject {
             ))
         }
 
-        // Persisted records with no live window: Stopped rows (or Archived).
-        // A record whose uuid is currently managed is the same session — skip.
-        for record in records where !managedUUIDs.contains(record.uuid) {
+        // Discovered (unmanaged) surface, resolved session-granular: live
+        // external sessions become individual UUID-keyed rows; fully-dormant
+        // directories collapse to one summary row. A running session outranks a
+        // stale Stopped record for the same UUID.
+        let discovered = DiscoveryMerge.resolve(
+            projects: unmanagedProjects,
+            liveCandidates: liveUnmanaged,
+            managedUUIDs: managedUUIDs,
+            managedPaths: managedPaths,
+            recordUUIDs: recordUUIDs)
+
+        // Persisted records with no live window: Stopped rows (or Archived). A
+        // record whose uuid is currently managed — or running externally right
+        // now — is the same session, surfaced elsewhere; skip it here.
+        for record in records
+        where !managedUUIDs.contains(record.uuid)
+            && !discovered.liveUUIDs.contains(record.uuid) {
             let row = SessionRow(
                 id: "record:\(record.uuid)",
                 kind: .record,
@@ -402,17 +435,34 @@ final class AppModel: ObservableObject {
             }
         }
 
-        for project in unmanagedProjects {
-            guard let path = project.resolvedPath else { continue }
-            guard !managedPaths.contains(path) else { continue }
-            // Any session of this project that CCorn already knows — live or
-            // recorded — means the project is represented; not unmanaged.
-            guard !project.sessions.contains(where: {
-                managedUUIDs.contains($0.uuid) || recordUUIDs.contains($0.uuid)
-            }) else { continue }
+        // Live external sessions: one stable row each, keyed by UUID. Two
+        // sessions sharing a directory are two distinct rows — no directory
+        // collapse, no most-recent flip.
+        for session in discovered.live {
+            built.append(SessionRow(
+                id: "unmanaged:session:\(session.uuid)",
+                kind: .unmanaged,
+                title: Self.displayTitle(explicit: "",
+                                         aiTitle: metaByUUID[session.uuid]?.title,
+                                         path: session.path),
+                uuid: session.uuid,
+                path: session.path,
+                state: .unmanaged,
+                remoteControlActive: false,
+                lastActive: transcriptIndex[session.uuid]?.modified
+            ))
+        }
+
+        // Fully-dormant directories: one summary row each (the most-recent
+        // session as representative). Stable — no live process is writing them.
+        let projectsByKey = Dictionary(unmanagedProjects.map { ($0.encodedKey, $0) },
+                                       uniquingKeysWith: { first, _ in first })
+        for key in discovered.dormantDirKeys {
+            guard let project = projectsByKey[key],
+                  let path = project.resolvedPath else { continue }
             let uuid = project.mostRecentSession?.uuid ?? ""
             built.append(SessionRow(
-                id: "unmanaged:\(project.encodedKey)",
+                id: "unmanaged:dir:\(project.encodedKey)",
                 kind: .unmanaged,
                 title: Self.displayTitle(explicit: "",
                                          aiTitle: uuid.isEmpty ? nil : metaByUUID[uuid]?.title,
