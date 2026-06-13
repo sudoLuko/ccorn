@@ -25,6 +25,12 @@ struct MainWindowView: View {
         } detail: {
             SessionListView(model: model, nav: model.sidebarNav)
         }
+        // App identity lives in the branded sidebar header; the bound
+        // NavigationSplitView otherwise surfaces the window title ("CCorn") in
+        // the titlebar, duplicating it. AppKit's titleVisibility = .hidden no
+        // longer wins against SwiftUI's titlebar, so remove the title item
+        // here. window.title stays "CCorn" for the debug/window lookup.
+        .hiddenWindowTitle()
         .frame(minWidth: 720, minHeight: 480)
         .sheet(item: $model.importFlow) { flow in
             ImportSheetView(flow: flow)
@@ -33,6 +39,20 @@ struct MainWindowView: View {
         // false): the row marks gate their repeatForever motion on the
         // window's actual visibility (close, miniaturize, full occlusion).
         .environment(\.rowMotionEnabled, model.mainWindowOnScreen)
+    }
+}
+
+private extension View {
+    /// Hide the titlebar's title text without clearing `window.title`.
+    /// `.toolbar(removing: .title)` is macOS 15+; below that the AppKit
+    /// `titleVisibility = .hidden` in MainWindowController is the fallback.
+    @ViewBuilder
+    func hiddenWindowTitle() -> some View {
+        if #available(macOS 15.0, *) {
+            toolbar(removing: .title)
+        } else {
+            self
+        }
     }
 }
 
