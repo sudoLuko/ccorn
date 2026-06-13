@@ -191,6 +191,12 @@ struct SettingsView: View {
                  destination: URL(string: "https://github.com/sudoLuko/ccorn")!)
                 .font(.caption)
                 .foregroundColor(.accentColor)
+            // OpenMoji is CC BY-SA 4.0 — attribution must appear somewhere
+            // user-facing (see design-assets/app-icon/ICON_CREDITS.md). The
+            // markdown links render tappable in a Text/LocalizedStringKey.
+            Text("App icon: ear-of-corn glyph from [OpenMoji](https://openmoji.org), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 }

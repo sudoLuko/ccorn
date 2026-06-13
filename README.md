@@ -108,4 +108,6 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — CCorn's source code.
+
+The app icon is the ear-of-corn glyph from [OpenMoji](https://openmoji.org), licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Per ShareAlike, the icon artwork (this adaptation) is itself CC BY-SA 4.0; this applies to the image only and does not affect the MIT-licensed code. Details in [design-assets/app-icon/ICON_CREDITS.md](design-assets/app-icon/ICON_CREDITS.md).
