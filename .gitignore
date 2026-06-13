@@ -19,6 +19,9 @@ build-release/
 # Local Claude Code state (settings.local.json, worktrees) — never commit
 .claude/
 
+# Firecrawl MCP local working dir — local tool state, never commit
+.firecrawl/
+
 # Internal research / working notes — kept out of the public repo
 docs/research/
 docs/ANIMATION_AUDIT_VERIFICATION.md

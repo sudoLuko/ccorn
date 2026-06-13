@@ -124,17 +124,23 @@ extension SessionRow {
         case browser
         /// No live window: restart (resume) the session, then attach Terminal.
         case restartThenAttach
+        /// An unmanaged discovery: import (adopt) the session under CCorn, then
+        /// attach Terminal to the fresh managed window (flow 6.4 / 6.10).
+        case adoptThenAttach
     }
 
     /// Browser mode always opens claude.ai/code. Terminal mode:
     ///  - live window → attach to it (no remote control needed);
     ///  - stopped session (a record, not archived) → restart and attach to the
     ///    fresh window (the Restart preconditions still gate this downstream);
-    ///  - anything else with no window (archived, unmanaged) → browser.
+    ///  - unmanaged discovery (uuid + path known) → import it, then attach to
+    ///    the fresh window (the import confirm + wait-for-idle gate it downstream);
+    ///  - anything else with no window (archived, identity not yet surfaced) → browser.
     func openAction(clickAction: SessionClickAction) -> OpenAction {
         guard clickAction == .terminal else { return .browser }
         if windowId != nil { return .terminal }
         if case .record = kind, !archived { return .restartThenAttach }
+        if case .unmanaged = kind, !uuid.isEmpty, !path.isEmpty { return .adoptThenAttach }
         return .browser
     }
 }

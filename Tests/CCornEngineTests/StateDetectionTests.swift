@@ -136,6 +136,33 @@ struct StubPanes: PaneSource {
         #expect(classifyFresh(pane) == .running)
     }
 
+    /// REAL 2.1.173 idle frame: the `Remote Control active` footer was removed
+    /// at 2.1.172 and replaced with a `/rc active` chip (the old literal has
+    /// zero occurrences in the 2.1.173 binary). The frame still classifies
+    /// Running, and remote-control-active now reads from the chip — the bug that
+    /// made every fresh 2.1.173 session false-alarm "No remote".
+    @Test func idleRcActiveChip2173FixtureIsRunning() {
+        let pane = Fixtures.paneText("running-rc-active-2173.txt")
+        #expect(!pane.contains(StateDetector.remoteControlMarker)) // old literal gone
+        #expect(pane.contains(StateDetector.rcChipActive))
+        #expect(detector.showsRemoteControlEngaged(pane: pane))
+        #expect(classifyFresh(pane) == .running)
+    }
+
+    /// The footer RC vocabulary, version-spanning: the pre-2.1.172 literal and
+    /// the 2.1.172+ `active`/`connecting`/`reconnecting` chips all read as
+    /// engaged (connecting/reconnecting are the bring-up/recovery handshake, not
+    /// failure); `/rc failed` and an absent chip read as not engaged — that is
+    /// the no-remote case, decided from a positive failure signal, not a miss.
+    @Test func remoteControlEngagedSpansVersionsAndTransients() {
+        #expect(detector.showsRemoteControlEngaged(pane: "idle · Remote Control active"))
+        #expect(detector.showsRemoteControlEngaged(pane: "? for shortcuts        /rc active"))
+        #expect(detector.showsRemoteControlEngaged(pane: "? for shortcuts        /rc connecting"))
+        #expect(detector.showsRemoteControlEngaged(pane: "? for shortcuts        /rc reconnecting"))
+        #expect(!detector.showsRemoteControlEngaged(pane: "? for shortcuts        /rc failed"))
+        #expect(!detector.showsRemoteControlEngaged(pane: "? for shortcuts · ← for agents"))
+    }
+
     // MARK: Stale (injected clock)
 
     /// An unchanged pane hash older than the stale threshold promotes Running -> Stale.
@@ -321,6 +348,28 @@ struct StubPanes: PaneSource {
         try FileManager.default.removeItem(atPath: path)
         let afterDelete = cache.hasBridgeSession(path: path, mtime: t2)
         #expect(afterDelete)
+    }
+
+    /// The version-independent positive: with no RC footer and no transcript
+    /// bridge record, a live bridge handle in the process's session registry
+    /// still resolves remote-control-active — and its absence (all three signals
+    /// missing) leaves RC inactive, never asserted from a single miss. The
+    /// registry read is injected so the test never touches `~/.claude`.
+    @Test func detectUsesRegistryBridgeWhenFooterAndTranscriptAbsent() {
+        let input = DetectionInput(windowId: "@1", pid: getpid()) // alive
+        // The waiting fixture has no RC footer; no transcript is passed.
+        let panes = StubPanes(pane: Fixtures.paneText("waiting-permission.txt"), shellPID: nil)
+
+        let bridged = detector.detect(input: input, panes: panes, transcript: nil,
+                                      staleThreshold: 600, now: t0,
+                                      bridgeForPid: { _ in "session_01abc" })
+        #expect(bridged.remoteControlActive)
+        #expect(bridged.state == .waiting)
+
+        let unbridged = detector.detect(input: input, panes: panes, transcript: nil,
+                                        staleThreshold: 600, now: t0,
+                                        bridgeForPid: { _ in nil })
+        #expect(!unbridged.remoteControlActive)
     }
 
     /// detect's remote-control signal falls back to the transcript when the pane

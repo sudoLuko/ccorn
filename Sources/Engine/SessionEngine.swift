@@ -82,8 +82,14 @@ final class SessionEngine: ObservableObject {
     /// F2), so a record that survives relaunch is the only thing keeping the
     /// displayed name in sync with what claude.ai/mobile shows. Returns the
     /// window id and the captured claude PID.
-    func startNewSession(directory: String, title: String? = nil) async -> StartResult {
-        let title = title ?? URL(fileURLWithPath: directory).lastPathComponent
+    func startNewSession(directory: String, title userTitle: String? = nil) async -> StartResult {
+        // `label` names the tmux window and the `--rc` handle, which both need a
+        // non-empty string. The persisted title is the user's chosen name, or
+        // empty so the row falls through to Claude's AI title (as resume does):
+        // persisting the basename here would pin every session to its folder
+        // name and shadow the AI title forever.
+        let label = userTitle ?? URL(fileURLWithPath: directory).lastPathComponent
+        let storedTitle = userTitle ?? ""
         let tmux = self.tmux
         let store = self.store
 
@@ -97,7 +103,7 @@ final class SessionEngine: ObservableObject {
             guard session.ok else {
                 return Launch(result: .failed("could not create tmux session"), uuid: nil)
             }
-            let name = tmux.uniqueWindowName(from: title)
+            let name = tmux.uniqueWindowName(from: label)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {
                 return Launch(result: .failed("could not create tmux window"), uuid: nil)
             }
@@ -113,7 +119,7 @@ final class SessionEngine: ObservableObject {
             // single-quoted. Double-quote escaping is insufficient: inside double
             // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
             // title like `$(rm -rf ~)` would execute. Single quotes make it inert.
-            tmux.sendCommand(windowId: windowId, "claude --rc \(TmuxController.shellQuote(title))")
+            tmux.sendCommand(windowId: windowId, "claude --rc \(TmuxController.shellQuote(label))")
             let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
             guard case let .started(_, pid) = outcome else {
                 return Launch(result: outcome, uuid: nil)
@@ -131,7 +137,7 @@ final class SessionEngine: ObservableObject {
             }
             if let uuid {
                 tmux.setCcornId(windowId: windowId, uuid: uuid)
-                store.upsert(SessionRecord(uuid: uuid, path: directory, title: title))
+                store.upsert(SessionRecord(uuid: uuid, path: directory, title: storedTitle))
             }
             // No uuid (registry never appeared): fall back to the old behavior —
             // reconcile binds it on the next launch, though the title is then
@@ -141,7 +147,7 @@ final class SessionEngine: ObservableObject {
 
         if case let .started(windowId, pid) = launch.result {
             let live = LiveSession(
-                record: SessionRecord(uuid: launch.uuid ?? "", path: directory, title: title),
+                record: SessionRecord(uuid: launch.uuid ?? "", path: directory, title: storedTitle),
                 windowId: windowId,
                 ccornTag: launch.uuid,
                 pid: pid,
@@ -323,6 +329,22 @@ final class SessionEngine: ObservableObject {
             }
         }.value
         return await resumeSession(uuid: uuid, directory: directory)
+    }
+
+    /// True if an unmanaged session is mid-task right now: a live external
+    /// `claude` process for this session AND transcript writes in the last two
+    /// minutes. The import wait-for-idle guard (flows 6.2 / 6.10) polls this so
+    /// the takeover's SIGTERM → resume doesn't cut off an in-flight turn. A
+    /// quiet transcript or a gone process reads as idle (nothing to interrupt).
+    func isExternalSessionWorking(uuid: String, directory: String) async -> Bool {
+        let discovery = self.discovery
+        return await Task.detached {
+            guard UnmanagedClaudeFinder.find(inDirectory: directory, sessionId: uuid) != nil else {
+                return false
+            }
+            guard let transcript = discovery.transcriptIndex()[uuid] else { return false }
+            return Date().timeIntervalSince(transcript.modified) < 120
+        }.value
     }
 
     // MARK: - Rename

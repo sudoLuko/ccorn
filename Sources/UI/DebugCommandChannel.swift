@@ -16,6 +16,7 @@ import SwiftUI
 ///   kill <dir>                -> killSession for the managed row at <dir>
 ///   rename <dir> <name...>    -> renameSession (name may contain spaces)
 ///   restart <dir>             -> restartSession for the stopped/dead row
+///   terminal <dir>            -> openInTerminal (attach Terminal to the window)
 ///   import <dir>              -> importSession for the unmanaged row
 ///   archive <dir> | unarchive <dir>
 ///   onboard <dir> [dir...]    -> completeOnboarding
@@ -131,6 +132,14 @@ final class DebugCommandChannel {
                                                            replacingWindowId: target.windowId)
             await model.debugRefresh()
             return "restart \(result)"
+
+        case "terminal" where parts.count >= 2:
+            // Exercises the real "Open in Terminal" path (osascript attach to the
+            // engine's socket+session) so a scripted run can pop visible Terminal
+            // windows, not just headless channel ops.
+            guard let target = row(at: parts[1], where: { $0.windowId != nil }) else { return "err no-row" }
+            model.openInTerminal(target)
+            return "terminal \(target.windowId ?? "")"
 
         case "import" where parts.count >= 2:
             guard let target = row(at: parts[1], where: { $0.state == .unmanaged }) else { return "err no-row" }

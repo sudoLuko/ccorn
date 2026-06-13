@@ -18,6 +18,52 @@ tmux server or a normally-running CCorn, which is the only reason the chaos
 suite may run `kill-server`. They need a Debug build at
 `build/Build/Products/Debug/CCorn.app`; gatecheck builds Release itself.
 
+## Window-churn repro (e2e-churn.sh)
+
+Not part of the release gate — a focused diagnostic for the window-creation
+failure that only appears after many new/kill cycles in an *existing* ccorn
+session ("could not create tmux window"; raw tmux: "index 0 in use"). It churns
+one persistent session and asserts every `new` returns `started(...)`; the first
+`failed(...)` stops the run, writes a minimal repro (the tmux window table) to
+the run dir, and exits non-zero. Builds Debug itself if needed.
+
+```sh
+scripts/preflight/e2e-churn.sh            # 50 cycles (default)
+scripts/preflight/e2e-churn.sh 200        # push further
+CHURN_KEEP_GOING=1 scripts/preflight/e2e-churn.sh 200   # measure failure rate, don't stop
+```
+
+Exit 0 = all cycles created+killed cleanly (bug absent/fixed), so it also serves
+as a regression guard. Per-op JSON lands in `results.jsonl` under the run dir.
+
+## New-session name collision (e2e-name-collision.sh)
+
+Regression guard for the bug where a managed window named the same as the tmux
+session (a project whose basename == the session name, e.g. CCorn run on its own
+`ccorn` repo) made `tmux new-window -t <session>` resolve to that window and fail
+with "index N in use", blocking every new session. Reproduces the collision and
+asserts a second session still starts. Exit 0 = fixed.
+
+```sh
+scripts/preflight/e2e-name-collision.sh
+```
+
+## Watch real Terminal spawns (spawn-in-terminal.sh)
+
+Interactive (not a gate). Spawns real sessions into VISIBLE Terminal.app windows
+via the actual product path (`startNewSession` → `openInTerminal` → osascript
+`tmux attach`), so you can watch them come up and answer each "trust this folder"
+prompt yourself. Hermetic: the attach lands on the isolated server, not your real
+`ccorn` (the app's attach now honors `CCORN_DEBUG_TMUX_SOCKET/_SESSION`).
+
+```sh
+scripts/preflight/spawn-in-terminal.sh           # 3 sessions, hold until Ctrl-C
+HOLD_SECONDS=8 scripts/preflight/spawn-in-terminal.sh 2   # 2 sessions, auto-teardown
+```
+
+Ctrl-C (or HOLD_SECONDS elapsing) quits the hermetic app and kills its server;
+the opened Terminal windows then detach (close them when done).
+
 ## The contract test (run.sh)
 
 Answers one question: **does the installed Claude Code CLI still render the

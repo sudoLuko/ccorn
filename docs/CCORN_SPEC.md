@@ -674,10 +674,13 @@ Copy Session ID
 **For an unmanaged session:**
 
 ```
+Open in Terminal
 Import Session
 ───────────────
 Copy Session ID
 ```
+
+Both items adopt the session (take over the external `claude` → resume under CCorn, flow 6.10); “Open in Terminal” also attaches the fresh managed window. The take-over confirmation applies to either path.
 
 Kill Session requires a confirmation alert:
 
@@ -852,7 +855,7 @@ verification with the list's existing tap/right-click stack.
 
 1. User clicks a session row in the popover (single click) or double-clicks a row in the main window
 1. The handoff follows the **click action** in Settings (5.5):
-   - Terminal (default) → attach to the session’s tmux window (6.5). A stopped session has no window, so it is restarted first (resume, flow 6.7, including the missing-dir/missing-transcript dialogs) and the fresh window opened in Terminal. An archived or unmanaged row with no window falls back to the browser
+   - Terminal (default) → attach to the session’s tmux window (6.5). A stopped session has no window, so it is restarted first (resume, flow 6.7, including the missing-dir/missing-transcript dialogs) and the fresh window opened in Terminal. An unmanaged (discovered) row has no window either, so it is imported (adopted) first — flow 6.10, including the take-over confirm and the wait-for-idle guard — and the fresh managed window opened in Terminal. An archived row with no window falls back to the browser
    - Browser → open `https://claude.ai/code` in the default browser. There is no per-session deep link (verified on 2.1.169), so this opens the session list; the user selects the session by the title CCorn set
 1. The explicit context-menu items override the preference: “Open in Terminal” always attaches (6.5); “Open in Browser” always opens the list, and is greyed out (tooltip “Remote control is not active on this session”) when remote control is not active on the session
 
@@ -908,9 +911,10 @@ verification with the list's existing tap/right-click stack.
 
 ### 6.10 Import Single Unmanaged Session
 
-1. User clicks “Import Session” in `...` menu on an unmanaged session row
+1. User triggers adopt on an unmanaged row: “Import Session” or “Open in Terminal” in the `...` menu, or a row click in Terminal click-action mode (flow 6.4). All three land here; “Open in Terminal” and the row click also attach the fresh window at the end
 1. Alert: “CCorn will take over this session. Your existing terminal window will stop working. Continue?” Cancel / Import
 1. User confirms
+1. Wait-for-idle guard (shared with the first-run sheet, flow 6.2): if the session is mid-task (a live external `claude` plus transcript writes in the last two minutes), warn — “Claude is mid-task … Wait for Idle / Import Anyway”. “Wait for Idle” polls every 10s and proceeds once it goes quiet, so the SIGTERM → resume doesn’t cut off an in-flight turn; “Import Anyway” proceeds immediately. An already-idle session skips this step. Rapid re-triggers on the same session are ignored while one adopt is in flight
 1. CCorn reads session ID from `~/.claude/projects/` JSONL files — most recent entry for that project path
 1. Find the PID of the unmanaged `claude` process for this directory. `ps` does not expose a process's working directory, so match by cwd using `lsof -p <pid> -d cwd` (or libproc) against each candidate `claude` process; do not match the directory from `ps` output alone (see Process Identification)
 1. Sends `SIGTERM` to existing process PID, waits 5 seconds, sends `SIGKILL` if still running
@@ -918,6 +922,7 @@ verification with the list's existing tap/right-click stack.
 1. Runs `claude --resume <uuid> --rc` — resumes with remote control enabled
 1. Confirms remote control is active (footer string or `bridge-session` record — no URL exists to capture)
 1. Row updates — unmanaged badge removed, dot fills to correct state
+1. If triggered via “Open in Terminal” or a row click, the fresh managed window opens in Terminal (flow 6.5)
 1. User closes old terminal window
 
 ### 6.11 Auto-Restart on Launch

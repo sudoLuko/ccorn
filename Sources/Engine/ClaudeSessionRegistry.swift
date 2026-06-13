@@ -14,6 +14,16 @@ enum ClaudeSessionRegistry {
     struct Info: Sendable {
         let sessionId: String
         let cwd: String?
+        /// The live remote-control bridge handle, when the claude process has
+        /// one. Present (a `session_…` id) once the bridge has linked; `nil`
+        /// before it comes up. A version-independent positive RC signal — the
+        /// field has existed since long before the footer string changed — but
+        /// only a positive: the file is written at session start and refreshed
+        /// on some events, so a session that bridges *after* its last write can
+        /// read `nil` here while remote control is in fact active (verified
+        /// live on 2.1.173). Use it to confirm RC is up, never to conclude it
+        /// is down. See `StateDetector.detect`.
+        let bridgeSessionId: String?
     }
 
     /// `~/.claude` by default; tests point it at a fixture tree.
@@ -28,6 +38,7 @@ enum ClaudeSessionRegistry {
               let sessionId = obj["sessionId"] as? String,
               !sessionId.isEmpty else { return nil }
         let cwd = (obj["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return Info(sessionId: sessionId, cwd: cwd)
+        let bridge = (obj["bridgeSessionId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return Info(sessionId: sessionId, cwd: cwd, bridgeSessionId: bridge)
     }
 }

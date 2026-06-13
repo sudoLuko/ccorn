@@ -114,17 +114,10 @@ final class ImportFlowModel: ObservableObject, Identifiable {
     }
 
     /// Fresh activity check: a live external process AND transcript writes in
-    /// the last two minutes. Quiet transcript or gone process = idle.
+    /// the last two minutes. Quiet transcript or gone process = idle. Shared
+    /// with the single-row adopt path via the engine (flow 6.10).
     private func isActivelyWorking(_ item: Item) async -> Bool {
-        guard let discovery = model?.engine.discovery else { return false }
-        let uuid = item.id
-        let path = item.path
-        return await Task.detached {
-            guard UnmanagedClaudeFinder.find(inDirectory: path, sessionId: uuid) != nil else {
-                return false
-            }
-            guard let transcript = discovery.transcriptIndex()[uuid] else { return false }
-            return Date().timeIntervalSince(transcript.modified) < 120
-        }.value
+        guard let engine = model?.engine else { return false }
+        return await engine.isExternalSessionWorking(uuid: item.id, directory: item.path)
     }
 }

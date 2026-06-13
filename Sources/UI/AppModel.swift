@@ -44,6 +44,12 @@ final class AppModel: ObservableObject {
     /// windows in the gap before the next refresh re-derives the live window.
     private var restartingUUIDs: Set<String> = []
 
+    /// Session uuids with an import (adopt) in flight — dedupes rapid clicks on
+    /// an unmanaged row (importSession), which would otherwise kill + resume the
+    /// same session twice and leave a duplicate window. Held across the
+    /// wait-for-idle poll, so a second click is ignored until the first settles.
+    private var importingUUIDs: Set<String> = []
+
     /// User-defined groups (docs/CCORN_SPEC.md 5.11), mirrored from
     /// settings so the sidebar re-renders on every mutation. Definitions
     /// live in settings; membership lives on the session records.
@@ -608,6 +614,7 @@ final class AppModel: ObservableObject {
         case .terminal: openInTerminal(row)
         case .browser: openInBrowser(row)
         case .restartThenAttach: restartSession(row, attachInTerminal: true)
+        case .adoptThenAttach: importSession(row, attachInTerminal: true)
         }
     }
 
@@ -629,10 +636,17 @@ final class AppModel: ObservableObject {
     /// Open a Terminal window attached to a tmux window id. Shared by the
     /// direct attach (live row) and the restart-then-attach path (stopped row,
     /// where the id is only known once the resume returns a started window).
+    /// Targets the same server+session the engine drives: in Release that is the
+    /// default server's `ccorn` session, but a debug/shakedown run overrides the
+    /// socket and/or session name (CCORN_DEBUG_TMUX_SOCKET/_SESSION) and the
+    /// attach must follow, or it lands on the user's real server instead of the
+    /// isolated one. Mirrors TmuxController's own -L/session handling.
     private func attachTerminal(windowId: String) {
         let runner = engine.runner
+        let session = TmuxController.sessionName
+        let socketFlag = TmuxController.socketName.map { "-L \($0) " } ?? ""
         Task.detached {
-            let attach = "tmux attach -t 'ccorn:\(windowId)'"
+            let attach = "tmux \(socketFlag)attach -t '\(session):\(windowId)'"
             let script = """
             tell application "Terminal"
                 do script "\(attach)"
@@ -659,7 +673,7 @@ final class AppModel: ObservableObject {
             openMainWindow?()
             return
         }
-        guard let directory = Alerts.pickFolder(prompt: "Start Session") else { return }
+        guard let directory = Alerts.pickFolder(prompt: "Choose Folder") else { return }
         let canonical = SessionDiscovery.canonicalize(directory)
         let aliveHere = rows.contains {
             $0.isManaged && $0.path == canonical && $0.state.isAliveState
@@ -669,8 +683,17 @@ final class AppModel: ObservableObject {
                                  message: "Start another session in \(canonical)?",
                                  action: "Start Anyway") else { return }
         }
+        // Optional name: blank falls through to Claude's session title (it keeps
+        // updating as the work develops); a typed name sticks and wins over it.
+        // nil = the user cancelled the whole flow.
+        let folderName = URL(fileURLWithPath: directory).lastPathComponent
+        guard let entered = Alerts.prompt(
+            title: "Name this session",
+            message: "Leave blank to use Claude's session title.",
+            placeholder: folderName, action: "Start Session") else { return }
+        let title = entered.isEmpty ? nil : entered
         Task {
-            let result = await engine.startNewSession(directory: directory)
+            let result = await engine.startNewSession(directory: directory, title: title)
             handleStartResult(result, verb: "start")
             await refreshAfterMutation()
         }
@@ -785,15 +808,43 @@ final class AppModel: ObservableObject {
 
     // MARK: - Import single unmanaged session (flow 6.10)
 
-    func importSession(_ row: SessionRow) {
+    /// Adopt an unmanaged session: take it over (SIGTERM the external claude →
+    /// resume under CCorn). `attachInTerminal` — set by the row-click handoff
+    /// (openSession) and the unmanaged menu's "Open in Terminal" — opens the
+    /// fresh managed window in Terminal once it exists. If Claude is mid-task we
+    /// offer to wait it out first, so the takeover doesn't cut off active work
+    /// (same guard as the first-run import sheet, flow 6.2).
+    func importSession(_ row: SessionRow, attachInTerminal: Bool = false) {
         guard !row.uuid.isEmpty, !row.path.isEmpty else { return }
+        let uuid = row.uuid
+        // Dedupe rapid clicks: the row stays Unmanaged until the next refresh,
+        // so a second click would otherwise kick off a second kill + resume.
+        guard !importingUUIDs.contains(uuid) else { return }
         guard Alerts.confirm(
             title: "Import this session?",
             message: "CCorn will take over this session. Your existing terminal window will stop working.",
             action: "Import") else { return }
+        importingUUIDs.insert(uuid)
+        let path = row.path
         Task {
-            let result = await engine.importSession(uuid: row.uuid, directory: row.path)
+            defer { importingUUIDs.remove(uuid) }
+            // Wait for idle: if Claude is mid-task, hold off (polling) until the
+            // session goes quiet, unless the user chooses to import anyway.
+            if await engine.isExternalSessionWorking(uuid: uuid, directory: path) {
+                let wait = Alerts.choice(
+                    title: "Claude is mid-task in \(row.title)",
+                    message: "Importing now may interrupt active work.",
+                    primary: "Wait for Idle",
+                    secondary: "Import Anyway")
+                if wait {
+                    while await engine.isExternalSessionWorking(uuid: uuid, directory: path) {
+                        try? await Task.sleep(nanoseconds: 10_000_000_000) // 10s
+                    }
+                }
+            }
+            let result = await engine.importSession(uuid: uuid, directory: path)
             handleStartResult(result, verb: "import")
+            if attachInTerminal { attachIfStarted(result) }
             await refreshAfterMutation()
         }
     }

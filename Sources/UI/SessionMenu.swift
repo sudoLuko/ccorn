@@ -115,9 +115,19 @@ enum SessionMenu {
             menu.addItem(copyItem)
 
         case .unmanaged:
+            let canImport = !row.uuid.isEmpty && !row.path.isEmpty
+            // Both adopt the session (kill external claude → resume under CCorn);
+            // "Open in Terminal" also attaches the fresh window. The import
+            // confirm spells out the takeover either way.
+            menu.addItem(ActionMenuItem(
+                title: "Open in Terminal",
+                enabled: canImport,
+                toolTip: "Import this session into CCorn, then open it in Terminal") { [weak model] in
+                model?.importSession(row, attachInTerminal: true)
+            })
             menu.addItem(ActionMenuItem(
                 title: "Import Session",
-                enabled: !row.uuid.isEmpty && !row.path.isEmpty) { [weak model] in
+                enabled: canImport) { [weak model] in
                 model?.importSession(row)
             })
             menu.addItem(.separator())
