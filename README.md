@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌽 CCorn
+<img src="docs/images/ccorn-icon.png" width="88" alt="CCorn — OpenMoji ear-of-corn app icon" />
+
+# CCorn
 
 **Mission control for your Claude Code sessions, right in the macOS menu bar.**
 

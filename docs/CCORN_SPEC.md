@@ -384,10 +384,9 @@ CCorn uses `NSApplicationActivationPolicyAccessory` (in Swift, `.accessory`) by 
 
 Top section:
 
-- Brand lockup: corn emoji (🌽, ~15pt) + “CCorn” wordmark — `.title3`
-  semibold `Color.primary` (deliberately heavier/larger than row and nav
-  text; the one weight above medium in the app), 0.5px hairline divider
-  beneath (`Color(.separatorColor)`, inset 12px)
+- No sidebar brand lockup or wordmark: app identity is the OpenMoji corn
+  glyph (`CornMark`) centered in the title bar (principal toolbar item, see
+  5.1 header), so the sidebar opens directly on the New Session button
 - `+ New Session` — text button with SF Symbol `plus` icon left, `.subheadline` medium `Color.primary`
 
 Nav section (`.listStyle(.sidebar)`):
@@ -446,7 +445,7 @@ Triggered by clicking the CCorn icon in the macOS menu bar. Fixed dark zinc rega
 
 **Header (32px):**
 
-- Brand lockup: corn emoji + “CCorn” wordmark — `.title3` semibold `#FAFAFA` left (matches the sidebar header)
+- Corn glyph (`CornMark`, 18pt) far left — no wordmark; the popover is summoned from the menu-bar corn, so “CCorn” text would be redundant
 - Aggregate status mark far right: reflects the worst presentation across all sessions, severity order crashed > sign-in > no-remote > waiting > stale > working > running (waiting outranks stale because a waiting session is blocked on the user). A broken-tier worst renders the exclamation symbol colored by severity (amber recoverable, red terminal); otherwise the worst state's dot. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
 - 0.5px divider below — `#27272A`
 
@@ -494,7 +493,7 @@ First launch only. Never shown again after completion.
 - Centered card on the system window background (`Color(.windowBackgroundColor)`), so onboarding follows light/dark like the rest of the main UI
 - Card: 480px wide, auto height, `Color(.controlBackgroundColor)` surface, 0.5px border `Color(.separatorColor)`, 12px corner radius, 32px padding. Do not hardcode light hex here; it would render as a glaring white card in dark mode
 - Not a sheet: standalone centered window, not resizable. The app is `.accessory` at first launch, so switch to `.regular` before showing this window so it can take focus (see Activation policy)
-- Title-bar TEXT hidden (`titleVisibility = .hidden`), same treatment as the main window — the card body shows the corn lockup, so the title would duplicate it. The title STRING stays `"Welcome to CCorn"` for programmatic lookup (the debug channel finds the window by it)
+- Title-bar TEXT hidden (`titleVisibility = .hidden`), same treatment as the main window — the card body shows the corn glyph and the app name, so the title would duplicate it. The title STRING stays `"Welcome to CCorn"` for programmatic lookup (the debug channel finds the window by it)
 
 **Layout top to bottom:**
 
