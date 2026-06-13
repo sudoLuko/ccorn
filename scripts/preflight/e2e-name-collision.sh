@@ -1,25 +1,28 @@
 #!/bin/bash
-# e2e-name-collision.sh — regression guard for the new-session failure that
-# hits when a managed window's name equals the tmux session name.
+# e2e-name-collision.sh — regression guard for the new-session failure that hits
+# when a managed window is named the same as the tmux session (a project whose
+# basename == the session name, e.g. CCorn run on its own "ccorn" repo).
 #
-# CCorn names each window after its project basename and creates windows with
-# `tmux new-window -t <session>`. A bare `-t <session>` is a target-WINDOW: once
-# a managed window is named the same as the session (a project whose basename ==
-# the session name — e.g. CCorn run on its own "ccorn" repo), tmux resolves the
-# bare name to THAT window and tries to reuse its index, so EVERY subsequent new
-# session fails with "create window failed: index N in use". The fix targets the
-# session unambiguously (`-t <session>:`). This test reproduces the collision
-# and asserts a second session still starts.
+# Two defenses, both pinned here:
+#   1. Naming — uniqueWindowName never names a window identically to the session,
+#      so the hazard is avoided at creation. Checked by opening a project whose
+#      basename == the session and asserting its window was renamed (e.g.
+#      "ccollide-2"), with the displayed session unaffected.
+#   2. Targeting — windows are created with `tmux new-window -t <session>:`
+#      (not bare `-t <session>`), so even a window named exactly like the session
+#      cannot capture the target. Checked by FORCING that hazard (rename a window
+#      to the session name) and asserting a further new session still starts;
+#      bare targeting would fail "create window failed: index N in use".
 #
 # Hermetic, real signed-in account — same isolation as the other e2e scripts.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 SOCKET=ccorn-collide
-SESSION=ccollide                 # the collision: a project below is named this
+SESSION=ccollide                 # a project below is named this on purpose
 STAMP=$(date +%Y%m%d-%H%M%S)
 E2E=/tmp/ccorn-collide/run-$STAMP
-PROJ_COLLIDE="$E2E/$SESSION"      # basename == session name -> window named "ccollide"
+PROJ_NAMED="$E2E/$SESSION"        # basename == session name
 PROJ_OTHER="$E2E/other"
 APP_BIN=build/Build/Products/Debug/CCorn.app/Contents/MacOS/CCorn
 
@@ -35,29 +38,35 @@ if [[ ! -x "$APP_BIN" ]]; then
     fi
 fi
 
+# windowId out of a `new started(windowId: "@N", pid: …)` reply.
+win_of() { sed -n 's/.*windowId: "\(@[0-9][0-9]*\)".*/\1/p' <<< "$1"; }
+
 e2e_setup
-mkdir -p "$PROJ_COLLIDE" "$PROJ_OTHER"
+mkdir -p "$PROJ_NAMED" "$PROJ_OTHER"
 TMUX kill-server 2>/dev/null || true
 TMUX new-session -d -s "$SESSION" -x 220 -y 50
 launch_app
-cmd onboard "$PROJ_COLLIDE" > /dev/null
+cmd onboard "$PROJ_NAMED" > /dev/null
 
-# 1) Start the colliding session: its window gets named "ccollide" (== session).
-r1=$(cmd new "$PROJ_COLLIDE") || true
-if [[ $r1 == "new started("* ]]; then
-    pass "colliding session started (window now named '$SESSION')"
+# --- Defense 1 (naming): a same-named project must not yield a same-named window
+r1=$(cmd new "$PROJ_NAMED") || true
+if [[ $r1 == "new started("* ]]; then pass "same-named project session started"; else fail "same-named project did not start: $r1"; fi
+w1=$(win_of "$r1")
+n1=$(TMUX display-message -p -t "$w1" '#{window_name}' 2>/dev/null || echo '?')
+if [[ -n "$w1" && "$n1" != "$SESSION" ]]; then
+    pass "window born as '$n1', not the session name '$SESSION' (naming guard)"
 else
-    fail "colliding session did not start: $r1"
+    fail "window named identically to the session ('$n1') — uniqueWindowName guard missing"
 fi
-log "windows after collide: $(TMUX list-windows -t "$SESSION" -F '#{window_index}:#{window_name}' | paste -sd' ' -)"
 
-# 2) The regression: a SECOND new session. Pre-fix this fails with
-#    "could not create tmux window"; post-fix it must start.
+# --- Defense 2 (targeting): force the hazard, then a new session must still start
+TMUX rename-window -t "$w1" "$SESSION"
+log "injected hazard: window $w1 renamed to '$SESSION'"
 r2=$(cmd new "$PROJ_OTHER") || true
 if [[ $r2 == "new started("* ]]; then
-    pass "second session started despite the name collision (fix works)"
+    pass "new session starts despite a window named exactly '$SESSION' (colon target)"
 else
-    fail "second session BLOCKED by name collision: $r2"
+    fail "new session BLOCKED by the name collision: $r2"
 fi
 
 finish

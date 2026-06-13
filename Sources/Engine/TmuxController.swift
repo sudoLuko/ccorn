@@ -232,13 +232,17 @@ struct TmuxController: Sendable {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// A sanitized name unique against the current window names; appends -2, -3 on collision.
+    /// A sanitized name unique against the current window names; appends -2, -3
+    /// on collision. The session name itself is reserved: a window named
+    /// identically to the session is a tmux target hazard (see `newWindow`), so
+    /// the safe name is chosen up front — the window is born correct, with no
+    /// post-creation rename. The display title is separate and unaffected.
     func uniqueWindowName(from raw: String) -> String {
         let base = Self.sanitize(raw)
-        let existing = Set(listWindows().map { $0.name })
-        if !existing.contains(base) { return base }
+        let taken = Set(listWindows().map { $0.name }).union([Self.sessionName])
+        if !taken.contains(base) { return base }
         var n = 2
-        while existing.contains("\(base)-\(n)") { n += 1 }
+        while taken.contains("\(base)-\(n)") { n += 1 }
         return "\(base)-\(n)"
     }
 }
