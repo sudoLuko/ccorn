@@ -31,14 +31,10 @@ struct MainWindowView: View {
         // longer wins against SwiftUI's titlebar, so remove the title item
         // here. window.title stays "CCorn" for the debug/window lookup.
         .hiddenWindowTitle()
-        // App identity: the corn glyph alone, centered in the title bar (the
-        // wordmark is gone — the mark carries it). Principal toolbar slot, so
-        // it sits between the leading sidebar toggle and the window controls.
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                CornMark(size: 16)
-            }
-        }
+        // App identity: the corn glyph is now in the NSToolbar (see
+        // MainWindowController.ToolbarDelegate), which provides full control
+        // over toolbar item styling via isBordered = false, bypassing the
+        // ring/halo that SwiftUI's toolbar applies.
         .frame(minWidth: 720, minHeight: 480)
         .sheet(item: $model.importFlow) { flow in
             ImportSheetView(flow: flow)

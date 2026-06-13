@@ -9,6 +9,7 @@ import SwiftUI
 final class MainWindowController {
     private var window: NSWindow?
     private var observers: [NSObjectProtocol] = []
+    private var toolbarDelegate: ToolbarDelegate?
     /// For publishing mainWindowOnScreen (row-motion gating): the closed
     /// window keeps its SwiftUI tree alive (isReleasedWhenClosed = false),
     /// so the marks must be told when it leaves the screen.
@@ -50,6 +51,17 @@ final class MainWindowController {
             window.setContentSize(NSSize(width: 860, height: 540))
             window.isReleasedWhenClosed = false
             window.center()
+
+            // Set up custom NSToolbar with corn icon, bypassing SwiftUI's
+            // automatic toolbar item styling (which adds the ring/halo).
+            let toolbar = NSToolbar(identifier: "MainToolbar")
+            let delegate = ToolbarDelegate()
+            toolbar.delegate = delegate
+            toolbar.displayMode = .iconOnly
+            toolbar.showsBaselineSeparator = false
+            window.toolbar = toolbar
+            self.toolbarDelegate = delegate
+
             // Sidebar toggle in the titlebar, next to the traffic lights:
             // window chrome is the one region that can never collapse, so the
             // restore control survives a hidden sidebar (and a persisted-hidden
@@ -115,5 +127,49 @@ final class MainWindowController {
                 && window.level == .normal
         }
         NSApp.setActivationPolicy(hasRegularWindow ? .regular : .accessory)
+    }
+}
+
+// MARK: - Toolbar Delegate
+
+private class ToolbarDelegate: NSObject, NSToolbarDelegate {
+    static let cornIconID = NSToolbarItem.Identifier("CornIcon")
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        if itemIdentifier == Self.cornIconID {
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+
+            // Corn icon image view.
+            let imageView = NSImageView()
+            imageView.image = NSImage(named: "CornGlyph")
+            imageView.imageScaling = .scaleProportionallyDown
+            imageView.frame.size = CGSize(width: 16, height: 16)
+
+            item.view = imageView
+            item.minSize = CGSize(width: 16, height: 16)
+            item.maxSize = CGSize(width: 16, height: 16)
+
+            // The key setting: disable the border/ring that appears on toolbar items.
+            item.isBordered = false
+
+            return item
+        }
+        return nil
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        return [Self.cornIconID]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        return [Self.cornIconID, .flexibleSpace]
+    }
+
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        return []
     }
 }
