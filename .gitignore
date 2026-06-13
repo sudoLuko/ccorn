@@ -29,3 +29,7 @@ docs/screenshots/
 design-assets/corn-glyph/
 design-assets/status-color-swatches.png
 design-assets/status-colors-before-after.png
+# App-icon source renders (1024px masters + discarded alternatives); the
+# shipped icon lives in Sources/Assets.xcassets, the vector source is the
+# committed .svg. Keep ICON_CREDITS.md tracked for the CC BY-SA obligation.
+design-assets/app-icon/*-1024.png
