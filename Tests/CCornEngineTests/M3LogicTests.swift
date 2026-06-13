@@ -89,11 +89,31 @@ import Testing
         #expect(archived.openAction(clickAction: .terminal) == .browser)
     }
 
-    /// An unmanaged discovery has no CCorn window to attach to and no record to
-    /// resume — Terminal mode falls back to the browser.
-    @Test func terminalModeUnmanagedFallsBackToBrowser() {
+    /// An unmanaged discovery (uuid + path known) imports under CCorn then
+    /// attaches in Terminal mode — the click-to-adopt path (flow 6.4 / 6.10).
+    @Test func terminalModeUnmanagedAdoptsThenAttaches() {
         let unmanaged = sampleRow(kind: .unmanaged, state: .unmanaged)
-        #expect(unmanaged.openAction(clickAction: .terminal) == .browser)
+        #expect(unmanaged.openAction(clickAction: .terminal) == .adoptThenAttach)
+    }
+
+    /// Adopt needs both a session uuid and a resolved path to resume; without
+    /// either there is nothing to import, so the click falls back to the browser.
+    @Test func terminalModeUnmanagedWithoutIdentityFallsBackToBrowser() {
+        let noUUID = SessionRow(id: "id", kind: .unmanaged, title: "t", uuid: "",
+                                path: "/p", state: .unmanaged, remoteControlActive: false,
+                                lastActive: nil)
+        let noPath = SessionRow(id: "id", kind: .unmanaged, title: "t", uuid: "u",
+                                path: "", state: .unmanaged, remoteControlActive: false,
+                                lastActive: nil)
+        #expect(noUUID.openAction(clickAction: .terminal) == .browser)
+        #expect(noPath.openAction(clickAction: .terminal) == .browser)
+    }
+
+    /// Browser mode never adopts: an unmanaged row opens the session list, the
+    /// same as every other row in browser mode.
+    @Test func browserModeUnmanagedOpensBrowser() {
+        let unmanaged = sampleRow(kind: .unmanaged, state: .unmanaged)
+        #expect(unmanaged.openAction(clickAction: .browser) == .browser)
     }
 
     // MARK: - Rename error detection (flow 6.8)

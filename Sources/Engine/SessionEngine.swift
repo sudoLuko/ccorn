@@ -325,6 +325,22 @@ final class SessionEngine: ObservableObject {
         return await resumeSession(uuid: uuid, directory: directory)
     }
 
+    /// True if an unmanaged session is mid-task right now: a live external
+    /// `claude` process for this session AND transcript writes in the last two
+    /// minutes. The import wait-for-idle guard (flows 6.2 / 6.10) polls this so
+    /// the takeover's SIGTERM → resume doesn't cut off an in-flight turn. A
+    /// quiet transcript or a gone process reads as idle (nothing to interrupt).
+    func isExternalSessionWorking(uuid: String, directory: String) async -> Bool {
+        let discovery = self.discovery
+        return await Task.detached {
+            guard UnmanagedClaudeFinder.find(inDirectory: directory, sessionId: uuid) != nil else {
+                return false
+            }
+            guard let transcript = discovery.transcriptIndex()[uuid] else { return false }
+            return Date().timeIntervalSince(transcript.modified) < 120
+        }.value
+    }
+
     // MARK: - Rename
 
     enum RenameResult: Sendable, Equatable {
