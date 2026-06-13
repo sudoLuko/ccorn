@@ -636,10 +636,17 @@ final class AppModel: ObservableObject {
     /// Open a Terminal window attached to a tmux window id. Shared by the
     /// direct attach (live row) and the restart-then-attach path (stopped row,
     /// where the id is only known once the resume returns a started window).
+    /// Targets the same server+session the engine drives: in Release that is the
+    /// default server's `ccorn` session, but a debug/shakedown run overrides the
+    /// socket and/or session name (CCORN_DEBUG_TMUX_SOCKET/_SESSION) and the
+    /// attach must follow, or it lands on the user's real server instead of the
+    /// isolated one. Mirrors TmuxController's own -L/session handling.
     private func attachTerminal(windowId: String) {
         let runner = engine.runner
+        let session = TmuxController.sessionName
+        let socketFlag = TmuxController.socketName.map { "-L \($0) " } ?? ""
         Task.detached {
-            let attach = "tmux attach -t 'ccorn:\(windowId)'"
+            let attach = "tmux \(socketFlag)attach -t '\(session):\(windowId)'"
             let script = """
             tell application "Terminal"
                 do script "\(attach)"
