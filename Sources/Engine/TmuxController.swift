@@ -106,7 +106,15 @@ struct TmuxController: Sendable {
     /// and de-duplicated against existing windows by the caller via `uniqueWindowName`.
     func newWindow(name: String, cwd: String) -> String? {
         let r = tmux([
-            "new-window", "-t", Self.sessionName,
+            // Trailing ":" (empty window part) targets the SESSION, so tmux
+            // creates at the next free index. A bare "-t ccorn" is a
+            // target-WINDOW: when a managed window is itself named "ccorn" — a
+            // project whose basename equals the session name, e.g. CCorn run on
+            // its own repo — tmux resolves the bare name to THAT window and
+            // tries to reuse its index, failing with "create window failed:
+            // index N in use" and breaking every new session. The colon forces
+            // the session interpretation.
+            "new-window", "-t", Self.sessionName + ":",
             "-n", name, "-c", cwd,
             "-P", "-F", "#{window_id}",
         ])
