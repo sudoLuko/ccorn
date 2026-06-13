@@ -94,9 +94,23 @@ struct BridgeSessionCache: Sendable, Equatable {
 /// indicator); it does not change the Working/Waiting/Running dot.
 struct StateDetector: Sendable {
 
-    /// The exact footer literal printed by Claude Code 2.1.169/2.1.170
-    /// (runtime findings C2).
-    static let remoteControlMarker = "Remote Control active"
+    /// The footer remote-control indicators, across CLI versions. Claude Code
+    /// 2.1.169–2.1.171 printed the literal `Remote Control active` (runtime
+    /// findings C2); 2.1.172 removed it and 2.1.173 replaced the footer with a
+    /// short `/rc <state>` chip (verified live: the old literal has zero
+    /// occurrences in the 2.1.173 binary). `remoteControlMarker` is kept for the
+    /// older versions and as the `claude-evidence` / plan-notice anchor; the
+    /// chip vocabulary below covers 2.1.172+.
+    ///
+    /// Chip states: `active` is connected; `connecting`/`reconnecting` are the
+    /// transient bring-up/recovery handshake — remote control is engaging, not
+    /// failed, so they must read as engaged and never trip "No remote";
+    /// `failed` is the genuine failure (alongside the verbose
+    /// "Remote Control … {disabled,unavailable,…}" messages, see `rcPlanNotice`).
+    static let remoteControlMarker = "Remote Control active"          // ≤ 2.1.171
+    static let rcChipActive = "/rc active"                            // ≥ 2.1.172
+    static let rcChipConnecting = ["/rc connecting", "/rc reconnecting"]
+    static let rcChipFailed = "/rc failed"
 
     /// Rendered ONLY while Claude is actively executing (verified on 2.1.169 and
     /// 2.1.170): the `esc to interrupt` hint accompanies the live spinner/status
@@ -151,7 +165,7 @@ struct StateDetector: Sendable {
     /// `Remote Control active` can never trip it.
     static let rcPlanFailureWords = [
         "not available", "not supported", "requires", "unavailable",
-        "upgrade", "not enabled", "disabled by", "failed",
+        "upgrade", "not enabled", "not yet enabled", "disabled by", "failed",
     ]
 
     /// How long a freshly created window may sit without a `claude` child before
@@ -168,6 +182,21 @@ struct StateDetector: Sendable {
     func showsLiveActivity(pane: String) -> Bool {
         if pane.contains(Self.liveActivityMarker) { return true }
         return pane.contains(where: { Self.spinnerChars.contains($0) })
+    }
+
+    /// True when the footer reports remote control *engaged* — connected, or in
+    /// the transient connecting/reconnecting handshake. Matches both the
+    /// pre-2.1.172 `Remote Control active` literal and the 2.1.172+ `/rc` chip,
+    /// so detection is version-robust. `/rc failed` and an absent chip are
+    /// deliberately excluded — that is the no-remote case, decided elsewhere.
+    /// This is a *positive* signal only: its absence does not prove RC is down
+    /// (the footer can lag in an un-repainted idle TUI), which is why `detect`
+    /// ORs it with the registry/transcript bridge signals rather than treating
+    /// a miss as failure.
+    func showsRemoteControlEngaged(pane: String) -> Bool {
+        if pane.contains(Self.remoteControlMarker) { return true }
+        if pane.contains(Self.rcChipActive) { return true }
+        return Self.rcChipConnecting.contains { pane.contains($0) }
     }
 
     /// True when a pane shows any trace of ever having hosted Claude Code.
@@ -230,6 +259,14 @@ struct StateDetector: Sendable {
         line.trimmingCharacters(in: CharacterSet(charactersIn: "│┃|╭╮╰╯─━❯> \t"))
     }
 
+    /// Default `bridgeForPid` for `detect`: the live remote-control bridge
+    /// handle the claude process records in its own session-registry file. A
+    /// version-independent positive RC signal (the field predates the footer
+    /// string change). Injected by tests so `detect` need not touch `~/.claude`.
+    static func registryBridge(pid: Int32) -> String? {
+        ClaudeSessionRegistry.info(forPid: pid)?.bridgeSessionId
+    }
+
     static func sha256(_ s: String) -> String {
         let digest = SHA256.hash(data: Data(s.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
@@ -252,7 +289,9 @@ struct StateDetector: Sendable {
                 transcript: DiscoveredSession?,
                 staleThreshold: TimeInterval,
                 spawnGrace: TimeInterval = StateDetector.spawnGraceSeconds,
-                now: Date = Date()) -> DetectionResult {
+                now: Date = Date(),
+                bridgeForPid: @Sendable (Int32) -> String? = StateDetector.registryBridge)
+                -> DetectionResult {
 
         var result = DetectionResult(state: .stopped,
                                      pid: input.pid,
@@ -295,7 +334,15 @@ struct StateDetector: Sendable {
         result.pid = livePID
 
         let pane = panes.capturePane(windowId: windowId)
-        result.remoteControlActive = pane.contains(Self.remoteControlMarker)
+        // Remote-control-active is the OR of three positive signals, most
+        // reliable first; absence of all three is "not up", never asserted from
+        // any one miss. The footer (version-robust: old literal or `/rc` chip)
+        // is the CLI's own self-report; the registry bridge handle and the
+        // transcript `bridge-session` record are version-independent positives
+        // that cover a footer that hasn't repainted yet. `||` short-circuits, so
+        // an engaged footer skips the registry read and transcript I/O entirely.
+        result.remoteControlActive = showsRemoteControlEngaged(pane: pane)
+            || livePID.flatMap(bridgeForPid) != nil
             || result.rcCache.hasBridgeSession(path: transcript?.transcriptPath,
                                                mtime: transcript?.modified)
         result.rcPlanNotice = rcPlanNotice(pane: pane)
