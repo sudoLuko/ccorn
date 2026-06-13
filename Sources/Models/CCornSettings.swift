@@ -33,6 +33,16 @@ struct SessionGroup: Codable, Equatable, Hashable, Identifiable {
     }
 }
 
+/// What clicking a session row does — popover single-click and main-window
+/// double-click both route through it. Terminal is the default: it attaches to
+/// the session's own tmux window, so one click lands you *inside* that session.
+/// Browser opens claude.ai/code, which is only the session list (no per-session
+/// URL exists, runtime finding C1), so the user still has to find it by title.
+enum SessionClickAction: String, Codable, CaseIterable {
+    case terminal
+    case browser
+}
+
 /// User settings that scope and tune the engine. Persisted as JSON alongside
 /// the session records. Watch directories are a *filter* on discovery, not the
 /// discovery source (that is always `~/.claude/projects/`).
@@ -49,6 +59,10 @@ struct CCornSettings: Codable, Equatable {
     /// User-defined group definitions, in sidebar order. Membership lives on
     /// the session records (`SessionRecord.groupIDs`), not here.
     var groups: [SessionGroup]
+    /// What clicking a session row does (popover single-click, main-window
+    /// double-click). Defaults to Terminal — the click attaches to the
+    /// session's tmux window rather than opening the claude.ai/code list.
+    var clickAction: SessionClickAction
 
     static let `default` = CCornSettings(
         watchDirectories: [],
@@ -61,12 +75,14 @@ struct CCornSettings: Codable, Equatable {
          staleThresholdSeconds: TimeInterval,
          autoRestartOnLaunch: Bool,
          onboardingComplete: Bool = false,
-         groups: [SessionGroup] = []) {
+         groups: [SessionGroup] = [],
+         clickAction: SessionClickAction = .terminal) {
         self.watchDirectories = watchDirectories
         self.staleThresholdSeconds = staleThresholdSeconds
         self.autoRestartOnLaunch = autoRestartOnLaunch
         self.onboardingComplete = onboardingComplete
         self.groups = groups
+        self.clickAction = clickAction
     }
 
     /// Every field decodes with a default so a settings.json written by an
@@ -84,5 +100,7 @@ struct CCornSettings: Codable, Equatable {
             ?? Self.default.onboardingComplete
         groups = try c.decodeIfPresent([SessionGroup].self, forKey: .groups)
             ?? Self.default.groups
+        clickAction = try c.decodeIfPresent(SessionClickAction.self, forKey: .clickAction)
+            ?? Self.default.clickAction
     }
 }

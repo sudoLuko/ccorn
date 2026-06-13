@@ -194,7 +194,7 @@ struct PopoverView: View {
 
     private func popoverRow(_ row: SessionRow) -> some View {
         PopoverRowView(row: row) {
-            model.openInBrowser(row)
+            model.openSession(row)
             model.closePopover?()
         }
         .frame(height: rowHeight)
@@ -306,7 +306,8 @@ struct PopoverView: View {
 
 /// One popover row: the same single status mark as the main window (dot or
 /// warning symbol, fixed slot), name, attention word, last-active. Click
-/// anywhere opens the browser (claude.ai/code); hover highlights #18181B.
+/// anywhere opens the session — in Terminal or the browser per the Settings
+/// preference (5.5), via model.openSession; hover highlights #18181B.
 private struct PopoverRowView: View {
     let row: SessionRow
     let action: () -> Void

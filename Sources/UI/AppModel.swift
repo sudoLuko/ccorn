@@ -39,6 +39,11 @@ final class AppModel: ObservableObject {
     /// A commit is in flight (the 3s pane error-watch); the field locks.
     @Published var renameInFlight = false
 
+    /// Session uuids with a restart in flight — dedupes rapid clicks on a
+    /// stopped row (restartSession), which would otherwise spawn duplicate
+    /// windows in the gap before the next refresh re-derives the live window.
+    private var restartingUUIDs: Set<String> = []
+
     /// User-defined groups (docs/CCORN_SPEC.md 5.11), mirrored from
     /// settings so the sidebar re-renders on every mutation. Definitions
     /// live in settings; membership lives on the session records.
@@ -594,6 +599,30 @@ final class AppModel: ObservableObject {
 
     // MARK: - Read-only actions
 
+    /// The row-click handoff (flow 6.4): popover single-click and main-window
+    /// double-click both land here, and route on the user's preference (5.5).
+    /// Browser mode always opens claude.ai/code. Terminal mode:
+    ///  - live window → attach to it (no remote control needed);
+    ///  - stopped session (a record, not archived) → restart it and attach to
+    ///    the fresh window (the explicit Restart preconditions still apply, so
+    ///    a missing dir/transcript surfaces the same dialog);
+    ///  - anything else with no window (archived, unmanaged) → browser.
+    /// The explicit, RC-gated "Open in Browser"/"Open in Terminal" menu items
+    /// remain the way to force either destination.
+    func openSession(_ row: SessionRow) {
+        guard engine.settings.clickAction == .terminal else {
+            openInBrowser(row)
+            return
+        }
+        if row.windowId != nil {
+            openInTerminal(row)
+        } else if case .record = row.kind, !row.archived {
+            restartSession(row, attachInTerminal: true)
+        } else {
+            openInBrowser(row)
+        }
+    }
+
     /// No per-session URL exists (runtime findings C1): open the claude.ai/code
     /// session list; the user finds the session by its title.
     func openInBrowser(_ row: SessionRow) {
@@ -606,6 +635,13 @@ final class AppModel: ObservableObject {
     /// attach target on tmux 3.6.
     func openInTerminal(_ row: SessionRow) {
         guard let windowId = row.windowId else { return }
+        attachTerminal(windowId: windowId)
+    }
+
+    /// Open a Terminal window attached to a tmux window id. Shared by the
+    /// direct attach (live row) and the restart-then-attach path (stopped row,
+    /// where the id is only known once the resume returns a started window).
+    private func attachTerminal(windowId: String) {
         let runner = engine.runner
         Task.detached {
             let attach = "tmux attach -t 'ccorn:\(windowId)'"
@@ -681,8 +717,18 @@ final class AppModel: ObservableObject {
 
     // MARK: - Restart (flow 6.7)
 
-    func restartSession(_ row: SessionRow) {
+    /// Restart a stopped/dead session (flow 6.7). `attachInTerminal` is set by
+    /// the row-click handoff (openSession) when the click action is Terminal:
+    /// a stopped row has no window to attach to, so it is resumed first and the
+    /// fresh window opened in Terminal. The context-menu "Restart Session"
+    /// leaves it false — restart only, no terminal.
+    func restartSession(_ row: SessionRow, attachInTerminal: Bool = false) {
+        let uuid = row.uuid
+        // Dedupe rapid clicks: the row keeps showing no window until the next
+        // refresh, so a second click would otherwise spawn a second window.
+        guard restartingUUIDs.insert(uuid).inserted else { return }
         Task {
+            defer { restartingUUIDs.remove(uuid) }
             guard !row.path.isEmpty,
                   FileManager.default.fileExists(atPath: row.path) else {
                 Alerts.info(title: "The project directory no longer exists.")
@@ -691,7 +737,6 @@ final class AppModel: ObservableObject {
             // The transcript must still exist or `claude --resume` has nothing
             // to resume (section 8: "Session ID not found in JSONL files").
             let discovery = engine.discovery
-            let uuid = row.uuid
             let hasTranscript = await Task.detached {
                 !uuid.isEmpty && discovery.transcriptIndex()[uuid] != nil
             }.value
@@ -706,6 +751,7 @@ final class AppModel: ObservableObject {
                     }
                     let result = await engine.startNewSession(directory: row.path)
                     handleStartResult(result, verb: "start")
+                    if attachInTerminal { attachIfStarted(result) }
                     await refreshAfterMutation()
                 }
                 return
@@ -714,7 +760,17 @@ final class AppModel: ObservableObject {
                                                      directory: row.path,
                                                      replacingWindowId: row.windowId)
             handleStartResult(result, verb: "restart")
+            if attachInTerminal { attachIfStarted(result) }
             await refreshAfterMutation()
+        }
+    }
+
+    /// Attach Terminal to a just-started window (the restart-then-attach tail
+    /// of openSession). Only `.started` carries a live window;
+    /// `.windowCreatedNoProcess`/`.failed` surface through handleStartResult.
+    private func attachIfStarted(_ result: StartResult) {
+        if case let .started(windowId, _) = result {
+            attachTerminal(windowId: windowId)
         }
     }
 

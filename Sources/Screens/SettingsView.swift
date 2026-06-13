@@ -143,6 +143,18 @@ struct SettingsView: View {
                 }
             ))
 
+            Picker("Clicking a session opens", selection: Binding(
+                get: { engine.settings.clickAction },
+                set: { value in
+                    var settings = engine.settings
+                    settings.clickAction = value
+                    model.applySettings(settings)
+                }
+            )) {
+                Text("Terminal").tag(SessionClickAction.terminal)
+                Text("Browser").tag(SessionClickAction.browser)
+            }
+
             Picker("Stale session threshold", selection: Binding(
                 get: { Self.nearestThreshold(engine.settings.staleThresholdSeconds) },
                 set: { value in

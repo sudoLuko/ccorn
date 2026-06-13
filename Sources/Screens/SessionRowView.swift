@@ -5,8 +5,8 @@ import SwiftUI
 /// textual state word lives in the mark's tooltip, except for the states that
 /// need the user — Waiting, Sign in, No remote, Crashed — which get a short
 /// colored label next to the name so they pop in a list of calm rows. Single
-/// click selects; double click = Open in Browser (disabled when remote
-/// control is inactive); right-click / `…` shows the NSMenu. Rename swaps the
+/// click selects; double click opens the session — in Terminal or the browser
+/// per the Settings preference (5.5); right-click / `…` shows the NSMenu. Rename swaps the
 /// name for an inline TextField (5.8) with the error caption below. Archived
 /// rows render muted with the empty dot (5.9); unmanaged rows render
 /// de-emphasized — discovered context, not managed content.
@@ -42,10 +42,11 @@ struct SessionRowView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .gesture(TapGesture(count: 2).onEnded {
-            // Same gate as the context-menu item: greyed out without remote control.
-            if row.remoteControlActive {
-                model.openInBrowser(row)
-            }
+            // The row-click handoff (5.5): opens Terminal or browser per the
+            // user's setting. Routes through the model so it stays in sync with
+            // the popover single-click; the explicit, RC-gated "Open in
+            // Browser"/"Open in Terminal" menu items remain for forcing either.
+            model.openSession(row)
         })
         .simultaneousGesture(TapGesture(count: 1).onEnded {
             model.selection = row.id

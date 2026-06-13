@@ -419,7 +419,7 @@ Session rows (36px each):
 - Last active timestamp — `.caption` `Color.secondary` — far right, before actions
 - `...` button — appears on hover only, far right, SF Symbol `ellipsis` at 14px
 
-**Row click behavior in main window:** Single click selects the row (highlight only). Double-click triggers the same action as "Open in Browser" in the context menu; double-click is disabled when remote control is not active, matching the greyed-out context-menu item. Right-click or the `...` button opens the context menu. (Composing single-click select, double-click open, right-click menu, and hover-to-reveal `...` on a SwiftUI `List` row inside `NavigationSplitView` is finicky; budget for gesture composition or light AppKit interop.)
+**Row click behavior in main window:** Single click selects the row (highlight only). Double-click opens the session using the **click action** chosen in Settings (5.5) — Terminal (default) or browser — routing through the same handoff as the popover row click (flow 6.4). The double-click itself is not gated on remote control: in Terminal mode it attaches to the tmux window regardless; a stopped session (no live window) is restarted first and the fresh window opened in Terminal (the Restart preconditions apply, so a missing project dir or transcript surfaces the same dialog); an archived or unmanaged row with no window falls back to the browser. The explicit, remote-control-gated "Open in Browser" and "Open in Terminal" items remain in the context menu for forcing either destination. Right-click or the `...` button opens the context menu. (Composing single-click select, double-click open, right-click menu, and hover-to-reveal `...` on a SwiftUI `List` row inside `NavigationSplitView` is finicky; budget for gesture composition or light AppKit interop.)
 
 Row states:
 
@@ -470,7 +470,7 @@ popover-local — the main window keeps its full recency-ordered list.
 - Row anatomy unchanged: 32px rows, 8px left/right padding, status mark in
   the fixed slot left, 8px gap, session name `.subheadline` medium `#FAFAFA`,
   attention word after the name, last active `.caption` `#71717A` far right
-- Click anywhere on a session row → opens claude.ai/code in default browser
+- Click anywhere on a session row → opens the session using the **click action** chosen in Settings (5.5): Terminal (default) attaches to its tmux window; a stopped session is restarted first and the fresh window opened in Terminal; browser opens claude.ai/code. Same handoff as the main-window double-click (flow 6.4).
 - Hover: `#18181B` background (rows and the disclosure row)
 - Size budget: width stays 280; the list region caps at 8 rows × 32px before
   scrolling. Attention rows + the collapsed disclosure fit unscrolled in the
@@ -606,6 +606,7 @@ Section 2 — “Behavior”:
 
 - Launch at login — `Toggle`
 - Auto-restart sessions on launch — `Toggle`
+- Clicking a session opens — `Picker`: Terminal (default) / Browser. Governs both the popover single-click and the main-window double-click (flow 6.4)
 - Stale session threshold — `Picker` with options: 1 hour, 2 hours, 4 hours, 8 hours, 24 hours
 
 Section 3 — “About”:
@@ -848,11 +849,13 @@ verification with the list's existing tap/right-click stack.
 1. Session appears in list immediately with green dot
 1. If remote control does not become active within the 30s grace (no `Remote Control active` string and no `bridge-session` record) → the row presents No-remote: amber warning triangle plus the "No remote" word (see Section 4)
 
-### 6.4 Open Session in Browser
+### 6.4 Open Session (row click)
 
-1. User clicks session row in popover OR clicks “Open in Browser” in `...` menu
-1. Open `https://claude.ai/code` in the default browser. There is no per-session deep link (verified on 2.1.169), so this opens the session list; the user selects the session by the title CCorn set
-1. If remote control not active on session → “Open in Browser” is greyed out, tooltip: “Remote control is not active on this session”
+1. User clicks a session row in the popover (single click) or double-clicks a row in the main window
+1. The handoff follows the **click action** in Settings (5.5):
+   - Terminal (default) → attach to the session’s tmux window (6.5). A stopped session has no window, so it is restarted first (resume, flow 6.7, including the missing-dir/missing-transcript dialogs) and the fresh window opened in Terminal. An archived or unmanaged row with no window falls back to the browser
+   - Browser → open `https://claude.ai/code` in the default browser. There is no per-session deep link (verified on 2.1.169), so this opens the session list; the user selects the session by the title CCorn set
+1. The explicit context-menu items override the preference: “Open in Terminal” always attaches (6.5); “Open in Browser” always opens the list, and is greyed out (tooltip “Remote control is not active on this session”) when remote control is not active on the session
 
 ### 6.5 Open Session in Terminal
 
