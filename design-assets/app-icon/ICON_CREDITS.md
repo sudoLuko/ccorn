@@ -19,10 +19,15 @@ rounded tile.
 
 - Glyph: OpenMoji `1F33D` (ear of corn), color SVG.
 - Repo source: `ccorn-appicon-openmoji.svg`
-- Master: `ccorn-appicon-openmoji-1024.png` — OpenMoji glyph rendered at 760px,
-  centered on a 1024² white rounded tile (corner radius 230), sRGB.
-- Regenerate the shipped sizes: render the master, then downscale to
+- Master: `ccorn-appicon-openmoji-1024.png` — OpenMoji glyph rendered into a
+  1064px box, centered on a 1024² white rounded tile (corner radius 230), sRGB.
+  The glyph's ink is ~65% of its render box, so it fills ~67.5% of the canvas
+  (was a 760px box / ~48% fill, which read small with heavy padding; the +40%
+  bump leaves a ~16% margin inside the rounded tile).
+- Regenerate the shipped sizes: run `./make-appicon.sh`. It draws the tile,
+  composites the glyph at the size above, and downscales to
   16/32/64/128/256/512/1024 into `Sources/Assets.xcassets/AppIcon.appiconset/`.
+  The glyph render box (`GLYPH_BOX`) is the only knob that controls glyph scale.
 
 ## In-app glyph (`CornGlyph` asset)
 
