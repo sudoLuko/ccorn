@@ -600,26 +600,14 @@ final class AppModel: ObservableObject {
     // MARK: - Read-only actions
 
     /// The row-click handoff (flow 6.4): popover single-click and main-window
-    /// double-click both land here, and route on the user's preference (5.5).
-    /// Browser mode always opens claude.ai/code. Terminal mode:
-    ///  - live window → attach to it (no remote control needed);
-    ///  - stopped session (a record, not archived) → restart it and attach to
-    ///    the fresh window (the explicit Restart preconditions still apply, so
-    ///    a missing dir/transcript surfaces the same dialog);
-    ///  - anything else with no window (archived, unmanaged) → browser.
-    /// The explicit, RC-gated "Open in Browser"/"Open in Terminal" menu items
-    /// remain the way to force either destination.
+    /// double-click both land here and route via `SessionRow.openAction` (the
+    /// pure, unit-tested decision). The explicit, RC-gated "Open in Browser" /
+    /// "Open in Terminal" menu items remain the way to force either destination.
     func openSession(_ row: SessionRow) {
-        guard engine.settings.clickAction == .terminal else {
-            openInBrowser(row)
-            return
-        }
-        if row.windowId != nil {
-            openInTerminal(row)
-        } else if case .record = row.kind, !row.archived {
-            restartSession(row, attachInTerminal: true)
-        } else {
-            openInBrowser(row)
+        switch row.openAction(clickAction: engine.settings.clickAction) {
+        case .terminal: openInTerminal(row)
+        case .browser: openInBrowser(row)
+        case .restartThenAttach: restartSession(row, attachInTerminal: true)
         }
     }
 

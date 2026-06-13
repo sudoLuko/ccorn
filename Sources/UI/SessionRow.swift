@@ -112,3 +112,29 @@ struct SessionRow: Identifiable, Equatable {
         path.isEmpty ? "—" : (path as NSString).abbreviatingWithTildeInPath
     }
 }
+
+extension SessionRow {
+    /// What the row-click handoff resolves to (flow 6.4). Row-intrinsic and
+    /// pure — depends only on the row and the user's click-action preference —
+    /// so it is unit-testable without AppModel's GUI/tmux side effects.
+    enum OpenAction: Equatable {
+        /// Attach to this row's live tmux window.
+        case terminal
+        /// Open claude.ai/code.
+        case browser
+        /// No live window: restart (resume) the session, then attach Terminal.
+        case restartThenAttach
+    }
+
+    /// Browser mode always opens claude.ai/code. Terminal mode:
+    ///  - live window → attach to it (no remote control needed);
+    ///  - stopped session (a record, not archived) → restart and attach to the
+    ///    fresh window (the Restart preconditions still gate this downstream);
+    ///  - anything else with no window (archived, unmanaged) → browser.
+    func openAction(clickAction: SessionClickAction) -> OpenAction {
+        guard clickAction == .terminal else { return .browser }
+        if windowId != nil { return .terminal }
+        if case .record = kind, !archived { return .restartThenAttach }
+        return .browser
+    }
+}

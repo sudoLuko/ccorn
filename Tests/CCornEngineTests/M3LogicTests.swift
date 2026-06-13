@@ -33,6 +33,69 @@ import Testing
         #expect(decoded == settings)
     }
 
+    /// The default click action is Terminal, and a settings.json from a build
+    /// predating the field must adopt that default — never silently land on
+    /// browser (the old behavior) on upgrade (5.5, flow 6.4).
+    @Test func clickActionDefaultsToTerminal() throws {
+        #expect(CCornSettings.default.clickAction == .terminal)
+        let old = #"{"watchDirectories":[],"staleThresholdSeconds":3600,"autoRestartOnLaunch":false}"#
+        let settings = try JSONDecoder().decode(CCornSettings.self, from: Data(old.utf8))
+        #expect(settings.clickAction == .terminal)
+    }
+
+    @Test func clickActionRoundTrips() throws {
+        var settings = CCornSettings.default
+        settings.clickAction = .browser
+        let decoded = try JSONDecoder().decode(
+            CCornSettings.self, from: try JSONEncoder().encode(settings))
+        #expect(decoded.clickAction == .browser)
+    }
+
+    // MARK: - Row-click routing (SessionRow.openAction, flow 6.4)
+
+    private func sampleRow(kind: SessionRow.Kind,
+                           state: SessionState,
+                           rc: Bool = false,
+                           archived: Bool = false) -> SessionRow {
+        SessionRow(id: "id", kind: kind, title: "t", uuid: "u", path: "/p",
+                   state: state, remoteControlActive: rc,
+                   archived: archived, lastActive: nil)
+    }
+
+    /// Browser mode opens the browser for every row, including a live one.
+    @Test func browserModeAlwaysOpensBrowser() {
+        let live = sampleRow(kind: .managed(windowId: "@1"), state: .running, rc: true)
+        #expect(live.openAction(clickAction: .browser) == .browser)
+    }
+
+    /// Terminal mode attaches to a live window — even with remote control off,
+    /// since attach needs none (this is the No-remote win).
+    @Test func terminalModeAttachesToLiveWindow() {
+        let live = sampleRow(kind: .managed(windowId: "@1"), state: .running, rc: false)
+        #expect(live.openAction(clickAction: .terminal) == .terminal)
+    }
+
+    /// Terminal mode on a stopped session (a record, no window) restarts then
+    /// attaches.
+    @Test func terminalModeRestartsStoppedRecord() {
+        let stopped = sampleRow(kind: .record, state: .stopped)
+        #expect(stopped.openAction(clickAction: .terminal) == .restartThenAttach)
+    }
+
+    /// An archived record is never auto-restarted by a click — it falls back to
+    /// the browser (the menu's Unarchive/Restart is the deliberate path).
+    @Test func terminalModeArchivedRecordFallsBackToBrowser() {
+        let archived = sampleRow(kind: .record, state: .stopped, archived: true)
+        #expect(archived.openAction(clickAction: .terminal) == .browser)
+    }
+
+    /// An unmanaged discovery has no CCorn window to attach to and no record to
+    /// resume — Terminal mode falls back to the browser.
+    @Test func terminalModeUnmanagedFallsBackToBrowser() {
+        let unmanaged = sampleRow(kind: .unmanaged, state: .unmanaged)
+        #expect(unmanaged.openAction(clickAction: .terminal) == .browser)
+    }
+
     // MARK: - Rename error detection (flow 6.8)
 
     @Test func renameErrorDetectsNewErrorLine() {
