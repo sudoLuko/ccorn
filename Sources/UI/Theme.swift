@@ -184,8 +184,7 @@ struct StatusMark: View {
 /// their SwiftUI trees alive while hidden (the popover panel orders out, the
 /// main window closes with isReleasedWhenClosed = false), and a repeatForever
 /// mark animation in a hidden tree keeps the render loop ticking every frame —
-/// several percent CPU per hidden surface, forever (jank-risk 2 in
-/// docs/ANIMATION_AUDIT_VERIFICATION.md). The window controllers publish
+/// several percent CPU per hidden surface, forever. The window controllers publish
 /// visibility through the model into this key; RowStatusIndicator stops its
 /// loops when it goes false. Defaults to true so one-off hosts (debug
 /// previews) keep motion without wiring.
