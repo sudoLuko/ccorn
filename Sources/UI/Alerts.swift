@@ -92,6 +92,26 @@ enum Alerts {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
+    /// Single-line text prompt with an accessory field (focused for immediate
+    /// typing). Returns nil on Cancel; otherwise the trimmed entry, which MAY be
+    /// empty — callers decide what an empty confirmed entry means.
+    static func prompt(title: String, message: String = "",
+                       placeholder: String = "", action: String = "OK") -> String? {
+        activate()
+        let alert = NSAlert()
+        alert.messageText = title
+        if !message.isEmpty { alert.informativeText = message }
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: action)
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.placeholderString = placeholder
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Folder picker (NSOpenPanel — the only sanctioned picker). nil on cancel.
     static func pickFolder(prompt: String) -> String? {
         let panel = NSOpenPanel()

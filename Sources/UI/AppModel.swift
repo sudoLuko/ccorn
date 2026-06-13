@@ -673,7 +673,7 @@ final class AppModel: ObservableObject {
             openMainWindow?()
             return
         }
-        guard let directory = Alerts.pickFolder(prompt: "Start Session") else { return }
+        guard let directory = Alerts.pickFolder(prompt: "Choose Folder") else { return }
         let canonical = SessionDiscovery.canonicalize(directory)
         let aliveHere = rows.contains {
             $0.isManaged && $0.path == canonical && $0.state.isAliveState
@@ -683,8 +683,17 @@ final class AppModel: ObservableObject {
                                  message: "Start another session in \(canonical)?",
                                  action: "Start Anyway") else { return }
         }
+        // Optional name: blank falls through to Claude's session title (it keeps
+        // updating as the work develops); a typed name sticks and wins over it.
+        // nil = the user cancelled the whole flow.
+        let folderName = URL(fileURLWithPath: directory).lastPathComponent
+        guard let entered = Alerts.prompt(
+            title: "Name this session",
+            message: "Leave blank to use Claude's session title.",
+            placeholder: folderName, action: "Start Session") else { return }
+        let title = entered.isEmpty ? nil : entered
         Task {
-            let result = await engine.startNewSession(directory: directory)
+            let result = await engine.startNewSession(directory: directory, title: title)
             handleStartResult(result, verb: "start")
             await refreshAfterMutation()
         }

@@ -24,6 +24,14 @@ struct SessionRowView: View {
     /// Unmanaged and archived rows are secondary content: quieter title,
     /// regular weight, tertiary metadata.
     private var isMuted: Bool { row.kind == .unmanaged || row.archived }
+    /// Managed and stopped (record) rows can be renamed; unmanaged discovery
+    /// rows cannot.
+    private var canRename: Bool {
+        switch row.kind {
+        case .managed, .record: return true
+        case .unmanaged: return false
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -101,6 +109,12 @@ struct SessionRowView: View {
                     .foregroundColor(isMuted ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    // Double-click the title to rename (5.8). High priority so it
+                    // beats the row's double-click-to-open; gated to renameable
+                    // rows so unmanaged rows still open on double-click.
+                    .modifier(DoubleClickRename(enabled: canRename) {
+                        model.beginRename(row)
+                    })
             }
             if !isRenaming {
                 AttentionWord(presentation: row.presentation)
@@ -164,5 +178,21 @@ struct SessionRowView: View {
         .buttonStyle(.plain)
         .opacity(hovering ? 1 : 0)
         .accessibilityLabel("Session actions")
+    }
+}
+
+/// Applies a double-click-to-rename gesture only when enabled. A swallowed
+/// gesture on a non-renameable row would block its double-click-to-open, so the
+/// modifier adds nothing when disabled. High priority beats the ancestor row's
+/// double-click handler.
+private struct DoubleClickRename: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+    func body(content: Content) -> some View {
+        if enabled {
+            content.highPriorityGesture(TapGesture(count: 2).onEnded(action))
+        } else {
+            content
+        }
     }
 }

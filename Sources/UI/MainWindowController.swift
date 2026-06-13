@@ -14,6 +14,9 @@ final class MainWindowController {
     /// window keeps its SwiftUI tree alive (isReleasedWhenClosed = false),
     /// so the marks must be told when it leaves the screen.
     private weak var model: AppModel?
+    /// Local key monitor: Return on a selected, renameable row begins inline
+    /// rename (macOS 13 has no SwiftUI .onKeyPress).
+    private var keyMonitor: Any?
 
     init() {
         // Global observers cover the main window, Settings, and any future
@@ -86,6 +89,25 @@ final class MainWindowController {
                         window.occlusionState.contains(.visible)
                 }
             })
+
+            // Return begins inline rename of the selected row (Finder-style),
+            // complementing the double-click-title gesture. Scoped to this
+            // window; skipped while a text field is first responder (the rename
+            // editor itself) so typing is never hijacked. Key events arrive on
+            // the main thread, so touching the main-actor model here is safe.
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, let window = self.window, let model = self.model,
+                      event.window === window,
+                      event.keyCode == 36 || event.keyCode == 76,   // Return / numpad Enter
+                      !(window.firstResponder is NSText),
+                      model.renamingRowId == nil,
+                      let id = model.selection,
+                      let row = (model.rows + model.archivedRows).first(where: { $0.id == id }),
+                      Self.isRenameable(row)
+                else { return event }
+                model.beginRename(row)
+                return nil
+            }
         }
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
@@ -119,6 +141,15 @@ final class MainWindowController {
     /// `.regular` iff a regular window remains: titled, visible or minimized
     /// (a miniaturized window is open but not `isVisible`), normal level
     /// (excludes the status-bar window and the borderless popover window).
+    /// Managed and stopped (record) rows can be renamed; unmanaged discovery
+    /// rows cannot. Mirrors SessionRowView.canRename.
+    private static func isRenameable(_ row: SessionRow) -> Bool {
+        switch row.kind {
+        case .managed, .record: return true
+        case .unmanaged: return false
+        }
+    }
+
     static func updateActivationPolicy() {
         let hasRegularWindow = NSApp.windows.contains { window in
             (window.isVisible || window.isMiniaturized)
