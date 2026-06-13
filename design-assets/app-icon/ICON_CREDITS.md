@@ -23,3 +23,18 @@ rounded tile.
   centered on a 1024² white rounded tile (corner radius 230), sRGB.
 - Regenerate the shipped sizes: render the master, then downscale to
   16/32/64/128/256/512/1024 into `Sources/Assets.xcassets/AppIcon.appiconset/`.
+
+## In-app glyph (`CornGlyph` asset)
+
+The same OpenMoji glyph, *without* the tile, is the one shared mark for every
+in-app surface (brand lockup, onboarding, empty state) via the `CornMark`
+SwiftUI view. It is a vector PDF so it stays crisp at every size (15–44pt).
+
+- Source: `ccorn-glyph-inapp.svg` — `ccorn-appicon-openmoji.svg` with its
+  viewBox tightened to the glyph's ink bounds + a small uniform margin
+  (`viewBox="9.5 11 52.9 52.9"`, ~85% fill) so it centers and reads at the
+  same optical weight the corn emoji did.
+- Regenerate the asset (needs `librsvg`):
+  `rsvg-convert -f pdf -o ../../Sources/Assets.xcassets/CornGlyph.imageset/CornGlyph.pdf ccorn-glyph-inapp.svg`
+- Same CC BY-SA 4.0 obligations as the app icon: this is another adaptation of
+  the OpenMoji artwork, covered by the attribution already shipped.

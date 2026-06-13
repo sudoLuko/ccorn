@@ -38,13 +38,12 @@ struct OnboardingView: View {
 
     private var card: some View {
         VStack(spacing: 0) {
-            // The in-app brand mark is the corn emoji (review item 3); vector
-            // assets are reserved for the app icon and menu-bar glyph.
-            Text("🌽")
-                .font(.system(size: 44))
+            // The in-app brand mark is the shared OpenMoji corn glyph (CornMark),
+            // the same artwork as the app icon — one bundled asset across every
+            // surface (replaces the old system corn emoji).
+            CornMark(size: 44)
                 .frame(height: 48)
                 .padding(.bottom, 8)
-                .accessibilityHidden(true)
 
             Text("CCorn")
                 .font(.title2.weight(.medium))

@@ -292,28 +292,24 @@ struct AttentionWord: View {
     }
 }
 
-// MARK: - Brand lockup
+// MARK: - Corn mark
 
-/// The in-window home of app identity (header-and-branding pass): corn emoji
-/// + "CCorn" wordmark, deliberately heavier and slightly larger than row/nav
-/// text so it reads as a brand header, not a row. Used by the sidebar header
-/// and the popover header — each surface draws its own hairline divider
-/// beneath in its palette. The title bar hides its text instead of
-/// duplicating this (NSWindow.title stays "CCorn" for programmatic lookup).
-struct BrandLockup: View {
-    /// Wordmark color — semantic primary in the main window, the popover's
-    /// fixed light text on its always-dark background.
-    var textColor: Color = .primary
+/// CCorn's shared brand glyph: the OpenMoji ear-of-corn (`CornGlyph` asset —
+/// the same artwork as the app icon, trimmed glyph-only; see
+/// design-assets/app-icon/). One bundled vector replaces the system corn emoji
+/// everywhere it appears in-app (main-window title bar, popover header,
+/// onboarding, empty state) so the in-app mark matches the Dock/app icon
+/// exactly. Color art, never a template
+/// (that is the menu-bar glyph's job); CC BY-SA 4.0 — see Settings ▸ About.
+struct CornMark: View {
+    var size: CGFloat
 
     var body: some View {
-        HStack(spacing: 7) {
-            Text("🌽")
-                .font(.system(size: 15))
-                .accessibilityHidden(true)
-            Text("CCorn")
-                .font(.title3.weight(.semibold))
-                .foregroundColor(textColor)
-        }
+        Image("CornGlyph")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 

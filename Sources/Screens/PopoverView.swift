@@ -101,7 +101,9 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            BrandLockup(textColor: PopoverPalette.primaryText)
+            // Brand mark only — the popover is summoned from the menu-bar corn,
+            // so the wordmark is redundant here; the lone glyph reads cleaner.
+            CornMark(size: 18)
             Spacer()
             aggregateMark
                 // Crossfade worst-presentation swaps like the row marks do

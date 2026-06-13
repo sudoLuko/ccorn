@@ -155,9 +155,9 @@ struct SessionListView: View {
 
 /// Centered empty state (docs/CCORN_SPEC.md 5.6; 5.9 for the archived view
 /// and 5.11 for an empty group, which get the mark, title, and a hint but no
-/// action buttons). The corn emoji plus the tagline are the one place
-/// CCorn's identity shows (review item 3: the emoji is the in-app mark;
-/// vector assets are reserved for the app icon and menu-bar glyph).
+/// action buttons). The corn glyph plus the tagline are the one place
+/// CCorn's identity shows: the shared OpenMoji corn (CornMark), the same
+/// artwork as the app icon, drawn from one bundled asset everywhere in-app.
 private struct EmptyStateView: View {
     @ObservedObject var model: AppModel
     var nav: SidebarNav = .allSessions
@@ -178,10 +178,8 @@ private struct EmptyStateView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("🌽")
-                .font(.system(size: 40))
+            CornMark(size: 40)
                 .padding(.bottom, 16)
-                .accessibilityHidden(true)
 
             Text(title)
                 .font(.title3.weight(.medium))

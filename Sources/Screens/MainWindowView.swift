@@ -31,6 +31,14 @@ struct MainWindowView: View {
         // longer wins against SwiftUI's titlebar, so remove the title item
         // here. window.title stays "CCorn" for the debug/window lookup.
         .hiddenWindowTitle()
+        // App identity: the corn glyph alone, centered in the title bar (the
+        // wordmark is gone — the mark carries it). Principal toolbar slot, so
+        // it sits between the leading sidebar toggle and the window controls.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                CornMark(size: 16)
+            }
+        }
         .frame(minWidth: 720, minHeight: 480)
         .sheet(item: $model.importFlow) { flow in
             ImportSheetView(flow: flow)
@@ -74,17 +82,8 @@ private struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            BrandLockup()
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-
-            Rectangle()
-                .fill(Color(.separatorColor))
-                .frame(height: 0.5)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-
+            // Brand mark moved to the centered title-bar glyph; the sidebar now
+            // opens straight on New Session.
             Button {
                 model.newSession()
             } label: {
@@ -100,6 +99,7 @@ private struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
+            .padding(.top, 12)
             .padding(.bottom, 4)
 
             List(selection: Binding(get: { nav as SidebarNav? },
