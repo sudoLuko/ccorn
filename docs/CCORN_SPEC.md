@@ -397,8 +397,10 @@ CCorn uses `NSApplicationActivationPolicyAccessory` (in Swift, `.accessory`) by 
 Top section:
 
 - No sidebar brand lockup or wordmark: app identity is the OpenMoji corn
-  glyph (`CornMark`) centered in the title bar (principal toolbar item, see
-  5.1 header), so the sidebar opens directly on the New Session button
+  glyph (`CornMark`) at the trailing edge of the title bar (a titlebar
+  accessory, not a toolbar item — a toolbar would add AppKit's "Icon and
+  Text / Icon Only" right-click menu; see 5.1 header), so the sidebar opens
+  directly on the New Session button
 - `+ New Session` — text button with SF Symbol `plus` icon left, `.subheadline` medium `Color.primary`
 
 Nav section (`.listStyle(.sidebar)`):

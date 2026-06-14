@@ -9,7 +9,6 @@ import SwiftUI
 final class MainWindowController {
     private var window: NSWindow?
     private var observers: [NSObjectProtocol] = []
-    private var toolbarDelegate: ToolbarDelegate?
     /// For publishing mainWindowOnScreen (row-motion gating): the closed
     /// window keeps its SwiftUI tree alive (isReleasedWhenClosed = false),
     /// so the marks must be told when it leaves the screen.
@@ -55,15 +54,19 @@ final class MainWindowController {
             window.isReleasedWhenClosed = false
             window.center()
 
-            // Set up custom NSToolbar with corn icon, bypassing SwiftUI's
-            // automatic toolbar item styling (which adds the ring/halo).
-            let toolbar = NSToolbar(identifier: "MainToolbar")
-            let delegate = ToolbarDelegate()
-            toolbar.delegate = delegate
-            toolbar.displayMode = .iconOnly
-            toolbar.showsBaselineSeparator = false
-            window.toolbar = toolbar
-            self.toolbarDelegate = delegate
+            // App identity: the corn glyph pinned to the trailing edge of the
+            // title bar via a titlebar accessory. Deliberately NOT an NSToolbar:
+            // any window with a toolbar gets AppKit's built-in "Icon and Text /
+            // Icon Only" display-mode context menu on right-click, and there is
+            // no API to suppress just those items. A titlebar accessory hosts
+            // the same glyph with no toolbar and no context menu (spec §5.1:
+            // "No toolbar").
+            let cornHost = NSHostingView(rootView: CornMark(size: 16).padding(.trailing, 14))
+            cornHost.frame = NSRect(x: 0, y: 0, width: 38, height: 24)
+            let cornAccessory = NSTitlebarAccessoryViewController()
+            cornAccessory.view = cornHost
+            cornAccessory.layoutAttribute = .trailing
+            window.addTitlebarAccessoryViewController(cornAccessory)
 
             // Sidebar toggle in the titlebar, next to the traffic lights:
             // window chrome is the one region that can never collapse, so the
@@ -180,52 +183,5 @@ final class MainWindowController {
                 && (window.level == .normal || window.level == keepInFrontLevel)
         }
         NSApp.setActivationPolicy(hasRegularWindow ? .regular : .accessory)
-    }
-}
-
-// MARK: - Toolbar Delegate
-
-private class ToolbarDelegate: NSObject, NSToolbarDelegate {
-    static let cornIconID = NSToolbarItem.Identifier("CornIcon")
-
-    func toolbar(
-        _ toolbar: NSToolbar,
-        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
-        willBeInsertedIntoToolbar flag: Bool
-    ) -> NSToolbarItem? {
-        if itemIdentifier == Self.cornIconID {
-            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-
-            // Corn icon image view.
-            let imageView = NSImageView()
-            imageView.image = NSImage(named: "CornGlyph")
-            imageView.imageScaling = .scaleProportionallyDown
-            imageView.frame.size = CGSize(width: 16, height: 16)
-
-            item.view = imageView
-            item.minSize = CGSize(width: 16, height: 16)
-            item.maxSize = CGSize(width: 16, height: 16)
-
-            // The key setting: disable the border/ring that appears on toolbar items.
-            item.isBordered = false
-
-            return item
-        }
-        return nil
-    }
-
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        // Leading flexible space pushes the corn glyph to the trailing (right)
-        // edge, balancing it against the traffic lights and sidebar toggle on
-        // the left.
-        return [.flexibleSpace, Self.cornIconID]
-    }
-
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        return [Self.cornIconID, .flexibleSpace]
-    }
-
-    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        return []
     }
 }
