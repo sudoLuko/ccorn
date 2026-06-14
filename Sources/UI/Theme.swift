@@ -326,6 +326,12 @@ struct FilledButton: View {
     var disabled = false
     var fullWidth = false
     var height: CGFloat = 28
+    /// Bind this button to the window's default action (Return). The shortcut is
+    /// attached to the real `Button` below so the key equivalent fires its
+    /// action — and, as the window's default, Return is routed here instead of
+    /// to a focused single-line field editor (which would otherwise just
+    /// reselect its text on commit). Opt-in: most FilledButtons are not default.
+    var isDefault = false
     let action: () -> Void
 
     private static let fill = Color(lightHex: 0x09090B, darkHex: 0xFAFAFA)
@@ -345,6 +351,7 @@ struct FilledButton: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
+        .keyboardShortcut(isDefault ? .defaultAction : nil)
         .animation(.easeInOut(duration: 0.15), value: disabled)
     }
 }

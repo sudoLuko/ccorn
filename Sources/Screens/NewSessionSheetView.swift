@@ -227,8 +227,14 @@ struct NewSessionSheetView: View {
                 .buttonStyle(.plain)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+                .keyboardShortcut(.cancelAction)
             Spacer()
-            FilledButton(title: "Start Session") { flow.start() }
+            // Default action: Return starts the session whether or not the title
+            // field is focused. As the window's default it also intercepts Return
+            // before the focused field editor can reselect its text on commit.
+            // The fields write their bindings live, so flow.start() reads the
+            // typed values and applies the same validation as a click.
+            FilledButton(title: "Start Session", isDefault: true) { flow.start() }
         }
     }
 }
