@@ -40,6 +40,7 @@ build() {
         Sources/Engine/TmuxController.swift \
         Sources/Engine/CommandRunner.swift \
         Sources/Engine/TranscriptMetaCache.swift \
+        Sources/Engine/ClaudeSessionRegistry.swift \
         Sources/Models/SessionState.swift \
         Sources/Models/Discovery.swift \
         -o "$BIN"
