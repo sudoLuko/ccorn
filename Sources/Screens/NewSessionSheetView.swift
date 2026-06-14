@@ -26,6 +26,11 @@ struct NewSessionSheetView: View {
         }
         .frame(width: 480)
         .background(Color(.windowBackgroundColor))
+        // Click-away resigns a focused field instead of trapping focus until
+        // Return; the fields write their binding live, so the value is already
+        // captured. (The sheet is its own window, so the main window's resigner
+        // does not reach it.)
+        .endsEditingOnOutsideClick()
     }
 
     // MARK: Header

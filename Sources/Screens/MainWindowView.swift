@@ -46,6 +46,10 @@ struct MainWindowView: View {
         // false): the row marks gate their repeatForever motion on the
         // window's actual visibility (close, miniaturize, full occlusion).
         .environment(\.rowMotionEnabled, model.mainWindowOnScreen)
+        // Click-away ends an inline rename / group edit (the field commits on
+        // the resulting focus loss). The sheets above are separate windows and
+        // carry their own resigner.
+        .endsEditingOnOutsideClick()
     }
 }
 
@@ -234,6 +238,14 @@ private struct GroupNameField: View {
             .focused($focused)
             .onSubmit { model.commitGroupName(group.id, to: draft) }
             .onExitCommand { model.cancelGroupEdit() }
+            // Outside click resigns first responder (the window-root resigner);
+            // commit the typed name on focus loss, the same as Return. Guarded
+            // so Escape (cancelGroupEdit clears the id first) and Enter's own
+            // commit don't re-fire it.
+            .onChange(of: focused) { focused in
+                guard !focused, model.editingGroupId == group.id else { return }
+                model.commitGroupName(group.id, to: draft)
+            }
             .padding(.horizontal, 3)
             .overlay(
                 RoundedRectangle(cornerRadius: 3)

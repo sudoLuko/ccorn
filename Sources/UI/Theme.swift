@@ -349,6 +349,67 @@ struct FilledButton: View {
     }
 }
 
+// MARK: - Outside-click commit
+
+extension View {
+    /// Standard macOS "click-away ends the edit" behaviour for inline
+    /// `TextField`s. A `.plain` field (the rename / group editors) or a sheet
+    /// field lives inside a custom SwiftUI surface — a `ScrollView`/`LazyVStack`
+    /// of tap-gesture rows, a sidebar `List`, a sheet — with no focusable
+    /// container to steal first responder, so clicking another row or empty
+    /// space leaves the field editor first responder and the edit can only be
+    /// ended with Return. Apply this to the hosting window's root: while any
+    /// field in the window is editing, a left click outside that field's editor
+    /// resigns first responder, which flips the field's `@FocusState` to false.
+    /// Editors whose only other commit path is Return pair this with an
+    /// `onChange(of:)` focus-loss commit (see SessionRowView / GroupNameField);
+    /// sheet fields write their binding live, so resigning is the whole job.
+    func endsEditingOnOutsideClick() -> some View {
+        background(OutsideClickResigner())
+    }
+}
+
+/// Installs one window-local left-mouse-down monitor for the lifetime of the
+/// view it backs (mirrors the always-on key monitor in MainWindowController).
+/// The closure is a no-op unless a text field editor is first responder, so the
+/// per-click cost when nothing is being edited is a single cast.
+private struct OutsideClickResigner: NSViewRepresentable {
+    func makeNSView(context: Context) -> ResignerView { ResignerView() }
+    func updateNSView(_ view: ResignerView, context: Context) {}
+    static func dismantleNSView(_ view: ResignerView, coordinator: ()) { view.stop() }
+
+    final class ResignerView: NSView {
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window == nil ? stop() : start()
+        }
+
+        private func start() {
+            guard monitor == nil else { return }
+            // Returning the event keeps the click's normal action (selecting the
+            // clicked row, pressing a button) — so the edit ends AND the click
+            // acts, exactly the platform default.
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+                guard let window = self?.window, event.window === window,
+                      let editor = window.firstResponder as? NSText else { return event }
+                let editorFrame = editor.convert(editor.bounds, to: nil)
+                if !editorFrame.contains(event.locationInWindow) {
+                    window.makeFirstResponder(nil)
+                }
+                return event
+            }
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+        }
+
+        deinit { stop() }
+    }
+}
+
 // MARK: - Timestamps
 
 /// Short relative timestamp in the style of the list-rows reference

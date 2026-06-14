@@ -134,6 +134,15 @@ struct SessionRowView: View {
             .disabled(model.renameInFlight)
             .onSubmit { model.commitRename(row, to: renameDraft) }
             .onExitCommand { model.cancelRename() }
+            // Clicking outside resigns first responder (the window-root
+            // resigner), which lands here as a focus loss: commit, the same as
+            // Return. Guarded so Escape (cancelRename clears the id first),
+            // Enter's own commit, and the in-flight disable don't re-fire it.
+            .onChange(of: renameFocused) { focused in
+                guard !focused, model.renamingRowId == row.id, !model.renameInFlight
+                else { return }
+                model.commitRename(row, to: renameDraft)
+            }
             .padding(.horizontal, 3)
             .overlay(
                 RoundedRectangle(cornerRadius: 3)
