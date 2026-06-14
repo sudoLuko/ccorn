@@ -292,6 +292,24 @@ struct AttentionWord: View {
     }
 }
 
+// MARK: - Bypass marker
+
+/// At-a-glance marker for a session running with permissions bypassed. This is
+/// NOT a status mark — the row still shows exactly one of those. It is a
+/// separate, monochrome glyph in `secondary`: bypass is a property, not a
+/// severity, and the status marks own the only color in the app, so this stays
+/// colorless to avoid reading as an alert. Shared so the main-window row (and,
+/// later, the popover) render it identically.
+struct BypassMark: View {
+    var body: some View {
+        Image(systemName: "shield.slash")
+            .font(.system(size: 11))
+            .foregroundColor(.secondary)
+            .help("Running with permissions bypassed — permission checks are skipped")
+            .accessibilityLabel("Bypass mode")
+    }
+}
+
 // MARK: - Corn mark
 
 /// CCorn's shared brand glyph: the OpenMoji ear-of-corn (`CornGlyph` asset —

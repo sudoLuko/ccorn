@@ -19,16 +19,23 @@ struct SessionRecord: Codable, Identifiable, Equatable {
     /// record's uuid like everything else, so it is pruned and retained with
     /// the record.
     var groupIDs: [String]
+    /// The flags CCorn launched this session with. Persisted because the CLI
+    /// does NOT keep them across `--resume` (verified on 2.1.173) — a restart
+    /// must re-apply them or the session silently drops to its default posture.
+    /// nil for sessions CCorn did not start (adopted/reconciled): there is no
+    /// known config to re-apply, so they resume plainly.
+    var launchConfig: SessionLaunchConfig?
 
     var id: String { uuid }
 
     init(uuid: String, path: String, title: String, archived: Bool = false,
-         groupIDs: [String] = []) {
+         groupIDs: [String] = [], launchConfig: SessionLaunchConfig? = nil) {
         self.uuid = uuid
         self.path = path
         self.title = title
         self.archived = archived
         self.groupIDs = groupIDs
+        self.launchConfig = launchConfig
     }
 
     /// Field-by-field defaults (the CCornSettings rule) so a sessions.json
@@ -40,6 +47,7 @@ struct SessionRecord: Codable, Identifiable, Equatable {
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         groupIDs = try c.decodeIfPresent([String].self, forKey: .groupIDs) ?? []
+        launchConfig = try c.decodeIfPresent(SessionLaunchConfig.self, forKey: .launchConfig)
     }
 }
 
@@ -91,6 +99,10 @@ final class LiveSession: ObservableObject {
     /// runs after every apply — no need to publish.
     var authNotice: String?
     var rcPlanNotice: String?
+    /// True when the session is running with permissions bypassed (detector pane
+    /// signal). Read only during rebuildRows like the notices above, so not
+    /// published — the row it produces republishes on change.
+    var bypassActive = false
 
     #if DEBUG
     /// Shakedown identity, captured at init (deinit is nonisolated, so it must
@@ -151,5 +163,6 @@ final class LiveSession: ObservableObject {
         rcCache = result.rcCache
         authNotice = result.authNotice
         rcPlanNotice = result.rcPlanNotice
+        bypassActive = result.bypassActive
     }
 }

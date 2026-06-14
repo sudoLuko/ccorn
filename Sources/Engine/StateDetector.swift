@@ -59,6 +59,11 @@ struct DetectionResult: Sendable {
     /// The CLI's own line when remote control failed for plan/credential
     /// reasons (section 8's plan-restriction alert).
     var rcPlanNotice: String?
+    /// True when the pane footer reports permissions are being bypassed right
+    /// now — a session launched with `--dangerously-skip-permissions` or one the
+    /// user escalated into bypass mid-session (Shift+Tab). Drives the row's
+    /// bypass marker; reflects ACTUAL runtime state, not just the launch flag.
+    var bypassActive: Bool = false
 }
 
 /// Caches the bridge-session transcript check so the 3s refresh hot path does
@@ -123,6 +128,14 @@ struct StateDetector: Sendable {
     static let rcChipConnecting = ["/rc connecting", "/rc reconnecting"]
     static let rcChipFailed = "/rc failed"
 
+    /// Active-bypass footer: a session running with permission checks skipped —
+    /// launched with `--dangerously-skip-permissions`, or escalated into bypass
+    /// mid-session via Shift+Tab (the `--allow-dangerously-skip-permissions`
+    /// path). Claude renders a status-bar line like `⏵ bypass permissions on`;
+    /// matched on the core phrase, case-insensitively, so the leading glyph and
+    /// spacing can vary across CLI versions without breaking detection.
+    static let bypassMarker = "bypass permissions on"
+
     /// Rendered ONLY while Claude is actively executing (verified on 2.1.169 and
     /// 2.1.170): the `esc to interrupt` hint accompanies the live spinner/status
     /// line and disappears the moment the turn finishes. Tool-call markers like
@@ -173,6 +186,30 @@ struct StateDetector: Sendable {
         "Press Enter to open your browser and sign in",
     ]
 
+    /// Fatal launch errors that make `claude` exit immediately, leaving no child
+    /// process — so the spawn watch times out and would otherwise report the
+    /// generic "no claude process appeared". The clearest case is the bypass root
+    /// refusal (`--dangerously-skip-permissions cannot be used with root/sudo
+    /// privileges …`). Matched loosely so version wording can drift.
+    static let launchFatalPhrases = [
+        "cannot be used with root",
+        "cannot be used with sudo",
+    ]
+
+    /// The CLI's own fatal-launch line if the pane shows one (e.g. the bypass
+    /// root refusal), nil otherwise — so the failed-start alert can lead with
+    /// Claude Code's words instead of a generic message.
+    func launchFatalError(pane: String) -> String? {
+        for line in pane.split(whereSeparator: \.isNewline) {
+            if Self.launchFatalPhrases.contains(where: {
+                line.localizedCaseInsensitiveContains($0)
+            }) {
+                return Self.cleanTUILine(line)
+            }
+        }
+        return nil
+    }
+
     /// Remote-control plan/credential failure phrases (section 8's
     /// plan-restriction alert). Matched as a pane *line* containing
     /// "remote control" plus a failure word, so the stable footer string
@@ -211,6 +248,11 @@ struct StateDetector: Sendable {
         if pane.contains(Self.remoteControlMarker) { return true }
         if pane.contains(Self.rcChipActive) { return true }
         return Self.rcChipConnecting.contains { pane.contains($0) }
+    }
+
+    /// True when the pane footer reports permissions are currently bypassed.
+    func showsBypass(pane: String) -> Bool {
+        pane.localizedCaseInsensitiveContains(Self.bypassMarker)
     }
 
     /// True when a pane shows any trace of ever having hosted Claude Code.
@@ -383,6 +425,7 @@ struct StateDetector: Sendable {
             || result.rcCache.hasBridgeSession(path: transcript?.transcriptPath,
                                                mtime: transcript?.modified)
         result.rcPlanNotice = rcPlanNotice(pane: pane)
+        result.bypassActive = showsBypass(pane: pane)
 
         let verdict = classifyPane(pane: pane,
                                    lastPaneHash: input.lastPaneHash,
