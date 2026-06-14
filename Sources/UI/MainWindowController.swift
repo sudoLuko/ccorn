@@ -16,6 +16,10 @@ final class MainWindowController {
     /// Local key monitor: Return on a selected, renameable row begins inline
     /// rename (macOS 13 has no SwiftUI .onKeyPress).
     private var keyMonitor: Any?
+    /// Drives the title-bar corn glyph's tint: full color while this is the
+    /// app's main (selected) window, grayscale when another window or app is.
+    /// Outlives the window so the binding survives a close/reopen cycle.
+    private let cornActivation = TitlebarMarkActivation()
 
     init() {
         // Global observers cover the main window, Settings, and any future
@@ -32,6 +36,15 @@ final class MainWindowController {
                 }
             })
         }
+    }
+
+    deinit {
+        // The controller is an app-lifetime singleton, so this is belt-and-
+        // suspenders, but it keeps the observer/monitor teardown explicit and
+        // leak-free if that ever changes. nonisolated deinit, but these AppKit
+        // teardown calls are safe off the main actor.
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
     }
 
     func show(model: AppModel) {
@@ -60,8 +73,11 @@ final class MainWindowController {
             // Icon Only" display-mode context menu on right-click, and there is
             // no API to suppress just those items. A titlebar accessory hosts
             // the same glyph with no toolbar and no context menu (spec §5.1:
-            // "No toolbar").
-            let cornHost = NSHostingView(rootView: CornMark(size: 16).padding(.trailing, 14))
+            // "No toolbar"). The old NSToolbar dimmed its item for free when
+            // the window resigned key; an accessory does not, so the glyph's
+            // active/inactive tint is driven explicitly via `cornActivation`
+            // (see the didBecomeMain/didResignMain observers below).
+            let cornHost = NSHostingView(rootView: TitlebarCornMark(activation: cornActivation))
             cornHost.frame = NSRect(x: 0, y: 0, width: 38, height: 24)
             let cornAccessory = NSTitlebarAccessoryViewController()
             cornAccessory.view = cornHost
@@ -92,6 +108,23 @@ final class MainWindowController {
                         window.occlusionState.contains(.visible)
                 }
             })
+
+            // Title-bar corn tint follows MAIN-window state, not key: the glyph
+            // stays full color under our own sheets and the menu-bar popover
+            // (which take key but not main) and desaturates only when another
+            // real window (e.g. Settings) or another app becomes selected,
+            // re-coloring when this window is reselected. Restores the dimming
+            // the dropped NSToolbar gave for free. Scoped to this window;
+            // removed in deinit.
+            for name in [NSWindow.didBecomeMainNotification, NSWindow.didResignMainNotification] {
+                observers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main
+                ) { [weak self, weak window] _ in
+                    DispatchQueue.main.async {
+                        self?.cornActivation.isActive = window?.isMainWindow ?? false
+                    }
+                })
+            }
 
             // Return begins inline rename of the selected row (Finder-style),
             // complementing the double-click-title gesture. Scoped to this
@@ -157,6 +190,29 @@ final class MainWindowController {
             .buttonStyle(.plain)
             .help(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
             .accessibilityLabel(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
+        }
+    }
+
+    /// Observable tint state for the title-bar corn glyph, toggled by the
+    /// window's didBecomeMain/didResignMain observers.
+    @MainActor
+    private final class TitlebarMarkActivation: ObservableObject {
+        @Published var isActive = true
+    }
+
+    /// The trailing title-bar corn glyph. Full color while its window is the
+    /// app's main (selected) window, desaturated to grayscale otherwise. Tints
+    /// only this instance of `CornMark`; the shared glyph in the popover,
+    /// onboarding, and empty state is deliberately untouched.
+    private struct TitlebarCornMark: View {
+        @ObservedObject var activation: TitlebarMarkActivation
+
+        var body: some View {
+            CornMark(size: 16)
+                .grayscale(activation.isActive ? 0 : 1)
+                .opacity(activation.isActive ? 1 : 0.55)
+                .padding(.trailing, 14)
+                .animation(.easeInOut(duration: 0.15), value: activation.isActive)
         }
     }
 
