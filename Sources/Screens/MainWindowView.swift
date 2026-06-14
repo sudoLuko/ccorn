@@ -105,7 +105,7 @@ private struct SidebarView: View {
                                     set: { nav = $0 ?? .allSessions })) {
                 Section {
                     Text("All Sessions")
-                        .font(.subheadline.weight(nav == .allSessions ? .medium : .regular))
+                        .font(.subheadline)
                         .foregroundColor(.primary)
                         .tag(SidebarNav.allSessions)
                     Text("Archived")
@@ -172,7 +172,7 @@ private struct SidebarView: View {
     private func groupRow(_ group: SessionGroup) -> some View {
         HStack(spacing: 4) {
             Text(group.name)
-                .font(.subheadline.weight(nav == .group(group.id) ? .medium : .regular))
+                .font(.subheadline)
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
