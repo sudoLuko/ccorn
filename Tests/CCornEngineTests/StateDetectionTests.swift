@@ -74,6 +74,61 @@ struct StubPanes: PaneSource {
         #expect(verdict.hashChange == now)
     }
 
+    /// THE settle-cycle removal: when the previous poll showed live activity and
+    /// this one doesn't, the turn just finished and the pane change is only the
+    /// final render settling — so it flips to Running on THIS poll, not one
+    /// later. Same captured idle frame, same pane change; only the
+    /// previous-marker flag differs.
+    @Test func markerFallingEdgeFlipsToRunningImmediately() {
+        let working = Fixtures.paneText("working-midtask.txt")
+        let finished = Fixtures.paneText("idle-finished.txt")
+        let now = t0.addingTimeInterval(3)
+        #expect(detector.showsLiveActivity(pane: working))
+        #expect(!detector.showsLiveActivity(pane: finished))
+
+        // Previous poll saw the marker -> the marker present->absent edge is a
+        // finished turn -> Running now, no extra Working cycle.
+        let edge = detector.classifyPane(pane: finished,
+                                         lastPaneHash: StateDetector.sha256(working),
+                                         lastHashChange: t0,
+                                         wasShowingLiveActivity: true,
+                                         staleThreshold: 600,
+                                         now: now)
+        #expect(edge.state == .running)
+
+        // The marker-less renderer (previous poll showed no marker): the
+        // change-fallback is unchanged, so a changed pane still reads Working.
+        let fallback = detector.classifyPane(pane: finished,
+                                             lastPaneHash: StateDetector.sha256(working),
+                                             lastHashChange: t0,
+                                             wasShowingLiveActivity: false,
+                                             staleThreshold: 600,
+                                             now: now)
+        #expect(fallback.state == .working)
+    }
+
+    /// detect() carries the current frame's marker state back in the result, so
+    /// the next pass can recognise the falling edge. A live frame reports true;
+    /// the following idle frame reports false.
+    @Test func detectReportsLiveActivityForNextPass() {
+        let live = StubPanes(pane: Fixtures.paneText("working-midtask.txt"), shellPID: getpid())
+        let liveResult = detector.detect(input: DetectionInput(windowId: "@1", pid: getpid()),
+                                         panes: live, transcript: nil,
+                                         staleThreshold: 600, now: t0)
+        #expect(liveResult.state == .working)
+        #expect(liveResult.wasShowingLiveActivity)
+
+        let idle = StubPanes(pane: Fixtures.paneText("idle-finished.txt"), shellPID: getpid())
+        let idleResult = detector.detect(
+            input: DetectionInput(windowId: "@1", pid: getpid(),
+                                  lastPaneHash: StateDetector.sha256(Fixtures.paneText("working-midtask.txt")),
+                                  lastHashChange: t0,
+                                  wasShowingLiveActivity: true),
+            panes: idle, transcript: nil, staleThreshold: 600, now: t0.addingTimeInterval(3))
+        #expect(idleResult.state == .running)
+        #expect(!idleResult.wasShowingLiveActivity)
+    }
+
     // MARK: Waiting
 
     /// Permission/confirmation frame (the "trust this folder" prompt with

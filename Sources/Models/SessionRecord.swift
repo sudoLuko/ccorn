@@ -81,6 +81,10 @@ final class LiveSession: ObservableObject {
     // Detection bookkeeping (not UI-facing, so not published).
     var lastPaneHash: String?
     var lastHashChange: Date?
+    /// Whether the last pass saw the live-activity marker, so the next pass can
+    /// detect the marker present->absent edge (a finished turn) and flip to
+    /// Running on the same poll instead of one later.
+    var lastShowedLiveActivity = false
     var rcCache = BridgeSessionCache()
     /// CLI-authored auth/plan failure lines from the latest detection pass
     /// (section 8 alerts + row tooltips). Read only during rebuildRows, which
@@ -132,6 +136,7 @@ final class LiveSession: ObservableObject {
                        pid: pid,
                        lastPaneHash: lastPaneHash,
                        lastHashChange: lastHashChange,
+                       wasShowingLiveActivity: lastShowedLiveActivity,
                        rcCache: rcCache)
     }
 
@@ -142,6 +147,7 @@ final class LiveSession: ObservableObject {
         remoteControlActive = result.remoteControlActive
         lastPaneHash = result.lastPaneHash
         lastHashChange = result.lastHashChange
+        lastShowedLiveActivity = result.wasShowingLiveActivity
         rcCache = result.rcCache
         authNotice = result.authNotice
         rcPlanNotice = result.rcPlanNotice

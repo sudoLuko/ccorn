@@ -19,17 +19,25 @@ struct DetectionInput: Sendable {
     var pid: Int32?
     var lastPaneHash: String?
     var lastHashChange: Date?
+    /// Whether the previous pass saw the live-activity marker. Lets `classifyPane`
+    /// recognise the marker present->absent edge (a finished turn) and flip
+    /// straight to Running, instead of the change-fallback holding Working for
+    /// one more poll. Defaults false so first observations and marker-less
+    /// renderers behave exactly as before.
+    var wasShowingLiveActivity: Bool
     var rcCache: BridgeSessionCache
 
     init(windowId: String?,
          pid: Int32?,
          lastPaneHash: String? = nil,
          lastHashChange: Date? = nil,
+         wasShowingLiveActivity: Bool = false,
          rcCache: BridgeSessionCache = BridgeSessionCache()) {
         self.windowId = windowId
         self.pid = pid
         self.lastPaneHash = lastPaneHash
         self.lastHashChange = lastHashChange
+        self.wasShowingLiveActivity = wasShowingLiveActivity
         self.rcCache = rcCache
     }
 }
@@ -41,6 +49,9 @@ struct DetectionResult: Sendable {
     var remoteControlActive: Bool
     var lastPaneHash: String?
     var lastHashChange: Date?
+    /// Whether this pass saw the live-activity marker, carried back so the next
+    /// pass can detect the present->absent edge (see `DetectionInput`).
+    var wasShowingLiveActivity: Bool
     var rcCache: BridgeSessionCache
     /// The CLI's own auth-error line when the pane shows a login prompt
     /// (docs/CCORN_SPEC.md section 8: surface the CLI's text, not a canned string).
@@ -323,6 +334,7 @@ struct StateDetector: Sendable {
                                      remoteControlActive: false,
                                      lastPaneHash: input.lastPaneHash,
                                      lastHashChange: input.lastHashChange,
+                                     wasShowingLiveActivity: input.wasShowingLiveActivity,
                                      rcCache: input.rcCache)
 
         var livePID = input.pid.flatMap { ProcessControl.isAlive($0) ? $0 : nil }
@@ -375,11 +387,13 @@ struct StateDetector: Sendable {
         let verdict = classifyPane(pane: pane,
                                    lastPaneHash: input.lastPaneHash,
                                    lastHashChange: input.lastHashChange,
+                                   wasShowingLiveActivity: input.wasShowingLiveActivity,
                                    staleThreshold: staleThreshold,
                                    now: now)
         result.state = verdict.state
         result.lastPaneHash = verdict.hash
         result.lastHashChange = verdict.hashChange
+        result.wasShowingLiveActivity = showsLiveActivity(pane: pane)
         if verdict.state == .needsAuth {
             result.authNotice = authNotice(pane: pane)
         }
@@ -402,16 +416,25 @@ struct StateDetector: Sendable {
     func classifyPane(pane: String,
                       lastPaneHash: String?,
                       lastHashChange: Date?,
+                      wasShowingLiveActivity: Bool = false,
                       staleThreshold: TimeInterval,
                       now: Date) -> (state: SessionState, hash: String, hashChange: Date) {
         let hash = Self.sha256(pane)
         let hashChange = (hash != lastPaneHash) ? now : (lastHashChange ?? now)
         let changedSinceLastPoll = (lastPaneHash != nil && hash != lastPaneHash)
+        let liveNow = showsLiveActivity(pane: pane)
 
-        if showsLiveActivity(pane: pane) { return (.working, hash, hashChange) }
+        if liveNow { return (.working, hash, hashChange) }
         if authNotice(pane: pane) != nil { return (.needsAuth, hash, hashChange) }
         if isWaiting(pane: pane) { return (.waiting, hash, hashChange) }
-        if changedSinceLastPoll { return (.working, hash, hashChange) }
+        // Change-fallback (covers marker-less renderers): a changed pane reads as
+        // Working — EXCEPT on the live-activity present->absent edge. There the
+        // turn just finished (the marker "disappears the moment the turn
+        // finishes"), and the change is only the final render settling, so flip
+        // straight to the idle classification below instead of costing one more
+        // poll. When the marker was never involved (wasShowingLiveActivity ==
+        // false), this is unchanged from before.
+        if changedSinceLastPoll && !wasShowingLiveActivity { return (.working, hash, hashChange) }
 
         // Idle: Running, promoted to Stale if the pane hasn't changed past threshold.
         let state: SessionState =
