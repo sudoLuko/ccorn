@@ -90,6 +90,26 @@ import Testing
         #expect(TmuxController.shellQuote("'") == "''\\'''")
     }
 
+    // MARK: Per-client view-session naming (Open in Terminal isolation)
+
+    @Test func viewSessionNameDerivesFromWindowId() {
+        // The `@` is stripped so the name is a tmux-safe session token that
+        // still reads back to its window in `tmux ls`.
+        #expect(TmuxController.uniqueViewSessionName(forWindowId: "@22", taken: [])
+                == "ccorn-view-22")
+    }
+
+    @Test func viewSessionNameDisambiguatesOnCollision() {
+        // Two terminals attached to the same window get distinct view sessions
+        // (a second `new-session -s <name>` would otherwise fail as a dup).
+        let taken: Set<String> = ["ccorn-view-22"]
+        #expect(TmuxController.uniqueViewSessionName(forWindowId: "@22", taken: taken)
+                == "ccorn-view-22-2")
+        #expect(TmuxController.uniqueViewSessionName(forWindowId: "@22",
+                                                     taken: taken.union(["ccorn-view-22-2"]))
+                == "ccorn-view-22-3")
+    }
+
     // MARK: Aggregate-mark severity ordering
 
     @Test func aggregatePicksWorstPresentation() {

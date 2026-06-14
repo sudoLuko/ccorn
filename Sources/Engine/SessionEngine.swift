@@ -650,6 +650,11 @@ final class SessionEngine: ObservableObject {
         }
 
         let reconciled = await Task.detached { () -> [Reconciled] in
+            // Reap "Open in Terminal" view sessions left by a crashed terminal
+            // before enumerating windows; destroy-unattached covers the normal
+            // close, this is the launch backstop (a view never holds a window
+            // the managed session doesn't, so this can't drop a real session).
+            tmux.killStrayViewSessions()
             guard tmux.hasSession() else { return [] }
             let persisted = store.loadRecords()
             let index = discovery.transcriptIndex()

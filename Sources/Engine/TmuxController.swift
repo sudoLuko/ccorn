@@ -245,4 +245,78 @@ struct TmuxController: Sendable {
         while taken.contains("\(base)-\(n)") { n += 1 }
         return "\(base)-\(n)"
     }
+
+    // MARK: Per-client view sessions (Open in Terminal)
+
+    /// Prefix for the throwaway grouped "view" sessions that "Open in Terminal"
+    /// creates — one per attached terminal. A view shares `ccorn`'s window list
+    /// but keeps its OWN current window and active pane, so two terminals no
+    /// longer mirror each other's window switching or share keystrokes the way
+    /// every client attached to one plain session does (both are session-level).
+    /// Named distinctly from the managed session so the launch sweep can spot
+    /// and reap strays.
+    static let viewSessionPrefix = "ccorn-view"
+
+    /// Every session name on the server: the managed `ccorn` plus any live views.
+    func sessionNames() -> [String] {
+        let r = tmux(["list-sessions", "-F", "#{session_name}"])
+        guard r.ok else { return [] }
+        return r.stdout
+            .split(whereSeparator: { $0 == "\n" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// A view-session name unique among `taken`. Derived from the window id so
+    /// `tmux ls` reads back to a window; `-2`, `-3` on collision when several
+    /// terminals attach to the same window. The id is digits after `@`, so the
+    /// result is already a tmux-safe session token (no `.`/`:`/space to escape).
+    static func uniqueViewSessionName(forWindowId windowId: String, taken: Set<String>) -> String {
+        let suffix = windowId.replacingOccurrences(of: "@", with: "")
+        let base = "\(viewSessionPrefix)-\(suffix)"
+        if !taken.contains(base) { return base }
+        var n = 2
+        while taken.contains("\(base)-\(n)") { n += 1 }
+        return "\(base)-\(n)"
+    }
+
+    /// The shell command a Terminal runs to attach to `windowId` through a fresh
+    /// grouped view session. `new-session -t <ccorn>` groups onto the shared
+    /// window list; `-s <view>` is this terminal's private view; `select-window`
+    /// points it at the requested window by stable id (a grouped session does
+    /// NOT inherit the leader's current window — it lands on window 0, so the
+    /// select is required). `destroy-unattached on` reaps the view the moment
+    /// the terminal closes; it MUST be set with the client already attached
+    /// (set on a *detached* session, tmux destroys it immediately), which is why
+    /// it rides in this attaching command rather than being pre-set. Honors the
+    /// debug socket+session overrides so a shakedown attach lands on the isolated
+    /// server, not the user's real `ccorn`. tmux's command separator is a
+    /// single-quoted `';'` — the shell hands tmux a literal `;`, avoiding
+    /// backslash escaping inside the osascript `do script` string.
+    func attachViewCommand(windowId: String) -> String {
+        let view = Self.uniqueViewSessionName(forWindowId: windowId, taken: Set(sessionNames()))
+        let socket = Self.socketName.map { "-L \($0) " } ?? ""
+        return "tmux \(socket)new-session -t \(Self.sessionName) -s \(view)"
+            + " ';' set-option -t \(view) destroy-unattached on"
+            + " ';' select-window -t '\(view):\(windowId)'"
+    }
+
+    /// Reap view sessions orphaned by a crashed terminal — the backstop to
+    /// `destroy-unattached`, which already covers the normal close. Only
+    /// unattached views are killed; one with a live client is in active use.
+    /// Killing a view never harms the shared windows (they belong to the group,
+    /// kept alive by the managed session). Run from the launch reconcile sweep.
+    func killStrayViewSessions() {
+        let r = tmux(["list-sessions", "-F", "#{session_name}\t#{session_attached}"])
+        guard r.ok else { return }
+        for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
+            let cols = line.components(separatedBy: "\t")
+            guard cols.count >= 2 else { continue }
+            let name = cols[0]
+            let attached = cols[1].trimmingCharacters(in: .whitespaces)
+            if name.hasPrefix(Self.viewSessionPrefix + "-"), attached == "0" {
+                tmux(["kill-session", "-t", name])
+            }
+        }
+    }
 }

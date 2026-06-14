@@ -73,6 +73,38 @@ for ((i = 1; i <= COUNT; i++)); do
     sleep 2   # let the window settle / be seen before the next pops
 done
 
+# --- Isolation regression: the multi-window bug fix --------------------------
+# Each Open-in-Terminal must attach through its OWN grouped "view" session, so
+# the terminals don't mirror window-switching or share keystrokes. Verify one
+# attached view per terminal, the shared session itself unattached (no client to
+# mirror), and a distinct current window per view. Reported on teardown via the
+# e2e-lib FAILS counter (run with HOLD_SECONDS for the auto-finish path).
+sleep 1
+views=$(TMUX list-sessions -F '#{session_name} #{session_attached}' 2>/dev/null | awk '$1 ~ /^ccorn-view-/{print}')
+view_count=$(printf '%s\n' "$views" | grep -c . || true)
+if [[ "$view_count" -eq "$COUNT" ]]; then
+    pass "isolation: $view_count grouped view session(s) for $COUNT terminal(s)"
+else
+    fail "isolation: expected $COUNT view sessions, found $view_count"
+    [[ -n "$views" ]] && printf '       %s\n' "$views"
+fi
+
+base_attached=$(TMUX display-message -t "$SESSION" -p '#{session_attached}' 2>/dev/null || echo '?')
+if [[ "$base_attached" == "0" ]]; then
+    pass "isolation: shared '$SESSION' session has no attached client (no mirroring)"
+else
+    fail "isolation: '$SESSION' has $base_attached client(s) — terminals would mirror"
+fi
+
+distinct=$(printf '%s\n' "$views" | awk '{print $1}' | while read -r v; do
+    [[ -n "$v" ]] && TMUX display-message -t "$v" -p '#{window_id}'
+done | sort -u | grep -c . || true)
+if [[ "$distinct" -eq "$COUNT" ]]; then
+    pass "isolation: each view on a distinct current window ($distinct/$COUNT)"
+else
+    fail "isolation: views share current windows ($distinct distinct of $COUNT)"
+fi
+
 echo
 log "$COUNT session(s) attached to the hermetic '$SESSION' session (socket: $SOCKET)."
 log "Answer any 'trust this folder' prompt in each Terminal as you would normally."

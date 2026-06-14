@@ -103,7 +103,7 @@ CCorn tracks the live PID of the `claude` process for each managed session. With
 - New session command: `tmux send-keys -t <window-id> "claude --rc" Enter`.
 - Resume command: `tmux send-keys -t <window-id> "claude --resume <uuid> --rc" Enter`.
 - Capture for state detection: `tmux capture-pane -t <window-id> -p` (the visible frame; see Session States for why scrollback is unreliable here).
-- "Open in Terminal": attach by window ID via `osascript`; escape the AppleScript string (see Window Naming and Identity).
+- "Open in Terminal": attach each terminal through its own grouped "view" session via `osascript`, not the shared `ccorn` session directly (see Window Naming and Identity).
 
 ### Process Identification
 
@@ -119,7 +119,7 @@ The tmux window name is a display/attach label, not a reliable key. Folder names
 
 - Sanitize window names: replace spaces, dots, colons, and other tmux-significant characters with `-` before creating the window; append `-2`, `-3` on collision.
 - Target programmatic commands (`send-keys`, `capture-pane`, `kill-window`, `rename-window`) by the stable window ID (`@N`) captured at creation. The `ccorn:<name>` forms shown elsewhere in this doc are illustrative and are only safe while names are unique and unchanged, so resolve them to the window ID (or an `@ccorn_id` tag) first. Optionally tag the window: `tmux set-option -w -t <window-id> @ccorn_id <session-uuid>` (the `-w` scopes it to the window) and resolve windows by it. This is what makes Launch Reconciliation and Rename robust.
-- For "Open in Terminal," attach to the session and select the window by ID (`tmux attach -t ccorn \; select-window -t <window-id>`), or escape the window name in the `osascript` string, so spaces or quotes do not break the AppleScript.
+- For "Open in Terminal," do NOT attach the terminal directly to the shared `ccorn` session (`tmux attach -t ccorn`). The current window and the active pane are session-level state shared by every attached client, so a second terminal mirrors the first: selecting a window — or CCorn creating a new one — switches all attached terminals, keystrokes route to the single shared pane, and clients are clamped to the smallest one's size. Instead attach each terminal through its own throwaway grouped session that shares `ccorn`'s window list but holds an independent current window and active pane: `tmux new-session -t ccorn -s <view> ';' set-option -t <view> destroy-unattached on ';' select-window -t '<view>:<window-id>'`. Name views `ccorn-view-<window-id>` (unique-suffixed on collision). `destroy-unattached` reaps a view when its terminal closes and MUST be set with the client attached (set on a detached session, tmux destroys it immediately); the launch reconcile sweep kills any unattached `ccorn-view-*` a crashed terminal left behind. Chain the commands with a single-quoted `';'` (the shell hands tmux a literal `;` separator) so no backslash needs escaping inside the `osascript` `do script` string, and select the window by `@N` id, never the name, so spaces or quotes can't break the target.
 
 Two names exist and must not be confused: the **tmux window name** (display/attach only) and the **Claude session title** set by `/rename` (which syncs to claude.ai and mobile). On rename in CCorn, send `/rename <new>` to update the Claude title *and* run `tmux rename-window` so they stay in sync. CCorn displays the Claude title and targets by window ID. To set the title when CCorn starts a session, pass it as the name argument (`claude --rc "<title>"`) rather than a follow-up `/rename`; reserve `/rename` for retitling a session that is already running.
 
@@ -882,10 +882,10 @@ verification with the list's existing tap/right-click stack.
 ### 6.5 Open Session in Terminal
 
 1. User clicks “Open in Terminal” in `...` menu
-1. App opens Terminal with tmux attach using osascript: `osascript -e 'tell application "Terminal" to do script "tmux attach -t ccorn:<window-name>"'`
-1. New terminal window opens, attached directly to that session’s tmux window
-1. User interacts directly in terminal
-1. User closes terminal window — session stays alive in tmux, CCorn continues tracking
+1. App opens Terminal via osascript, attaching through a per-terminal grouped **view** session (its own current window + active pane) rather than the shared `ccorn` session directly — so multiple open terminals don’t mirror each other’s window switching or share keystrokes (Window Naming and Identity has the exact command and rationale)
+1. New terminal window opens, showing that session’s tmux window
+1. User interacts directly in terminal — switching windows or typing affects only this terminal
+1. User closes terminal window — the view session is reaped (`destroy-unattached`), the underlying session stays alive in tmux, and CCorn continues tracking
 
 ### 6.6 Kill Session
 
