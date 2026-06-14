@@ -119,9 +119,6 @@ struct SessionRowView: View {
             if !isRenaming {
                 AttentionWord(presentation: row.presentation)
             }
-            if row.isBypass {
-                BypassMark()
-            }
         }
         .animation(.easeInOut(duration: 0.25), value: row.presentation)
     }

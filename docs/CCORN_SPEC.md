@@ -358,17 +358,16 @@ the specific problem, and the mark's tooltip carries the full reason
 (including the underlying activity a No-remote session was in). Waiting is
 routine, not broken: it keeps its amber dot plus the "Needs input" word.
 
-**Bypass marker (a marker, not a status mark):**
-A session running with permissions bypassed shows a small monochrome
-`shield.slash` glyph (`Color.secondary`) after its name — a SEPARATE marker, so
-the one-status-mark-per-row rule is untouched (the dot/triangle still shows the
-lifecycle state). It is deliberately colorless: bypass is a property, not a
-severity, and the status marks own the only color in the app, so a colored
-bypass glyph would misread as an alert. It is driven by the detector's pane
-footer signal (`bypass permissions on`), so it reflects ACTUAL runtime bypass —
-including a session escalated into bypass mid-session (Shift+Tab) and adopted
-sessions — and additionally by a launch config of Bypass for sessions CCorn
-just started. See 5.5 (New Session Defaults) and 6.3 (New Session).
+**Bypass detection (no on-row marker for now):**
+Bypass is still tracked at runtime — the detector's pane footer signal
+(`bypass permissions on`) flags a session running with permissions bypassed,
+including one escalated mid-session (Shift+Tab) or an adopted session, plus any
+session CCorn started with a Bypass launch config — and the row model carries
+the resulting `isBypass` flag. No on-row marker is currently rendered for it:
+earlier treatments (a monochrome `shield.slash`, then `bolt.fill`, after the
+name) read either as an alert or as "fast," so any visible marker is deferred
+until a treatment fits the one-status-mark-per-row and status-marks-own-the-
+only-color rules. See 5.5 (New Session Defaults) and 6.3 (New Session).
 
 -----
 
