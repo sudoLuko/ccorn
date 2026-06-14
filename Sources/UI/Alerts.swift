@@ -21,30 +21,30 @@ enum Alerts {
     /// icon (the appiconset) is deliberately left with its tile.
     private static var cornIcon: NSImage? { NSImage(named: "CornGlyph") }
 
-    /// Kill confirmation (flow 6.6): destructive, with Kill as the default
-    /// action so Return confirms — mirrors Start Session's default button.
-    static func confirmKill(name: String) -> Bool {
+    /// Stop confirmation (flow 6.6): Stop is the default action so Return
+    /// confirms — mirrors Start Session's default button. Stopping is
+    /// recoverable (the session survives as Stopped and can be restarted), so
+    /// this is a plain default button, not the old destructive-red treatment.
+    static func confirmStop(name: String) -> Bool {
         activate()
         let alert = NSAlert()
         alert.icon = cornIcon
-        alert.messageText = "Kill \(name)?"
-        alert.informativeText = "This will end the session. This cannot be undone."
+        alert.messageText = "Stop \(name)?"
+        alert.informativeText = "The session will stop but stay in your list. You can restart it anytime."
         alert.alertStyle = .warning
         // First button is the default (Return); a button titled "Cancel" gets
-        // Escape automatically. macOS deliberately ignores Return on a button
-        // flagged `hasDestructiveAction` (a safety block against an accidental
-        // destructive default), so tint the bezel red instead to keep the
-        // destructive look while letting Return confirm. Escape and Cancel stay
-        // the safety valve against an accidental kill.
-        let kill = alert.addButton(withTitle: "Kill")
-        kill.bezelColor = .systemRed
+        // Escape automatically. Stop is not destructive, so it needs neither
+        // `hasDestructiveAction` (which would block Return) nor a red bezel —
+        // a plain default button confirms on Return. Escape and Cancel stay the
+        // safety valve against an accidental stop of a live session.
+        alert.addButton(withTitle: "Stop")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Generic two-button confirmation; returns true when the action button is
     /// chosen. The action button is the default (archive/import are
-    /// deliberately lighter than Kill).
+    /// deliberately lighter than Stop).
     static func confirm(title: String, message: String, action: String,
                         destructive: Bool = false) -> Bool {
         activate()

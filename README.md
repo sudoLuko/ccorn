@@ -30,7 +30,7 @@ It is a process manager, not a chat interface. You keep talking to Claude in you
 
 - **Aggregate status in the menu bar.** The corn glyph reflects the most urgent session state across everything it manages.
 - **Triage popover.** Sessions that need attention float to the top; calm sessions stay behind a quiet disclosure.
-- **Full session manager.** A main window with every session: rename, group, archive, kill, restart, import.
+- **Full session manager.** A main window with every session: rename, group, archive, stop, restart, import.
 - **One-click handoff.** Open any session in Terminal (it is just a tmux window) or in the browser — a per-session deep link when remote control is active.
 - **Discovery.** Finds existing Claude Code sessions on your machine and offers to import and resume them.
 - **Notifications.** Get pinged when a session needs your input or dies.
@@ -41,7 +41,7 @@ Every session CCorn starts runs `claude --rc` in its own tmux window inside a si
 
 <img src="docs/images/main-window-demo.gif" width="760" alt="CCorn main window: sessions flipping between working, needs-input, signed-in, and restarted as a new one slides in and an old one is cleared">
 
-*The main window. Sessions flip between working, needs-input, and healthy in real time as a new one slides in and an old one is cleared, all in one list with rename, group, archive, kill, restart, and import.*
+*The main window. Sessions flip between working, needs-input, and healthy in real time as a new one slides in and an old one is cleared, all in one list with rename, group, archive, stop, restart, and import.*
 
 </div>
 
@@ -58,7 +58,7 @@ Status marks are the only color in CCorn. Every row shows exactly one mark, a co
 | ![amber](https://placehold.co/15x15/f59e0b/f59e0b.png) | **Sign in** | ▲ | Sign in | Login prompt is showing; sign-in needed |
 | ![amber](https://placehold.co/15x15/f59e0b/f59e0b.png) | **No remote** | ▲ | No remote | Alive, but remote control is not active past the grace period |
 | ![red](https://placehold.co/15x15/dc2626/dc2626.png) | **Crashed** | ▲ | Crashed | Process crashed or died unexpectedly |
-| ![grey](https://placehold.co/15x15/a1a1aa/a1a1aa.png) | **Stopped** | ○ | | You killed it; not running |
+| ![grey](https://placehold.co/15x15/a1a1aa/a1a1aa.png) | **Stopped** | ○ | | You stopped it; not running |
 | ![grey](https://placehold.co/15x15/71717a/71717a.png) | **Unmanaged** | ○ | | Discovered on your machine, not yet imported |
 
 The menu-bar corn itself takes on the most urgent state across everything it manages, so the icon alone tells you if anything needs you. Exact light and dark hex for every token lives in [docs/CCORN_SPEC.md](docs/CCORN_SPEC.md), section 3.

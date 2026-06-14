@@ -4,7 +4,7 @@ import SwiftUI
 
 /// UI-facing coordinator over the engine. Owns the 3s state poll, the
 /// FSEvents-driven discovery refresh, and the row models every screen renders.
-/// Milestone 3: also owns the full action surface — new session, kill,
+/// Milestone 3: also owns the full action surface — new session, stop,
 /// restart, archive, import, rename — plus onboarding completion, the
 /// first-run import flow, state-transition notifications, and auto-restart.
 @MainActor
@@ -854,11 +854,17 @@ final class AppModel: ObservableObject {
         Task { await runDiscovery() }
     }
 
-    // MARK: - Kill (flow 6.6)
+    // MARK: - Stop (flow 6.6)
 
-    func killSession(_ row: SessionRow) {
+    /// Stop a managed session: confirm, then run the engine-side kill
+    /// (`engine.killSession` — SIGKILL the process and tmux window) and persist
+    /// a Stopped record so the row survives as Stopped, restartable. The UI
+    /// verb is "Stop" because the outcome is a parked, recoverable session, not
+    /// a deleted one; the engine keeps the literal "kill" name for the
+    /// mechanism it performs.
+    func stopSession(_ row: SessionRow) {
         guard let windowId = row.windowId else { return }
-        guard Alerts.confirmKill(name: row.title) else { return }
+        guard Alerts.confirmStop(name: row.title) else { return }
         Task {
             await engine.killSession(windowId: windowId)
             await refreshAfterMutation()

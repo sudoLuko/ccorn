@@ -87,8 +87,8 @@ enum SessionMenu {
             })
             menu.addItem(groupsItem(for: row, model: model))
             menu.addItem(.separator())
-            menu.addItem(ActionMenuItem(title: "Kill Session", destructive: true) { [weak model] in
-                model?.killSession(row)
+            menu.addItem(ActionMenuItem(title: "Stop Session") { [weak model] in
+                model?.stopSession(row)
             })
             menu.addItem(ActionMenuItem(title: "Archive") { [weak model] in
                 model?.archiveSession(row)

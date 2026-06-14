@@ -93,7 +93,7 @@ CCorn tracks the live PID of the `claude` process for each managed session. With
 **Using the PID:**
 
 - Liveness/dead detection: `kill -0 <pid>` fails when the process is gone.
-- Kill and import-kill both use the canonical termination routine (see Terminating a Session).
+- Stop and import-kill both use the canonical termination routine (see Terminating a Session).
 
 **tmux session and windows:**
 
@@ -143,7 +143,7 @@ Persist as JSON under `~/Library/Application Support/CCorn/`. Archived state in 
 
 ### Terminating a Session
 
-One canonical routine, referenced by Kill, Archive, and Import:
+One canonical routine, referenced by Stop, Archive, and Import:
 
 1. If managed (has a tmux window): `tmux kill-window` by window ID. This sends SIGHUP to the pane's processes and usually ends `claude`.
 1. If the tracked PID is still alive (`kill -0` succeeds): `SIGTERM`, wait 5s, then `SIGKILL` if still alive.
@@ -325,7 +325,7 @@ the title; the routine states keep their word in the mark's tooltip.
 |Sign in     |Warning triangle    |Attention amber (same token)             |"Sign in"    |Login prompt showing; sign-in is the root cause|
 |No remote   |Warning triangle    |Attention amber (same token)             |"No remote"  |Alive, remote control not active past the grace|
 |Crashed     |Warning triangle    |Red `#dc2626`                            |"Crashed"    |Process crashed or died unexpectedly (Dead)    |
-|Stopped     |Empty circle        |Stopped outline (tertiaryLabel light / `#A1A1AA` dark+popover)|—|Manually killed by user, not running|
+|Stopped     |Empty circle        |Stopped outline (tertiaryLabel light / `#A1A1AA` dark+popover)|—|Manually stopped by user, not running|
 |Unmanaged   |Outline circle      |`#71717A` ring                           |—            |Discovered but not yet imported into CCorn     |
 
 **Dot size:** 7px diameter (hollow rings 1px — a 0.5px ring is invisible at 7px)  
@@ -340,7 +340,7 @@ Poll each session every 3 seconds with `tmux capture-pane -t <window-id> -p` (th
 - **Running (green):** Process is alive and remote control is active (see Remote Control in Section 2 for the detection signal and its fallback), but no Working or Waiting pattern matched. This is the default healthy idle state.
 - **Stale (slate):** Running state but pane output hash unchanged for longer than the user-defined threshold. Implementation: store a SHA256 hash of captured pane output each poll cycle. Compare to previous hash — if identical for longer than threshold → stale. Track last-hash-change timestamp per session.
 - **Dead (red):** The session's tracked PID is gone (`kill -0 <pid>` fails). Confirm against the process list (see Process Identification), matching by PID rather than a grep on the command line.
-- **Stopped (empty circle):** User-initiated kill — set by CCorn, not detected from process state.
+- **Stopped (empty circle):** User-initiated stop — set by CCorn, not detected from process state.
 - **Unmanaged (outline):** discovered via `~/.claude/projects/` (a project whose `cwd` resolves into a watch directory), or a live `claude` process running in such a directory, with no window in the `ccorn` session matching this project path. Not detected from a `.claude/` folder (see Session Discovery).
 
 **Note:** The literal footer string is `Remote Control active` (verified on 2.1.169). If a future Claude Code version changes the wording, the `bridge-session` JSONL record (see Remote control linkage) is the version-independent fallback.
@@ -666,7 +666,7 @@ Open in Terminal
 ───────────────
 Rename
 ───────────────
-Kill Session        ← red text (destructive)
+Stop Session        ← recoverable; session stays as Stopped
 Archive
 ───────────────
 Copy Session ID
@@ -703,11 +703,11 @@ Copy Session ID
 
 Both items adopt the session (take over the external `claude` → resume under CCorn, flow 6.10); “Open in Terminal” also attaches the fresh managed window. The take-over confirmation applies to either path.
 
-Kill Session requires a confirmation alert:
+Stop Session requires a confirmation alert:
 
-- Title: “Kill [session name]?”
-- Message: “This will end the session. This cannot be undone.”
-- Buttons: Kill (default, destructive red — Return confirms, mirroring Start Session's default button), Cancel (Escape backs out). Escape and Cancel stay the safety valve against an accidental confirm.
+- Title: “Stop [session name]?”
+- Message: “The session will stop but stay in your list. You can restart it anytime.”
+- Buttons: Stop (default — Return confirms, mirroring Start Session's default button; not destructive-red, since Stop is recoverable), Cancel (Escape backs out). Escape and Cancel stay the safety valve against an accidental stop of a live session.
 
 -----
 
@@ -890,11 +890,17 @@ verification with the list's existing tap/right-click stack.
 1. User interacts directly in terminal — switching windows or typing affects only this terminal
 1. User closes terminal window — the view session is reaped (`destroy-unattached`), the underlying session stays alive in tmux, and CCorn continues tracking
 
-### 6.6 Kill Session
+### 6.6 Stop Session
 
-1. User clicks “Kill Session” in `...` menu
-1. Confirmation alert appears: “Kill [name]? This will end the session. This cannot be undone.” Kill (default — Return confirms) / Cancel (Escape backs out)
+Stop is recoverable, not destructive: it ends the running process but keeps the
+session in the list as Stopped, restartable via flow 6.7. The UI verb is "Stop"
+because the outcome is a parked session; the engine still performs a literal
+kill (SIGTERM → SIGKILL) as the mechanism.
+
+1. User clicks “Stop Session” in `...` menu
+1. Confirmation alert appears: “Stop [name]? The session will stop but stay in your list. You can restart it anytime.” Stop (default — Return confirms) / Cancel (Escape backs out)
 1. User confirms
+1. CCorn persists a Stopped record (UUID, path, title) so the row survives as Stopped and can be restarted
 1. CCorn kills the tmux window by ID: `tmux kill-window -t <window-id>` (see Terminating a Session for the full SIGTERM/SIGKILL fallback)
 1. If the underlying `claude` process is still running after window kill: send `SIGTERM` to the PID first, wait 5 seconds, then `SIGKILL` if still running
 1. Row updates to stopped state (empty circle)
@@ -925,7 +931,7 @@ verification with the list's existing tap/right-click stack.
 
 1. User clicks “Archive” in `...` menu
 1. If session is stopped or dead → archives immediately, no confirmation
-1. If session is running → show confirmation alert: “This session is still running. Archive and stop it?” Cancel / Archive. This is intentionally lighter than the Kill confirmation — archive implies done, but worth one prompt since it kills a live session.
+1. If session is running → show confirmation alert: “This session is still running. Archive and stop it?” Cancel / Archive. Comparable in weight to the Stop confirmation — archive implies done, but worth one prompt since it stops a live session.
 1. User confirms (or session already stopped) → CCorn kills the tmux window (SIGTERM → 5s → SIGKILL on PID)
 1. Session record moved to archived state
 1. Row disappears from All Sessions
