@@ -107,7 +107,13 @@ final class DebugCommandChannel {
             return Self.dumpJSON(rows: model.rows, archived: model.archivedRows)
 
         case "new" where parts.count >= 2:
-            let result = await model.engine.startNewSession(directory: parts[1])
+            // Optional 2nd arg: a permission mode (auto/plan/acceptEdits/standard/
+            // allowBypass/bypass) so e2e can drive config-bearing launches and
+            // assert the resulting pane. Absent → the settings default.
+            let cfg = parts.count >= 3
+                ? SessionLaunchConfig(permissionMode: CCPermissionMode(rawValue: parts[2]) ?? .auto)
+                : nil
+            let result = await model.engine.startNewSession(directory: parts[1], config: cfg)
             await model.debugRefresh()
             return "new \(result)"
 

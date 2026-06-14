@@ -82,7 +82,8 @@ final class SessionEngine: ObservableObject {
     /// F2), so a record that survives relaunch is the only thing keeping the
     /// displayed name in sync with what claude.ai/mobile shows. Returns the
     /// window id and the captured claude PID.
-    func startNewSession(directory: String, title userTitle: String? = nil) async -> StartResult {
+    func startNewSession(directory: String, title userTitle: String? = nil,
+                         config: SessionLaunchConfig? = nil) async -> StartResult {
         // `label` names the tmux window and the `--rc` handle, which both need a
         // non-empty string. The persisted title is the user's chosen name, or
         // empty so the row falls through to Claude's AI title (as resume does):
@@ -90,6 +91,9 @@ final class SessionEngine: ObservableObject {
         // name and shadow the AI title forever.
         let label = userTitle ?? URL(fileURLWithPath: directory).lastPathComponent
         let storedTitle = userTitle ?? ""
+        // A new session inherits the user's configured default unless the New
+        // Session sheet passed an explicit per-session override.
+        let cfg = config ?? settings.defaultLaunchConfig
         let tmux = self.tmux
         let store = self.store
 
@@ -119,7 +123,9 @@ final class SessionEngine: ObservableObject {
             // single-quoted. Double-quote escaping is insufficient: inside double
             // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
             // title like `$(rm -rf ~)` would execute. Single quotes make it inert.
-            tmux.sendCommand(windowId: windowId, "claude --rc \(TmuxController.shellQuote(label))")
+            tmux.sendCommand(windowId: windowId,
+                             Self.claudeCommand(base: "claude --rc \(TmuxController.shellQuote(label))",
+                                                config: cfg))
             let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
             guard case let .started(_, pid) = outcome else {
                 return Launch(result: outcome, uuid: nil)
@@ -137,7 +143,8 @@ final class SessionEngine: ObservableObject {
             }
             if let uuid {
                 tmux.setCcornId(windowId: windowId, uuid: uuid)
-                store.upsert(SessionRecord(uuid: uuid, path: directory, title: storedTitle))
+                store.upsert(SessionRecord(uuid: uuid, path: directory, title: storedTitle,
+                                           launchConfig: cfg))
             }
             // No uuid (registry never appeared): fall back to the old behavior —
             // reconcile binds it on the next launch, though the title is then
@@ -147,7 +154,8 @@ final class SessionEngine: ObservableObject {
 
         if case let .started(windowId, pid) = launch.result {
             let live = LiveSession(
-                record: SessionRecord(uuid: launch.uuid ?? "", path: directory, title: storedTitle),
+                record: SessionRecord(uuid: launch.uuid ?? "", path: directory,
+                                      title: storedTitle, launchConfig: cfg),
                 windowId: windowId,
                 ccornTag: launch.uuid,
                 pid: pid,
@@ -162,16 +170,24 @@ final class SessionEngine: ObservableObject {
     /// explicit title is given the record keeps an empty title (or its persisted
     /// one) — `claude --resume` retains the session's existing title, so the row
     /// falls back to the transcript's ai-title rather than a fabricated name.
-    func resumeSession(uuid: String, directory: String, title: String? = nil) async -> StartResult {
+    func resumeSession(uuid: String, directory: String, title: String? = nil,
+                       config: SessionLaunchConfig? = nil) async -> StartResult {
         let tmux = self.tmux
         let store = self.store
         let windowName = title ?? URL(fileURLWithPath: directory).lastPathComponent
-        // Preserve a persisted title/archived flag unless explicitly retitled.
+        // `config` is the launch posture to re-apply (the flags do NOT survive
+        // --resume): restart passes the session's stored config; adopt/import
+        // pass nil for a plain resume. Preserve a persisted title/archived flag
+        // unless explicitly retitled, and carry over groupIDs + the stored
+        // config — `upsert` replaces the whole record, so anything not re-set
+        // here would be dropped.
         let record = await Task.detached { () -> SessionRecord in
             let existing = store.loadRecords().first { $0.uuid == uuid }
             return SessionRecord(uuid: uuid, path: directory,
                                  title: title ?? existing?.title ?? "",
-                                 archived: existing?.archived ?? false)
+                                 archived: existing?.archived ?? false,
+                                 groupIDs: existing?.groupIDs ?? [],
+                                 launchConfig: config ?? existing?.launchConfig)
         }.value
         let result = await Task.detached { () -> StartResult in
             let session = tmux.ensureSession()
@@ -186,7 +202,9 @@ final class SessionEngine: ObservableObject {
             tmux.setCcornId(windowId: windowId, uuid: uuid)
             // Single-quoted for the same reason as the title in startNewSession: this
             // command is typed into and evaluated by the pane's interactive shell.
-            tmux.sendCommand(windowId: windowId, "claude --resume \(TmuxController.shellQuote(uuid)) --rc")
+            tmux.sendCommand(windowId: windowId,
+                             Self.claudeCommand(base: "claude --resume \(TmuxController.shellQuote(uuid)) --rc",
+                                                config: config))
             let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
             if case .started = outcome {
                 store.upsert(record)
@@ -207,6 +225,18 @@ final class SessionEngine: ObservableObject {
         return result
     }
 
+    /// Assemble the `claude` command typed into a pane: the base invocation
+    /// (`--rc "<label>"` or `--resume <uuid> --rc`, already quoted) plus the
+    /// launch config's flag tokens, each token shell-quoted because the whole
+    /// string is evaluated by the pane's interactive shell. Quoting a bare
+    /// `--flag` is harmless; quoting a value (model alias, path, extra-arg) is
+    /// what keeps shell metacharacters in it inert. nil config → base only.
+    private nonisolated static func claudeCommand(base: String,
+                                                  config: SessionLaunchConfig?) -> String {
+        let flags = (config?.claudeFlagTokens() ?? []).map(TmuxController.shellQuote)
+        return ([base] + flags).joined(separator: " ")
+    }
+
     /// Poll for the claude child of the window's pane shell (up to 5s; node
     /// installs can be slow to spawn). On failure the orphan window is killed
     /// rather than left behind.
@@ -219,7 +249,15 @@ final class SessionEngine: ObservableObject {
                 return .started(windowId: windowId, pid: claudePID)
             }
         }
+        // No child: claude may have exited immediately on a fatal launch error
+        // (e.g. bypass refused under root). Capture the pane before tearing the
+        // window down so the alert can lead with the CLI's own line instead of
+        // the generic "no process appeared".
+        let finalPane = tmux.capturePane(windowId: windowId)
         tmux.killWindow(windowId: windowId)
+        if let fatal = StateDetector().launchFatalError(pane: finalPane) {
+            return .failed(fatal)
+        }
         return .windowCreatedNoProcess(windowId: windowId)
     }
 
@@ -306,6 +344,13 @@ final class SessionEngine: ObservableObject {
         }
         for windowId in doomed { liveSessions[windowId] = nil }
         let tmux = self.tmux
+        let store = self.store
+        // The session's stored launch flags, to re-apply on the fresh process
+        // (they don't survive --resume). nil for sessions CCorn didn't start —
+        // those resume plainly, not under the global default.
+        let storedConfig = await Task.detached { () -> SessionLaunchConfig? in
+            store.loadRecords().first { $0.uuid == uuid }?.launchConfig
+        }.value
         await Task.detached {
             for windowId in doomed { tmux.killWindow(windowId: windowId) }
             // A window tagged with this uuid from a previous run, unknown to
@@ -314,7 +359,7 @@ final class SessionEngine: ObservableObject {
                 tmux.killWindow(windowId: lingering.windowId)
             }
         }.value
-        return await resumeSession(uuid: uuid, directory: directory)
+        return await resumeSession(uuid: uuid, directory: directory, config: storedConfig)
     }
 
     /// Import an unmanaged session (flows 6.2 / 6.10): SIGTERM → 5s → SIGKILL
@@ -509,9 +554,14 @@ final class SessionEngine: ObservableObject {
             let path = live.record.path.isEmpty
                 ? info.cwd.map(SessionDiscovery.canonicalize) ?? ""
                 : live.record.path
+            // Carry the in-memory record's launch config (set by startNewSession
+            // even when the uuid bound too late to persist at spawn) and any
+            // groupIDs — upsert replaces the whole record, so they'd be lost.
             let record = SessionRecord(uuid: info.sessionId, path: path,
                                        title: live.record.title,
-                                       archived: live.record.archived)
+                                       archived: live.record.archived,
+                                       groupIDs: live.record.groupIDs,
+                                       launchConfig: live.record.launchConfig)
             live.record = record
             Task.detached { store.upsert(record) }
         }

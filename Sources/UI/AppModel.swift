@@ -65,6 +65,10 @@ final class AppModel: ObservableObject {
     /// scan when unmanaged sessions were found).
     @Published var importFlow: ImportFlowModel?
 
+    /// Non-nil while the New Session sheet is up (flow 6.3). Presented on the
+    /// main window via `.sheet(item:)`, the same hosting as the import sheet.
+    @Published var newSessionFlow: NewSessionFlowModel?
+
     /// Surface visibility, published by the window controllers (the popover's
     /// show/close, the main window's occlusion changes). Both surfaces keep
     /// their SwiftUI trees alive while hidden, so the row marks gate their
@@ -404,7 +408,12 @@ final class AppModel: ObservableObject {
                 lastActive: lastActive,
                 authNotice: live.authNotice,
                 rcPlanNotice: live.rcPlanNotice,
-                groupIDs: uuid.isEmpty ? [] : (groupsByUUID[uuid] ?? [])
+                groupIDs: uuid.isEmpty ? [] : (groupsByUUID[uuid] ?? []),
+                // The runtime pane signal (covers mid-session escalation and
+                // adopted sessions), OR a launch posture that starts in active
+                // bypass. allowBypass alone does NOT count — it only arms bypass.
+                isBypass: live.bypassActive
+                    || live.record.launchConfig?.permissionMode == .bypass
             ))
         }
 
@@ -683,20 +692,31 @@ final class AppModel: ObservableObject {
                                  message: "Start another session in \(canonical)?",
                                  action: "Start Anyway") else { return }
         }
-        // Optional name: blank falls through to Claude's session title (it keeps
-        // updating as the work develops); a typed name sticks and wins over it.
-        // nil = the user cancelled the whole flow.
-        let folderName = URL(fileURLWithPath: directory).lastPathComponent
-        guard let entered = Alerts.prompt(
-            title: "Name this session",
-            message: "Leave blank to use Claude's session title.",
-            placeholder: folderName, action: "Start Session") else { return }
-        let title = entered.isEmpty ? nil : entered
+        // The name + launch-flag override are gathered in the New Session sheet,
+        // seeded from the global default (inherit → override). The sheet attaches
+        // to the main window, so make sure it is open (from the popover it may not
+        // be) before presenting.
+        openMainWindow?()
+        newSessionFlow = NewSessionFlowModel(directory: canonical,
+                                             defaultConfig: engine.settings.defaultLaunchConfig,
+                                             model: self)
+    }
+
+    /// New Session sheet committed (flow 6.3): dismiss it, then start the session
+    /// with the chosen title + launch config. A blank title falls through to
+    /// Claude's AI session title (it keeps updating); a typed name sticks.
+    func startConfiguredSession(directory: String, title: String?, config: SessionLaunchConfig) {
+        newSessionFlow = nil
         Task {
-            let result = await engine.startNewSession(directory: directory, title: title)
+            let result = await engine.startNewSession(directory: directory, title: title, config: config)
             handleStartResult(result, verb: "start")
             await refreshAfterMutation()
         }
+    }
+
+    /// New Session sheet cancelled.
+    func dismissNewSession() {
+        newSessionFlow = nil
     }
 
     /// Empty-state "Add Directory": grow the watch list directly.

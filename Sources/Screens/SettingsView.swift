@@ -23,6 +23,7 @@ struct SettingsView: View {
         Form {
             watchDirectoriesSection
             behaviorSection
+            launchDefaultsSection
             aboutSection
         }
         .formStyle(.grouped)
@@ -176,6 +177,48 @@ struct SettingsView: View {
     /// the picker shows the nearest so the selection is never blank.
     private static func nearestThreshold(_ value: TimeInterval) -> TimeInterval {
         thresholdOptions.min { abs($0 - value) < abs($1 - value) } ?? 3600
+    }
+
+    // MARK: Section — New Session Defaults
+
+    /// Global defaults new sessions inherit (the New Session sheet seeds its
+    /// per-session override from these). Discrete controls only — the Picker
+    /// idiom of the Behavior section — so a keystroke never churns settings +
+    /// rediscovery. Per-session free text (custom model, add-dirs, extra args)
+    /// lives in the sheet, not here.
+    private var launchDefaultsSection: some View {
+        Section("New Session Defaults") {
+            Picker("Permission mode", selection: Binding(
+                get: { engine.settings.defaultLaunchConfig.permissionMode },
+                set: { value in
+                    var settings = engine.settings
+                    settings.defaultLaunchConfig.permissionMode = value
+                    model.applySettings(settings)
+                }
+            )) {
+                ForEach(CCPermissionMode.selectable(isRoot: LaunchEnvironment.isRoot), id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+
+            Picker("Model", selection: Binding(
+                get: { engine.settings.defaultLaunchConfig.model ?? "" },
+                set: { value in
+                    var settings = engine.settings
+                    settings.defaultLaunchConfig.model = value.isEmpty ? nil : value
+                    model.applySettings(settings)
+                }
+            )) {
+                Text("Account default").tag("")
+                Text("Opus").tag("opus")
+                Text("Sonnet").tag("sonnet")
+                Text("Fable").tag("fable")
+            }
+
+            Text(engine.settings.defaultLaunchConfig.permissionMode.summary)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
     }
 
     // MARK: Section 3 — About

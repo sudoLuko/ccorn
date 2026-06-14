@@ -358,6 +358,18 @@ the specific problem, and the mark's tooltip carries the full reason
 (including the underlying activity a No-remote session was in). Waiting is
 routine, not broken: it keeps its amber dot plus the "Needs input" word.
 
+**Bypass marker (a marker, not a status mark):**
+A session running with permissions bypassed shows a small monochrome
+`shield.slash` glyph (`Color.secondary`) after its name — a SEPARATE marker, so
+the one-status-mark-per-row rule is untouched (the dot/triangle still shows the
+lifecycle state). It is deliberately colorless: bypass is a property, not a
+severity, and the status marks own the only color in the app, so a colored
+bypass glyph would misread as an alert. It is driven by the detector's pane
+footer signal (`bypass permissions on`), so it reflects ACTUAL runtime bypass —
+including a session escalated into bypass mid-session (Shift+Tab) and adopted
+sessions — and additionally by a launch config of Bypass for sessions CCorn
+just started. See 5.5 (New Session Defaults) and 6.3 (New Session).
+
 -----
 
 ## 5. Screen Inventory
@@ -608,7 +620,14 @@ Section 2 — “Behavior”:
 - Clicking a session opens — `Picker`: Terminal (default) / Browser. Governs both the popover single-click and the main-window double-click (flow 6.4)
 - Stale session threshold — `Picker` with options: 1 hour, 2 hours, 4 hours, 8 hours, 24 hours
 
-Section 3 — “About”:
+Section 3 — “New Session Defaults”:
+
+- The launch flags new sessions inherit; the New Session sheet (6.3) seeds its per-session override from these (inherit → override). Discrete controls only (the Behavior-section `Picker` idiom), so a keystroke never churns settings + rediscovery; per-session free text (custom model id, additional directories, extra args) lives in the sheet, not here.
+- Permission mode — `Picker`: Default / Plan / Accept Edits / Auto / Allow Bypass / Bypass. Default is **Auto** (safe-but-autonomous: auto-approves routine work, blocks dangerous escalations). Maps to the CLI `--permission-mode` choices, except Bypass → `--dangerously-skip-permissions` and Allow Bypass → `--allow-dangerously-skip-permissions` (never combined with `--permission-mode`). The two bypass modes are dropped from the picker when CCorn runs as root (the CLI refuses bypass under root/sudo).
+- Model — `Picker`: Account default / Opus / Sonnet / Fable
+- Caption: a one-line summary of the selected permission mode — `.caption` `Color.secondary`
+
+Section 4 — “About”:
 
 - Version number — `.caption` `Color.secondary` (read from Bundle)
 - “View on GitHub” — `.caption` tappable link `Color.accentColor`, opens `https://github.com/sudoLuko/ccorn` in browser
@@ -844,8 +863,9 @@ verification with the list's existing tap/right-click stack.
 1. Native `NSOpenPanel` folder picker opens
 1. User selects a directory
 1. If directory already tracked → alert: “This directory already has an active session”
+1. The **New Session sheet** opens on the main window (from the popover, the main window is brought up first to host it), seeded from the Settings default launch config (5.5). It collects: the session name (blank → Claude’s AI title); the **permission mode** as a visible `Picker` (the one knob people vary per session); and, behind a collapsed **Advanced** disclosure, the model, additional directories (`--add-dir`, via `NSOpenPanel`), and extra arguments (a free-text field split on spaces into argv tokens). Bypass modes are absent from the picker when CCorn runs as root. Cancel aborts; Start Session proceeds.
 1. CCorn creates a new tmux window (sanitize the folder name, capture the window ID): `tmux new-window -t ccorn -n <sanitized-folder> -c <directory> -P -F "#{window_id}"`, appending `-2`/`-3` on name conflict. Target this window by its `@N` ID afterward (see Window Naming and Identity)
-1. Runs `claude --rc "<title>"` in that window (title defaults to the folder name and is the handle a remote user uses to find the session); remote control is enabled from session start
+1. Runs `claude --rc "<title>" <launch-config flags>` in that window — every flag token shell-quoted (the command is typed into and evaluated by the pane shell). The launch config is persisted on the session record, because the CLI does NOT keep these flags across `--resume`: a restart re-applies the stored config, or the session silently drops to its default posture. Bypass (`--dangerously-skip-permissions`) is launch-time only — there is no mid-session toggle from CCorn — and is re-applied on every restart; it is never emitted alongside `--permission-mode`. If a Bypass launch is refused (e.g. under root/sudo, where `claude` exits immediately), the failed-start alert leads with the CLI’s own refusal line rather than the generic “no process appeared”.
 1. Captures the session's PID for liveness and kill (see PID Tracking)
 1. Confirms remote control is active by detecting the `Remote Control active` footer string in the captured pane, or a `bridge-session` record in the session's JSONL
 1. Session appears in list immediately with green dot

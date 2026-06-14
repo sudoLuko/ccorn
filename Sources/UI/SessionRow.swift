@@ -38,6 +38,10 @@ struct SessionRow: Identifiable, Equatable {
     /// uuid there — never by this row's id, which differs across managed/
     /// stopped/unmanaged and changes on stop). Always [] for unmanaged rows.
     let groupIDs: [String]
+    /// True when the session is running with permissions bypassed — drives the
+    /// row's bypass marker. Only set for live managed rows (the detector pane
+    /// signal, or a launch config of `.bypass`); never for stopped/unmanaged.
+    let isBypass: Bool
 
     init(id: String,
          kind: Kind,
@@ -51,7 +55,8 @@ struct SessionRow: Identifiable, Equatable {
          lastActive: Date?,
          authNotice: String? = nil,
          rcPlanNotice: String? = nil,
-         groupIDs: [String] = []) {
+         groupIDs: [String] = [],
+         isBypass: Bool = false) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -65,6 +70,7 @@ struct SessionRow: Identifiable, Equatable {
         self.authNotice = authNotice
         self.rcPlanNotice = rcPlanNotice
         self.groupIDs = groupIDs
+        self.isBypass = isBypass
     }
 
     var isManaged: Bool {

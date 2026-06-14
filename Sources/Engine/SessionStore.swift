@@ -109,7 +109,8 @@ final class SessionStore: @unchecked Sendable {
                      path: String? = nil,
                      title: String? = nil,
                      archived: Bool? = nil,
-                     groupIDs: [String]? = nil) {
+                     groupIDs: [String]? = nil,
+                     launchConfig: SessionLaunchConfig? = nil) {
         guard !uuid.isEmpty else { return }
         queue.sync {
             var records = loadRecordsLocked()
@@ -119,6 +120,7 @@ final class SessionStore: @unchecked Sendable {
             if let title { record.title = title }
             if let archived { record.archived = archived }
             if let groupIDs { record.groupIDs = groupIDs }
+            if let launchConfig { record.launchConfig = launchConfig }
             if let idx = records.firstIndex(where: { $0.uuid == uuid }) {
                 records[idx] = record
             } else {

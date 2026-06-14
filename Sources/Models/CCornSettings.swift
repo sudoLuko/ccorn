@@ -63,6 +63,10 @@ struct CCornSettings: Codable, Equatable {
     /// double-click). Defaults to Terminal — the click attaches to the
     /// session's tmux window rather than opening the claude.ai/code list.
     var clickAction: SessionClickAction
+    /// The launch flags new sessions inherit (the New Session sheet seeds its
+    /// per-session override from this). Safe-but-autonomous (`auto`) by default.
+    /// Applies only to sessions CCorn starts fresh, never to adopted ones.
+    var defaultLaunchConfig: SessionLaunchConfig
 
     static let `default` = CCornSettings(
         watchDirectories: [],
@@ -76,13 +80,15 @@ struct CCornSettings: Codable, Equatable {
          autoRestartOnLaunch: Bool,
          onboardingComplete: Bool = false,
          groups: [SessionGroup] = [],
-         clickAction: SessionClickAction = .terminal) {
+         clickAction: SessionClickAction = .terminal,
+         defaultLaunchConfig: SessionLaunchConfig = .safeDefault) {
         self.watchDirectories = watchDirectories
         self.staleThresholdSeconds = staleThresholdSeconds
         self.autoRestartOnLaunch = autoRestartOnLaunch
         self.onboardingComplete = onboardingComplete
         self.groups = groups
         self.clickAction = clickAction
+        self.defaultLaunchConfig = defaultLaunchConfig
     }
 
     /// Every field decodes with a default so a settings.json written by an
@@ -102,5 +108,7 @@ struct CCornSettings: Codable, Equatable {
             ?? Self.default.groups
         clickAction = try c.decodeIfPresent(SessionClickAction.self, forKey: .clickAction)
             ?? Self.default.clickAction
+        defaultLaunchConfig = try c.decodeIfPresent(SessionLaunchConfig.self, forKey: .defaultLaunchConfig)
+            ?? Self.default.defaultLaunchConfig
     }
 }
