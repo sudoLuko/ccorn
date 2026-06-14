@@ -51,6 +51,24 @@ import Testing
         #expect(decoded.clickAction == .browser)
     }
 
+    /// Mouse mode defaults to on (scroll wheel scrolls out of the box), and a
+    /// settings.json from a build predating the field must adopt that default
+    /// rather than silently turning scrolling off on upgrade.
+    @Test func mouseModeDefaultsToOn() throws {
+        #expect(CCornSettings.default.mouseMode)
+        let old = #"{"watchDirectories":[],"staleThresholdSeconds":3600,"autoRestartOnLaunch":false}"#
+        let settings = try JSONDecoder().decode(CCornSettings.self, from: Data(old.utf8))
+        #expect(settings.mouseMode)
+    }
+
+    @Test func mouseModeRoundTrips() throws {
+        var settings = CCornSettings.default
+        settings.mouseMode = false
+        let decoded = try JSONDecoder().decode(
+            CCornSettings.self, from: try JSONEncoder().encode(settings))
+        #expect(!decoded.mouseMode)
+    }
+
     // MARK: - Row-click routing (SessionRow.openAction, flow 6.4)
 
     private func sampleRow(kind: SessionRow.Kind,

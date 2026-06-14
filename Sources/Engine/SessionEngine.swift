@@ -45,6 +45,21 @@ final class SessionEngine: ObservableObject {
         Task.detached { store.saveSettings(newSettings) }
     }
 
+    /// Push the current mouse-mode preference onto the live `ccorn` session so a
+    /// Settings toggle takes effect immediately for already-running sessions
+    /// (ensureSession only re-applies it on the next start/resume). Scoped to
+    /// the session, never the tmux global — see `TmuxController.setMouseMode`.
+    /// No-op when the session does not exist yet; the first start/resume creates
+    /// it with the current value.
+    func applyMouseMode() {
+        let tmux = self.tmux
+        let enabled = settings.mouseMode
+        Task.detached {
+            guard tmux.hasSession() else { return }
+            tmux.setMouseMode(enabled)
+        }
+    }
+
     // MARK: - Dependency checks
 
     struct Dependencies: Sendable {
@@ -94,6 +109,7 @@ final class SessionEngine: ObservableObject {
         // A new session inherits the user's configured default unless the New
         // Session sheet passed an explicit per-session override.
         let cfg = config ?? settings.defaultLaunchConfig
+        let mouse = settings.mouseMode
         let tmux = self.tmux
         let store = self.store
 
@@ -103,7 +119,7 @@ final class SessionEngine: ObservableObject {
         }
 
         let launch = await Task.detached { () -> Launch in
-            let session = tmux.ensureSession()
+            let session = tmux.ensureSession(mouseMode: mouse)
             guard session.ok else {
                 return Launch(result: .failed("could not create tmux session"), uuid: nil)
             }
@@ -176,6 +192,7 @@ final class SessionEngine: ObservableObject {
                        config: SessionLaunchConfig? = nil) async -> StartResult {
         let tmux = self.tmux
         let store = self.store
+        let mouse = settings.mouseMode
         let windowName = title ?? URL(fileURLWithPath: directory).lastPathComponent
         // `config` is the launch posture to re-apply (the flags do NOT survive
         // --resume): restart passes the session's stored config; adopt/import
@@ -192,7 +209,7 @@ final class SessionEngine: ObservableObject {
                                  launchConfig: config ?? existing?.launchConfig)
         }.value
         let result = await Task.detached { () -> StartResult in
-            let session = tmux.ensureSession()
+            let session = tmux.ensureSession(mouseMode: mouse)
             guard session.ok else { return .failed("could not create tmux session") }
             let name = tmux.uniqueWindowName(from: windowName)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {

@@ -618,6 +618,7 @@ Section 2 — “Behavior”:
 
 - Launch at login — `Toggle`
 - Auto-restart sessions on launch — `Toggle`
+- Scroll wheel scrolls in sessions — `Toggle`, default **on**. Drives tmux `set-option -t ccorn mouse on|off` scoped to CCorn's own `ccorn` session and its Open-in-Terminal view sessions, never the tmux global (`-g`), so a user's own `set -g mouse` for their other tmux work is untouched. On: the scroll wheel scrolls the pane. Off: native terminal text selection is simpler, but the wheel acts as arrow keys in the full-screen TUI. Applied at session setup (`TmuxController.ensureSession`) and live on toggle (`SessionEngine.applyMouseMode`)
 - Clicking a session opens — `Picker`: Terminal (default) / Browser. Governs both the popover single-click and the main-window double-click (flow 6.4)
 - Stale session threshold — `Picker` with options: 1 hour, 2 hours, 4 hours, 8 hours, 24 hours
 

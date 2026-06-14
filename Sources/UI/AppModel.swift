@@ -701,6 +701,7 @@ final class AppModel: ObservableObject {
     private func attachTerminal(windowId: String, title: String? = nil) {
         let runner = engine.runner
         let tmux = engine.tmux
+        let mouse = engine.settings.mouseMode
         Task.detached {
             // One terminal per session: if a terminal is already open for this
             // window (a live `ccorn-view-<id>` client), raise and focus it
@@ -713,7 +714,7 @@ final class AppModel: ObservableObject {
                AppModel.raiseTerminal(tty: tty, runner: runner) {
                 return
             }
-            let attach = tmux.attachViewCommand(windowId: windowId)
+            let attach = tmux.attachViewCommand(windowId: windowId, mouseMode: mouse)
             // Title the fresh tab with the session's chosen name. Without a custom
             // title Terminal labels the window after the command it ran — the long
             // grouped-attach string — so set the same name the rest of CCorn shows.
@@ -843,10 +844,13 @@ final class AppModel: ObservableObject {
 
     /// Settings changed (watch dirs / threshold / toggles): persist + rescan.
     /// applyWindowLevel covers the "keep window in front" toggle taking effect
-    /// immediately on the live window (a no-op for the other settings).
+    /// immediately on the live window; applyMouseMode pushes the scroll-wheel
+    /// preference onto the running `ccorn` session so it takes effect at once
+    /// for existing sessions (both no-ops for the other settings).
     func applySettings(_ settings: CCornSettings) {
         engine.updateSettings(settings)
         applyWindowLevel?()
+        engine.applyMouseMode()
         Task { await runDiscovery() }
     }
 

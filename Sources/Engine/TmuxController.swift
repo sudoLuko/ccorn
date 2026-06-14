@@ -69,10 +69,14 @@ struct TmuxController: Sendable {
     }
 
     /// Create the `ccorn` session if it does not already exist. Never recreate.
+    /// `mouseMode` is applied on every ensure (creation or confirmation) so a
+    /// session set up before the preference changed still picks up the current
+    /// value — see `setMouseMode` for why it is scoped to this session.
     @discardableResult
-    func ensureSession() -> EnsureSessionResult {
+    func ensureSession(mouseMode: Bool) -> EnsureSessionResult {
         if hasSession() {
             scrubNestedSessionMarkers()
+            setMouseMode(mouseMode)
             return EnsureSessionResult(ok: true, strayDefaultWindowId: nil)
         }
         let r = tmux([
@@ -81,8 +85,21 @@ struct TmuxController: Sendable {
         ])
         guard r.ok else { return EnsureSessionResult(ok: false, strayDefaultWindowId: nil) }
         scrubNestedSessionMarkers()
+        setMouseMode(mouseMode)
         let id = r.trimmedOut
         return EnsureSessionResult(ok: true, strayDefaultWindowId: id.isEmpty ? nil : id)
+    }
+
+    /// Set tmux mouse mode on the `ccorn` SESSION only (no `-g`). A session
+    /// option overrides the server-global value for this session alone, so a
+    /// user's own `set -g mouse …` for their other tmux sessions is left
+    /// intact. With mouse on the scroll wheel scrolls the pane; with it off the
+    /// wheel falls back to arrow keys in a full-screen TUI and native terminal
+    /// text selection is simpler. The grouped "view" sessions used by Open in
+    /// Terminal do NOT inherit this (they carry their own session options), so
+    /// `attachViewCommand` sets it on each view too.
+    func setMouseMode(_ enabled: Bool) {
+        tmux(["set-option", "-t", Self.sessionName, "mouse", enabled ? "on" : "off"])
     }
 
     /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
@@ -306,11 +323,18 @@ struct TmuxController: Sendable {
     /// server, not the user's real `ccorn`. tmux's command separator is a
     /// single-quoted `';'` — the shell hands tmux a literal `;`, avoiding
     /// backslash escaping inside the osascript `do script` string.
-    func attachViewCommand(windowId: String) -> String {
+    ///
+    /// `mouseMode` is set on the VIEW session, not just `ccorn`: a grouped
+    /// session shares the window list but carries its own session options, so
+    /// it does not inherit the base session's `mouse` value — the terminal the
+    /// user actually attaches to is the view, so the option must land here for
+    /// the scroll wheel to behave as configured.
+    func attachViewCommand(windowId: String, mouseMode: Bool) -> String {
         let view = Self.uniqueViewSessionName(forWindowId: windowId, taken: Set(sessionNames()))
         let socket = Self.socketName.map { "-L \($0) " } ?? ""
         return "tmux \(socket)new-session -t \(Self.sessionName) -s \(view)"
             + " ';' set-option -t \(view) destroy-unattached on"
+            + " ';' set-option -t \(view) mouse \(mouseMode ? "on" : "off")"
             + " ';' select-window -t '\(view):\(windowId)'"
     }
 

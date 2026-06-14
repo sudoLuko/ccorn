@@ -153,6 +153,23 @@ struct SettingsView: View {
                 }
             ))
 
+            // Drives `tmux set-option -t ccorn mouse` on CCorn's session (and
+            // its Open-in-Terminal view sessions) only — never the tmux global,
+            // so the user's own `set -g mouse` for other tmux work is untouched.
+            // The second Text renders as the toggle's secondary caption in a
+            // grouped Form, the place to spell out the tradeoff.
+            Toggle(isOn: Binding(
+                get: { engine.settings.mouseMode },
+                set: { value in
+                    var settings = engine.settings
+                    settings.mouseMode = value
+                    model.applySettings(settings)
+                }
+            )) {
+                Text("Scroll wheel scrolls in sessions")
+                Text("On, the scroll wheel scrolls. Off, native terminal text selection is simpler, but the wheel acts as arrow keys in full-screen views.")
+            }
+
             Picker("Clicking a session opens", selection: Binding(
                 get: { engine.settings.clickAction },
                 set: { value in

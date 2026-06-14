@@ -72,6 +72,13 @@ struct CCornSettings: Codable, Equatable {
     /// default; the popover and the activation-policy switch are unaffected
     /// (MainWindowController.applyWindowLevel / updateActivationPolicy).
     var keepWindowInFront: Bool
+    /// tmux mouse mode for CCorn's sessions. On (default): the scroll wheel
+    /// scrolls the pane. Off: the wheel falls back to arrow keys in a
+    /// full-screen TUI, but native terminal text selection is simpler.
+    /// Applied as a SESSION option on `ccorn` (and its view sessions), never
+    /// the tmux global, so a user's own `set -g mouse` is left untouched
+    /// (TmuxController.setMouseMode / applyMouseMode).
+    var mouseMode: Bool
 
     static let `default` = CCornSettings(
         watchDirectories: [],
@@ -87,7 +94,8 @@ struct CCornSettings: Codable, Equatable {
          groups: [SessionGroup] = [],
          clickAction: SessionClickAction = .terminal,
          defaultLaunchConfig: SessionLaunchConfig = .safeDefault,
-         keepWindowInFront: Bool = false) {
+         keepWindowInFront: Bool = false,
+         mouseMode: Bool = true) {
         self.watchDirectories = watchDirectories
         self.staleThresholdSeconds = staleThresholdSeconds
         self.autoRestartOnLaunch = autoRestartOnLaunch
@@ -96,6 +104,7 @@ struct CCornSettings: Codable, Equatable {
         self.clickAction = clickAction
         self.defaultLaunchConfig = defaultLaunchConfig
         self.keepWindowInFront = keepWindowInFront
+        self.mouseMode = mouseMode
     }
 
     /// Every field decodes with a default so a settings.json written by an
@@ -119,5 +128,7 @@ struct CCornSettings: Codable, Equatable {
             ?? Self.default.defaultLaunchConfig
         keepWindowInFront = try c.decodeIfPresent(Bool.self, forKey: .keepWindowInFront)
             ?? Self.default.keepWindowInFront
+        mouseMode = try c.decodeIfPresent(Bool.self, forKey: .mouseMode)
+            ?? Self.default.mouseMode
     }
 }
