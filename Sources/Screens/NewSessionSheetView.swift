@@ -99,18 +99,45 @@ struct NewSessionSheetView: View {
 
     // MARK: Advanced
 
+    // A custom disclosure (the app's pattern — see the popover), not
+    // DisclosureGroup: DisclosureGroup animates its own content reveal on a
+    // separate timeline from the sheet's auto-resize, so the two fight and the
+    // expand looks janky.
+    //
+    // Do NOT wrap the toggle in withAnimation: animating the content height
+    // *gradually* streams intermediate sizes to the auto-sizing sheet, which
+    // chases each one with its own resize animation — that is the janky
+    // desync. Snapping the state hands the sheet a single final size to animate
+    // to once, so the rows are revealed/hidden cleanly by the growing/shrinking
+    // sheet with the header pinned at the top. The chevron gets its own
+    // (isolated) rotation, which doesn't drive the sheet size.
     private var advanced: some View {
-        DisclosureGroup(isExpanded: $flow.showAdvanced) {
-            VStack(alignment: .leading, spacing: 14) {
-                modelField
-                additionalDirectories
-                extraArgsField
+        VStack(alignment: .leading, spacing: 14) {
+            Button {
+                flow.showAdvanced.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(flow.showAdvanced ? 90 : 0))
+                        .animation(.easeInOut(duration: 0.2), value: flow.showAdvanced)
+                    Text("Advanced")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-            .padding(.top, 8)
-        } label: {
-            Text("Advanced")
-                .font(.subheadline.weight(.medium))
-                .foregroundColor(.primary)
+            .buttonStyle(.plain)
+
+            if flow.showAdvanced {
+                VStack(alignment: .leading, spacing: 14) {
+                    modelField
+                    additionalDirectories
+                    extraArgsField
+                }
+            }
         }
     }
 
