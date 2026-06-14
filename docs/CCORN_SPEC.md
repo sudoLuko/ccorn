@@ -707,7 +707,7 @@ Kill Session requires a confirmation alert:
 
 - Title: “Kill [session name]?”
 - Message: “This will end the session. This cannot be undone.”
-- Buttons: Cancel (default), Kill (destructive red)
+- Buttons: Kill (default, destructive red — Return confirms, mirroring Start Session's default button), Cancel (Escape backs out). Escape and Cancel stay the safety valve against an accidental confirm.
 
 -----
 
@@ -893,7 +893,7 @@ verification with the list's existing tap/right-click stack.
 ### 6.6 Kill Session
 
 1. User clicks “Kill Session” in `...` menu
-1. Confirmation alert appears: “Kill [name]? This will end the session. This cannot be undone.” Cancel / Kill
+1. Confirmation alert appears: “Kill [name]? This will end the session. This cannot be undone.” Kill (default — Return confirms) / Cancel (Escape backs out)
 1. User confirms
 1. CCorn kills the tmux window by ID: `tmux kill-window -t <window-id>` (see Terminating a Session for the full SIGTERM/SIGKILL fallback)
 1. If the underlying `claude` process is still running after window kill: send `SIGTERM` to the PID first, wait 5 seconds, then `SIGKILL` if still running
