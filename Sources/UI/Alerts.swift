@@ -13,10 +13,19 @@ enum Alerts {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// The in-dialog brand mark: the trimmed, transparent OpenMoji corn glyph
+    /// (`CornGlyph`), the same artwork every other in-app surface uses. Without
+    /// this, NSAlert falls back to `NSApp.applicationIconImage` — the Dock/
+    /// Finder app icon, which is the corn baked onto its rounded-square tile —
+    /// so the glyph reads as boxed. Set on every alert below; the Dock/Finder
+    /// icon (the appiconset) is deliberately left with its tile.
+    private static var cornIcon: NSImage? { NSImage(named: "CornGlyph") }
+
     /// Kill confirmation (flow 6.6): destructive, Cancel is the default.
     static func confirmKill(name: String) -> Bool {
         activate()
         let alert = NSAlert()
+        alert.icon = cornIcon
         alert.messageText = "Kill \(name)?"
         alert.informativeText = "This will end the session. This cannot be undone."
         alert.alertStyle = .warning
@@ -34,6 +43,7 @@ enum Alerts {
                         destructive: Bool = false) -> Bool {
         activate()
         let alert = NSAlert()
+        alert.icon = cornIcon
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .warning
@@ -50,6 +60,7 @@ enum Alerts {
     /// loop — an app-modal `runModal` there would stall the 3s tick.
     static func sheetOrModal(title: String, message: String) {
         let alert = NSAlert()
+        alert.icon = cornIcon
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .warning
@@ -72,6 +83,7 @@ enum Alerts {
     static func info(title: String, message: String = "") {
         activate()
         let alert = NSAlert()
+        alert.icon = cornIcon
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .informational
@@ -84,6 +96,7 @@ enum Alerts {
                        primary: String, secondary: String) -> Bool {
         activate()
         let alert = NSAlert()
+        alert.icon = cornIcon
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .warning
@@ -99,6 +112,7 @@ enum Alerts {
                        placeholder: String = "", action: String = "OK") -> String? {
         activate()
         let alert = NSAlert()
+        alert.icon = cornIcon
         alert.messageText = title
         if !message.isEmpty { alert.informativeText = message }
         alert.alertStyle = .informational
