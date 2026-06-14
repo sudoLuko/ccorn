@@ -111,8 +111,27 @@ final class MainWindowController {
         }
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
+        applyWindowLevel()
         NSApp.activate(ignoringOtherApps: true)
         model.mainWindowOnScreen = true
+    }
+
+    /// The level the main window floats at when "keep in front" is on. Just
+    /// above other apps' normal windows, but well below the popover panel
+    /// (`.popUpMenu`) and system UI, so the menu-bar surface still overlays it.
+    private static let keepInFrontLevel: NSWindow.Level = .floating
+
+    /// Push the main window above other apps' windows when the "keep window in
+    /// front" preference is on, back to normal when off. Reads the live setting
+    /// off the model, so it is also the apply-on-change hook (AppModel calls it
+    /// from applySettings). No-op until the window exists. NEVER touches the
+    /// popover (an NSPanel, and at a higher level anyway); the raised level is
+    /// counted by updateActivationPolicy, so the .regular/.accessory switch is
+    /// unaffected.
+    func applyWindowLevel() {
+        guard let window else { return }
+        let keepInFront = model?.engine.settings.keepWindowInFront ?? false
+        window.level = keepInFront ? Self.keepInFrontLevel : .normal
     }
 
     /// Titlebar sidebar toggle. Lives in window chrome, NEVER inside the
@@ -139,8 +158,11 @@ final class MainWindowController {
     }
 
     /// `.regular` iff a regular window remains: titled, visible or minimized
-    /// (a miniaturized window is open but not `isVisible`), normal level
-    /// (excludes the status-bar window and the borderless popover window).
+    /// (a miniaturized window is open but not `isVisible`), at the normal level
+    /// or the "keep in front" level (excludes the status-bar window and the
+    /// borderless popover window, which sit at higher levels — the main window
+    /// raised to `.floating` by keep-in-front must still count, or the policy
+    /// would drop to `.accessory` while it is on screen).
     /// Managed and stopped (record) rows can be renamed; unmanaged discovery
     /// rows cannot. Mirrors SessionRowView.canRename.
     private static func isRenameable(_ row: SessionRow) -> Bool {
@@ -155,7 +177,7 @@ final class MainWindowController {
             (window.isVisible || window.isMiniaturized)
                 && window.styleMask.contains(.titled)
                 && !(window is NSPanel)
-                && window.level == .normal
+                && (window.level == .normal || window.level == keepInFrontLevel)
         }
         NSApp.setActivationPolicy(hasRegularWindow ? .regular : .accessory)
     }

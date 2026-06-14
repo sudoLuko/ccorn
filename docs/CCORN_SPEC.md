@@ -881,8 +881,9 @@ verification with the list's existing tap/right-click stack.
 
 ### 6.5 Open Session in Terminal
 
-1. User clicks “Open in Terminal” in `...` menu
-1. App opens Terminal via osascript, attaching through a per-terminal grouped **view** session (its own current window + active pane) rather than the shared `ccorn` session directly — so multiple open terminals don’t mirror each other’s window switching or share keystrokes (Window Naming and Identity has the exact command and rationale)
+1. User activates the session (row click/double-click) or clicks “Open in Terminal” in the `...` menu
+1. **One terminal per session.** If a terminal is already open for this session — a live `ccorn-view-<window-id>` client exists — CCorn raises and focuses that Terminal window instead of opening another. The window is found by matching tmux’s `client_tty` to Terminal’s `tty of tab` (they are byte-for-byte identical). The raise must resolve the window id and address `window id <id>`, using `set index … to 1` to reorder it to the front — setting `frontmost`/`index` on a `repeat`-loop window reference silently no-ops when other Terminal windows are open. If the user has since closed the terminal there is no client (`destroy-unattached` reaped the view), so CCorn opens a fresh one. A restart/import attaches to a new window id with no view yet, so it always opens fresh.
+1. Otherwise App opens Terminal via osascript, attaching through a per-terminal grouped **view** session (its own current window + active pane) rather than the shared `ccorn` session directly — so multiple open terminals don’t mirror each other’s window switching or share keystrokes (Window Naming and Identity has the exact command and rationale)
 1. New terminal window opens, showing that session’s tmux window
 1. User interacts directly in terminal — switching windows or typing affects only this terminal
 1. User closes terminal window — the view session is reaped (`destroy-unattached`), the underlying session stays alive in tmux, and CCorn continues tracking

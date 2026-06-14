@@ -82,6 +82,10 @@ final class AppModel: ObservableObject {
     var openMainWindow: (() -> Void)?
     var closePopover: (() -> Void)?
     var closeOnboarding: (() -> Void)?
+    /// Re-applies the "keep window in front" preference to the live main
+    /// window after a settings change, without the model reaching into the
+    /// window layer (wired by AppDelegate to MainWindowController).
+    var applyWindowLevel: (() -> Void)?
     #if DEBUG
     /// Debug-only (screenshot staging): show the popover on command.
     var openPopover: (() -> Void)?
@@ -661,7 +665,7 @@ final class AppModel: ObservableObject {
     /// attach target on tmux 3.6.
     func openInTerminal(_ row: SessionRow) {
         guard let windowId = row.windowId else { return }
-        attachTerminal(windowId: windowId)
+        attachTerminal(windowId: windowId, title: row.title)
     }
 
     /// Open a Terminal window attached to a tmux window id. Shared by the
@@ -674,19 +678,80 @@ final class AppModel: ObservableObject {
     /// own current window + active pane. See `TmuxController.attachViewCommand`,
     /// which builds the command and honors the debug socket+session overrides so
     /// a shakedown attach lands on the isolated server, not the user's real one.
-    private func attachTerminal(windowId: String) {
+    private func attachTerminal(windowId: String, title: String? = nil) {
         let runner = engine.runner
         let tmux = engine.tmux
         Task.detached {
+            // One terminal per session: if a terminal is already open for this
+            // window (a live `ccorn-view-<id>` client), raise and focus it
+            // instead of stacking a second window on the session. The lookup is
+            // live tmux state, so a terminal the user has since closed leaves no
+            // client and we fall through to opening a fresh one. A restart/import
+            // attaches to a *new* window id with no view yet, so it also opens
+            // fresh — no special-casing needed.
+            if let tty = tmux.viewClientTTY(forWindowId: windowId),
+               AppModel.raiseTerminal(tty: tty, runner: runner) {
+                return
+            }
             let attach = tmux.attachViewCommand(windowId: windowId)
+            // Title the fresh tab with the session's chosen name. Without a custom
+            // title Terminal labels the window after the command it ran — the long
+            // grouped-attach string — so set the same name the rest of CCorn shows.
+            // `do script` returns the new tab; its `custom title` overrides both
+            // Terminal's command-line default and any later tmux title escape. Only
+            // the fresh-open path needs it: the raise path above reuses a tab that
+            // was titled when it first opened. The title is user data → AppleScript-
+            // quoted; empty/absent falls back to Terminal's default (no title line).
+            let titleLine: String
+            if let title, !title.isEmpty {
+                titleLine = "\n    set custom title of newTab to \(TmuxController.appleScriptQuote(title))"
+            } else {
+                titleLine = ""
+            }
             let script = """
             tell application "Terminal"
-                do script "\(attach)"
+                set newTab to do script "\(attach)"\(titleLine)
                 activate
             end tell
             """
             runner.run("osascript", ["-e", script])
         }
+    }
+
+    /// Raise + focus the Terminal window whose tab tty matches (the one already
+    /// open for this session); returns whether it was found. The recipe is
+    /// load-bearing and verified live: resolve the window id first and address
+    /// `window id <id>` — setting `frontmost`/`index` on the `repeat`-loop window
+    /// reference silently no-ops when other Terminal windows are open, so it
+    /// surfaces the wrong window. `set index … to 1` is what reorders it to the
+    /// front (`set frontmost` alone does not). A false return (no Terminal tab
+    /// carries this tty — the user closed it after the tmux query) tells the
+    /// caller to open a fresh window instead. `tty` is `/dev/ttysNN`, so it is
+    /// safe to interpolate. `nonisolated static` so it runs on the detached task
+    /// without hopping to the main actor (it touches no AppModel state).
+    nonisolated private static func raiseTerminal(tty: String, runner: CommandRunner) -> Bool {
+        let script = """
+        tell application "Terminal"
+            set theId to missing value
+            repeat with w in windows
+                repeat with t in tabs of w
+                    if tty of t is "\(tty)" then
+                        set selected of t to true
+                        set theId to id of w
+                        exit repeat
+                    end if
+                end repeat
+                if theId is not missing value then exit repeat
+            end repeat
+            if theId is missing value then return "notfound"
+            if miniaturized of window id theId then set miniaturized of window id theId to false
+            set index of window id theId to 1
+            set frontmost of window id theId to true
+            activate
+        end tell
+        return "raised"
+        """
+        return runner.run("osascript", ["-e", script]).trimmedOut == "raised"
     }
 
     func copySessionID(_ row: SessionRow) {
@@ -707,14 +772,11 @@ final class AppModel: ObservableObject {
         }
         guard let directory = Alerts.pickFolder(prompt: "Choose Folder") else { return }
         let canonical = SessionDiscovery.canonicalize(directory)
-        let aliveHere = rows.contains {
-            $0.isManaged && $0.path == canonical && $0.state.isAliveState
-        }
-        if aliveHere {
-            guard Alerts.confirm(title: "This directory already has an active session",
-                                 message: "Start another session in \(canonical)?",
-                                 action: "Start Anyway") else { return }
-        }
+        // Multiple sessions per directory is a normal, expected workflow — no
+        // blocking "already has an active session" confirm. The sheet surfaces a
+        // passive count of any sessions already alive here (activeSessionCount);
+        // Start Session proceeds directly.
+        //
         // The name + launch-flag override are gathered in the New Session sheet,
         // seeded from the global default (inherit → override). The sheet attaches
         // to the main window, so make sure it is open (from the popover it may not
@@ -723,6 +785,13 @@ final class AppModel: ObservableObject {
         newSessionFlow = NewSessionFlowModel(directory: canonical,
                                              defaultConfig: engine.settings.defaultLaunchConfig,
                                              model: self)
+    }
+
+    /// Count of managed sessions already alive in `directory` (a canonical
+    /// path). Drives the New Session sheet's passive heads-up line; it is
+    /// awareness only, never a gate — multiple sessions per directory is normal.
+    func activeSessionCount(in directory: String) -> Int {
+        rows.filter { $0.isManaged && $0.path == directory && $0.state.isAliveState }.count
     }
 
     /// New Session sheet committed (flow 6.3): dismiss it, then start the session
@@ -753,8 +822,11 @@ final class AppModel: ObservableObject {
     }
 
     /// Settings changed (watch dirs / threshold / toggles): persist + rescan.
+    /// applyWindowLevel covers the "keep window in front" toggle taking effect
+    /// immediately on the live window (a no-op for the other settings).
     func applySettings(_ settings: CCornSettings) {
         engine.updateSettings(settings)
+        applyWindowLevel?()
         Task { await runDiscovery() }
     }
 
@@ -814,7 +886,7 @@ final class AppModel: ObservableObject {
                                                      directory: row.path,
                                                      replacingWindowId: row.windowId)
             handleStartResult(result, verb: "restart")
-            if attachInTerminal { attachIfStarted(result) }
+            if attachInTerminal { attachIfStarted(result, title: row.title) }
             await refreshAfterMutation()
         }
     }
@@ -822,9 +894,12 @@ final class AppModel: ObservableObject {
     /// Attach Terminal to a just-started window (the restart-then-attach tail
     /// of openSession). Only `.started` carries a live window;
     /// `.windowCreatedNoProcess`/`.failed` surface through handleStartResult.
-    private func attachIfStarted(_ result: StartResult) {
+    /// `title` names the fresh Terminal tab (the resumed/imported session's
+    /// chosen name); nil when a brand-new session was started in place, which
+    /// has no chosen name yet.
+    private func attachIfStarted(_ result: StartResult, title: String? = nil) {
         if case let .started(windowId, _) = result {
-            attachTerminal(windowId: windowId)
+            attachTerminal(windowId: windowId, title: title)
         }
     }
 
@@ -887,7 +962,7 @@ final class AppModel: ObservableObject {
             }
             let result = await engine.importSession(uuid: uuid, directory: path)
             handleStartResult(result, verb: "import")
-            if attachInTerminal { attachIfStarted(result) }
+            if attachInTerminal { attachIfStarted(result, title: row.title) }
             await refreshAfterMutation()
         }
     }

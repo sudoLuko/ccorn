@@ -144,6 +144,15 @@ struct SettingsView: View {
                 }
             ))
 
+            Toggle("Keep window in front of other apps", isOn: Binding(
+                get: { engine.settings.keepWindowInFront },
+                set: { value in
+                    var settings = engine.settings
+                    settings.keepWindowInFront = value
+                    model.applySettings(settings)
+                }
+            ))
+
             Picker("Clicking a session opens", selection: Binding(
                 get: { engine.settings.clickAction },
                 set: { value in

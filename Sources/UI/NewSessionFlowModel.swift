@@ -47,6 +47,11 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
     /// Home-relative folder display ("~/dev/ccorn").
     var displayDirectory: String { (directory as NSString).abbreviatingWithTildeInPath }
 
+    /// Sessions already alive in the chosen folder — a passive heads-up shown in
+    /// the sheet, not a gate. Read live from the model so it tracks the Change…
+    /// button re-picking the directory (`directory` is @Published).
+    var activeSessionsHere: Int { model?.activeSessionCount(in: directory) ?? 0 }
+
     /// The per-session override assembled from the fields.
     var finalConfig: SessionLaunchConfig {
         let trimmedModel = modelText.trimmingCharacters(in: .whitespaces)

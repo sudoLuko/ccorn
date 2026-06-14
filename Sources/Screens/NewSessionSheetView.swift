@@ -47,9 +47,25 @@ struct NewSessionSheetView: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
             directoryRow
+            existingSessionsNote
             nameField
             permissionPicker
             advanced
+        }
+    }
+
+    // Passive awareness, not a gate: when the chosen folder already has live
+    // sessions, surface the count so starting another is an informed choice.
+    // Multiple sessions per directory is normal — Start Session proceeds either
+    // way (the old blocking "Start Anyway" confirm is gone). Tracks Change…
+    // because the count reads live off the flow's @Published directory.
+    @ViewBuilder
+    private var existingSessionsNote: some View {
+        let count = flow.activeSessionsHere
+        if count > 0 {
+            Text("\(count) active session\(count == 1 ? "" : "s") in this folder")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 

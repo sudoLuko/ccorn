@@ -67,6 +67,11 @@ struct CCornSettings: Codable, Equatable {
     /// per-session override from this). Safe-but-autonomous (`auto`) by default.
     /// Applies only to sessions CCorn starts fresh, never to adopted ones.
     var defaultLaunchConfig: SessionLaunchConfig
+    /// Keep the main window above other apps' windows (raise its level to
+    /// `.floating`) so opening a session in Terminal can't bury it. Off by
+    /// default; the popover and the activation-policy switch are unaffected
+    /// (MainWindowController.applyWindowLevel / updateActivationPolicy).
+    var keepWindowInFront: Bool
 
     static let `default` = CCornSettings(
         watchDirectories: [],
@@ -81,7 +86,8 @@ struct CCornSettings: Codable, Equatable {
          onboardingComplete: Bool = false,
          groups: [SessionGroup] = [],
          clickAction: SessionClickAction = .terminal,
-         defaultLaunchConfig: SessionLaunchConfig = .safeDefault) {
+         defaultLaunchConfig: SessionLaunchConfig = .safeDefault,
+         keepWindowInFront: Bool = false) {
         self.watchDirectories = watchDirectories
         self.staleThresholdSeconds = staleThresholdSeconds
         self.autoRestartOnLaunch = autoRestartOnLaunch
@@ -89,6 +95,7 @@ struct CCornSettings: Codable, Equatable {
         self.groups = groups
         self.clickAction = clickAction
         self.defaultLaunchConfig = defaultLaunchConfig
+        self.keepWindowInFront = keepWindowInFront
     }
 
     /// Every field decodes with a default so a settings.json written by an
@@ -110,5 +117,7 @@ struct CCornSettings: Codable, Equatable {
             ?? Self.default.clickAction
         defaultLaunchConfig = try c.decodeIfPresent(SessionLaunchConfig.self, forKey: .defaultLaunchConfig)
             ?? Self.default.defaultLaunchConfig
+        keepWindowInFront = try c.decodeIfPresent(Bool.self, forKey: .keepWindowInFront)
+            ?? Self.default.keepWindowInFront
     }
 }

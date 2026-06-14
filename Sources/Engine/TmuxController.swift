@@ -232,6 +232,19 @@ struct TmuxController: Sendable {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    /// Quote a value as an AppleScript string literal for embedding in an
+    /// `osascript` program. AppleScript treats backslash and double quote as the
+    /// in-string escapes, so both are backslash-escaped — backslash first, or the
+    /// escapes added for the quotes would themselves be doubled. Returns the value
+    /// wrapped in double quotes, ready to drop into a `tell application` block. Use
+    /// for any user-controlled value (a session title) interpolated into a script.
+    static func appleScriptQuote(_ s: String) -> String {
+        let escaped = s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"" + escaped + "\""
+    }
+
     /// A sanitized name unique against the current window names; appends -2, -3
     /// on collision. The session name itself is reserved: a window named
     /// identically to the session is a tmux target hazard (see `newWindow`), so
@@ -318,5 +331,38 @@ struct TmuxController: Sendable {
                 tmux(["kill-session", "-t", name])
             }
         }
+    }
+
+    /// The tty of an already-open terminal attached to this window's view, or
+    /// nil if none. The join (verified live): a view is named
+    /// `ccorn-view-<windowId>` (uniqueViewSessionName), and tmux's `client_tty`
+    /// for that view is byte-for-byte Terminal's `tty of tab` — so a live client
+    /// on `ccorn-view-<id>` IS the Terminal tab opened for this session. Lets the
+    /// attach path raise that terminal instead of stacking a second window on the
+    /// session (one terminal per session). A terminal the user has since closed
+    /// leaves no client (`destroy-unattached` reaps the view), so a nil here
+    /// means "open a fresh one".
+    func viewClientTTY(forWindowId windowId: String) -> String? {
+        let r = tmux(["list-clients", "-F", "#{client_session}\t#{client_tty}"])
+        guard r.ok else { return nil }
+        return Self.matchViewClient(windowId: windowId, clientLines: r.stdout)
+    }
+
+    /// Pure split of `viewClientTTY`: the tty of the client whose session is this
+    /// window's view (`ccorn-view-<suffix>`, or a `-2`/`-3` collision form). The
+    /// `-` before the collision number is what stops window `@1`'s base
+    /// `ccorn-view-1` from matching window `@10`'s `ccorn-view-10`.
+    static func matchViewClient(windowId: String, clientLines: String) -> String? {
+        let suffix = windowId.replacingOccurrences(of: "@", with: "")
+        let base = "\(viewSessionPrefix)-\(suffix)"
+        for line in clientLines.split(whereSeparator: { $0 == "\n" }) {
+            let cols = line.components(separatedBy: "\t")
+            guard cols.count >= 2 else { continue }
+            let session = cols[0].trimmingCharacters(in: .whitespaces)
+            let tty = cols[1].trimmingCharacters(in: .whitespaces)
+            guard session == base || session.hasPrefix(base + "-") else { continue }
+            if !tty.isEmpty { return tty }
+        }
+        return nil
     }
 }

@@ -90,6 +90,29 @@ import Testing
         #expect(TmuxController.shellQuote("'") == "''\\'''")
     }
 
+    // MARK: AppleScript string-literal quoting (Open in Terminal custom title)
+
+    @Test func appleScriptQuoteWrapsAndPassesPlainText() {
+        // A plain title becomes a quoted AppleScript string literal, set verbatim
+        // as the Terminal tab's custom title.
+        #expect(TmuxController.appleScriptQuote("auth refactor") == "\"auth refactor\"")
+        // The title is a custom title, never `do script`, and AppleScript does no
+        // shell expansion — so injection-shaped names are inert and pass through.
+        #expect(TmuxController.appleScriptQuote("$(rm -rf ~)") == "\"$(rm -rf ~)\"")
+    }
+
+    @Test func appleScriptQuoteEscapesQuotesAndBackslashes() {
+        let bs = "\\"   // a single backslash
+        let dq = "\""   // a single double quote
+        // A double quote would otherwise terminate the literal early.
+        #expect(TmuxController.appleScriptQuote("a" + dq + "b") == dq + "a" + bs + dq + "b" + dq)
+        // A backslash is doubled.
+        #expect(TmuxController.appleScriptQuote("a" + bs + "b") == dq + "a" + bs + bs + "b" + dq)
+        // Backslash is escaped BEFORE the quote, so \" → \\\" (escaped backslash
+        // then escaped quote), never \\" (escaped backslash + a stray terminator).
+        #expect(TmuxController.appleScriptQuote(bs + dq) == dq + bs + bs + bs + dq + dq)
+    }
+
     // MARK: Per-client view-session naming (Open in Terminal isolation)
 
     @Test func viewSessionNameDerivesFromWindowId() {
@@ -108,6 +131,34 @@ import Testing
         #expect(TmuxController.uniqueViewSessionName(forWindowId: "@22",
                                                      taken: taken.union(["ccorn-view-22-2"]))
                 == "ccorn-view-22-3")
+    }
+
+    @Test func matchViewClientFindsAttachedViewTTY() {
+        // A live client on this window's view → its tty (raise that terminal).
+        let lines = "ccorn-view-3\t/dev/ttys017\nccorn\t/dev/ttys004"
+        #expect(TmuxController.matchViewClient(windowId: "@3", clientLines: lines)
+                == "/dev/ttys017")
+    }
+
+    @Test func matchViewClientMatchesCollisionSuffix() {
+        // A second terminal on the same window lands on `-2`; still this session.
+        let lines = "ccorn-view-3-2\t/dev/ttys020"
+        #expect(TmuxController.matchViewClient(windowId: "@3", clientLines: lines)
+                == "/dev/ttys020")
+    }
+
+    @Test func matchViewClientDoesNotBleedAcrossWindowIds() {
+        // @1's base `ccorn-view-1` must not match @10's `ccorn-view-10`; the `-`
+        // separator before the collision number is what keeps them distinct.
+        let lines = "ccorn-view-10\t/dev/ttys099"
+        #expect(TmuxController.matchViewClient(windowId: "@1", clientLines: lines) == nil)
+    }
+
+    @Test func matchViewClientNilWhenNoViewAttached() {
+        // No view client (closed terminal / only the managed session) → open fresh.
+        #expect(TmuxController.matchViewClient(windowId: "@3",
+                                               clientLines: "ccorn\t/dev/ttys004") == nil)
+        #expect(TmuxController.matchViewClient(windowId: "@3", clientLines: "") == nil)
     }
 
     // MARK: Aggregate-mark severity ordering
