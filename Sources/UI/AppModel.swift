@@ -155,8 +155,9 @@ final class AppModel: ObservableObject {
     // MARK: - Lifecycle
 
     /// Reconcile with existing tmux windows, run discovery, auto-restart if
-    /// enabled, then poll states every 3 seconds. Discovery re-runs only on
-    /// FSEvents from `~/.claude/projects/`, never on the poll.
+    /// enabled, then poll states on the adaptive cadence (`nextPollNanos`).
+    /// Discovery re-runs only on FSEvents from `~/.claude/projects/`, never on
+    /// the poll.
     func start() {
         guard pollTask == nil else { return }
 
@@ -172,14 +173,35 @@ final class AppModel: ObservableObject {
             await self?.initialSync()
             while !Task.isCancelled {
                 guard let self else { return }
-                await self.engine.refreshAll()
+                // Pass the cached transcript index so the hot path never
+                // re-walks the projects root — see refreshAll(index:).
+                await self.engine.refreshAll(index: self.transcriptIndex)
                 self.rebuildRows()
                 #if DEBUG
                 self.logDebugTick()
                 #endif
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                try? await Task.sleep(nanoseconds: self.nextPollNanos())
             }
         }
+    }
+
+    /// Adaptive poll cadence. The working->active flip's latency only matters
+    /// when the user is actually looking at a list, so fast polling is gated on
+    /// window visibility (the same on-screen signal that gates row motion):
+    ///
+    ///   - a session is Working AND a window is on screen -> 0.75s, so the flip
+    ///     to active lands sub-second instead of riding the 3s tick;
+    ///   - a window is on screen but nothing is Working -> 3s (keep the list
+    ///     fresh enough to notice work *starting*);
+    ///   - no window on screen -> 5s, clawing back wakeups when nobody is
+    ///     watching. The menu-bar icon carries no state, and the notified states
+    ///     (waiting/dead/needs-auth) are caught on the first poll regardless of
+    ///     cadence, so 5s costs nothing the user can perceive.
+    private func nextPollNanos() -> UInt64 {
+        let watching = popoverOnScreen || mainWindowOnScreen
+        guard watching else { return 5_000_000_000 }
+        let anyWorking = engine.liveSessions.values.contains { $0.state == .working }
+        return anyWorking ? 750_000_000 : 3_000_000_000
     }
 
     #if DEBUG

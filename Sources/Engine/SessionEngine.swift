@@ -453,15 +453,19 @@ final class SessionEngine: ObservableObject {
 
     // MARK: - State refresh
 
-    /// One refresh cycle over every live session — the 3s hot path. The projects
-    /// root is enumerated exactly ONCE into a uuid -> transcript index (directory
-    /// listings only, no transcript reads); each session then resolves its
-    /// transcript with an O(1) lookup, and the bridge-session check inside
-    /// `detect` is mtime-cached per session. All of it runs off-main; results
-    /// are applied back on the main actor.
-    func refreshAll(now: Date = Date()) async {
+    /// One refresh cycle over every live session — the hot poll path. Each
+    /// session resolves its transcript with an O(1) lookup into `index`, and the
+    /// bridge-session check inside `detect` is mtime-cached per session. All of
+    /// it runs off-main; results are applied back on the main actor.
+    ///
+    /// `index` is the caller's already-built uuid -> transcript index (the UI
+    /// keeps one, refreshed by FSEvents-driven discovery). Passing it keeps the
+    /// hot path off the filesystem entirely — a fast adaptive poll must not
+    /// re-enumerate the projects root on every tick. When nil, the index is
+    /// enumerated here (the one-off / launch callers that hold no cache).
+    func refreshAll(index: [String: DiscoveredSession]? = nil, now: Date = Date()) async {
         await bindUnknownIdentities()
-        await refresh(jobs: detectionJobs(), now: now)
+        await refresh(jobs: detectionJobs(), index: index, now: now)
     }
 
     /// Bind live sessions whose UUID is still unknown. startNewSession binds at
@@ -517,9 +521,11 @@ final class SessionEngine: ObservableObject {
         }
     }
 
-    /// Re-detect state for one live session.
+    /// Re-detect state for one live session. A one-off (not the hot path), so it
+    /// enumerates the transcript index itself rather than taking a cached one.
     func refreshState(windowId: String, now: Date = Date()) async {
-        await refresh(jobs: detectionJobs().filter { $0.windowId == windowId }, now: now)
+        await refresh(jobs: detectionJobs().filter { $0.windowId == windowId },
+                      index: nil, now: now)
     }
 
     private struct DetectionJob: Sendable {
@@ -534,7 +540,9 @@ final class SessionEngine: ObservableObject {
         }
     }
 
-    private func refresh(jobs: [DetectionJob], now: Date) async {
+    private func refresh(jobs: [DetectionJob],
+                         index providedIndex: [String: DiscoveredSession]?,
+                         now: Date) async {
         guard !jobs.isEmpty else { return }
         let tmux = self.tmux
         let detector = self.detector
@@ -542,7 +550,9 @@ final class SessionEngine: ObservableObject {
         let staleThreshold = settings.staleThresholdSeconds
 
         let results = await Task.detached { () -> [String: DetectionResult] in
-            let index = discovery.transcriptIndex()
+            // The caller's cached index keeps the hot path off the filesystem;
+            // only the one-off / launch callers (nil) enumerate here.
+            let index = providedIndex ?? discovery.transcriptIndex()
             var out: [String: DetectionResult] = [:]
             for job in jobs {
                 let transcript = job.uuid.isEmpty ? nil : index[job.uuid]

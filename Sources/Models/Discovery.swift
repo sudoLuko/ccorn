@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single transcript discovered under a project directory.
-struct DiscoveredSession {
+struct DiscoveredSession: Sendable {
     /// The JSONL filename without extension — this *is* the session UUID.
     let uuid: String
     let transcriptPath: String
