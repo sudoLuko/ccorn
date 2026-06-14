@@ -117,9 +117,11 @@ final class SessionEngine: ObservableObject {
             if let stray = session.strayDefaultWindowId {
                 tmux.killWindow(windowId: stray)
             }
-            // Title is the only remote handle (no per-session URL exists), so set it
-            // at launch. `tmux send-keys` TYPES this string into the pane's
-            // interactive shell, which then evaluates it — so the title must be POSIX
+            // Title is the remote handle the user finds the session by when the
+            // per-session deep link isn't available (the registry bridge id can
+            // lag a live bridge), so set it at launch. `tmux send-keys` TYPES
+            // this string into the pane's interactive shell, which then
+            // evaluates it — so the title must be POSIX
             // single-quoted. Double-quote escaping is insufficient: inside double
             // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
             // title like `$(rm -rf ~)` would execute. Single quotes make it inert.

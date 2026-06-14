@@ -103,6 +103,11 @@ final class LiveSession: ObservableObject {
     /// signal). Read only during rebuildRows like the notices above, so not
     /// published — the row it produces republishes on change.
     var bypassActive = false
+    /// Remote-control bridge handle (`session_…`) for the per-session browser
+    /// deep link, from the latest detection pass. Read only during rebuildRows
+    /// like the notices above, so not published. nil until RC links (or the
+    /// registry file lags). See `DetectionResult.bridgeSessionId`.
+    var bridgeSessionId: String?
 
     #if DEBUG
     /// Shakedown identity, captured at init (deinit is nonisolated, so it must
@@ -164,5 +169,6 @@ final class LiveSession: ObservableObject {
         authNotice = result.authNotice
         rcPlanNotice = result.rcPlanNotice
         bypassActive = result.bypassActive
+        bridgeSessionId = result.bridgeSessionId
     }
 }

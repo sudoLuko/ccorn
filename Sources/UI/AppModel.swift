@@ -430,6 +430,7 @@ final class AppModel: ObservableObject {
                 path: path,
                 state: live.state,
                 remoteControlActive: live.remoteControlActive,
+                bridgeSessionId: live.bridgeSessionId,
                 rcGraceExpired: now.timeIntervalSince(live.startedAt) > 30,
                 lastActive: lastActive,
                 authNotice: live.authNotice,
@@ -562,12 +563,14 @@ final class AppModel: ObservableObject {
                 if !presentAuthAlertIfNeeded(row) {
                     NotificationManager.shared.notify(sessionKey: row.id,
                                                       title: row.title,
-                                                      state: row.state)
+                                                      state: row.state,
+                                                      bridgeSessionId: row.bridgeSessionId)
                 }
             } else if row.state == .waiting || row.state == .dead {
                 NotificationManager.shared.notify(sessionKey: row.id,
                                                   title: row.title,
-                                                  state: row.state)
+                                                  state: row.state,
+                                                  bridgeSessionId: row.bridgeSessionId)
             }
         }
         // Drop memory for rows that no longer exist (killed windows, pruned
@@ -653,11 +656,28 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// No per-session URL exists (runtime findings C1): open the claude.ai/code
-    /// session list; the user finds the session by its title.
+    /// Open the session in the browser. When the remote-control bridge handle
+    /// is known, deep-link straight to the session
+    /// (`claude.ai/code/<session_…>`, verified to equal the URL Claude Code
+    /// prints); otherwise fall back to the claude.ai/code list, where the user
+    /// finds the session by its title. The handle is a positive-only signal
+    /// (the registry file can lag a live bridge), so the portal fallback is
+    /// normal, not an error.
     func openInBrowser(_ row: SessionRow) {
-        guard let url = URL(string: "https://claude.ai/code") else { return }
-        NSWorkspace.shared.open(url)
+        NSWorkspace.shared.open(Self.browserURL(bridgeSessionId: row.bridgeSessionId))
+    }
+
+    /// The claude.ai destination for a remote-control bridge handle: the
+    /// per-session deep link when the handle is present and usable, else the
+    /// claude.ai/code portal. Pure and `nonisolated` so the notification-tap
+    /// handler (which runs off the main actor) builds the identical URL.
+    nonisolated static func browserURL(bridgeSessionId: String?) -> URL {
+        if let id = bridgeSessionId,
+           let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+           let url = URL(string: "https://claude.ai/code/\(encoded)") {
+            return url
+        }
+        return URL(string: "https://claude.ai/code")!
     }
 
     /// Open Terminal attached to the session's tmux window (flow 6.5). Targets

@@ -24,6 +24,11 @@ struct SessionRow: Identifiable, Equatable {
     let path: String
     let state: SessionState
     let remoteControlActive: Bool
+    /// Remote-control bridge handle (`session_…`) when known — the
+    /// `claude.ai/code/<id>` per-session URL segment the browser handoff opens.
+    /// nil for rows with no live bridge (stopped/unmanaged, or RC not yet up);
+    /// the handoff falls back to the claude.ai/code portal then.
+    let bridgeSessionId: String?
     /// True once the session is old enough that missing remote control is a
     /// problem, not just still-activating (30s grace — docs/CCORN_SPEC.md §8).
     let rcGraceExpired: Bool
@@ -50,6 +55,7 @@ struct SessionRow: Identifiable, Equatable {
          path: String,
          state: SessionState,
          remoteControlActive: Bool,
+         bridgeSessionId: String? = nil,
          rcGraceExpired: Bool = true,
          archived: Bool = false,
          lastActive: Date?,
@@ -64,6 +70,7 @@ struct SessionRow: Identifiable, Equatable {
         self.path = path
         self.state = state
         self.remoteControlActive = remoteControlActive
+        self.bridgeSessionId = bridgeSessionId
         self.rcGraceExpired = rcGraceExpired
         self.archived = archived
         self.lastActive = lastActive
@@ -126,7 +133,9 @@ extension SessionRow {
     enum OpenAction: Equatable {
         /// Attach to this row's live tmux window.
         case terminal
-        /// Open claude.ai/code.
+        /// Hand off to the browser — the per-session deep link when this row's
+        /// bridge handle is known, else the claude.ai/code portal (see
+        /// `AppModel.openInBrowser`).
         case browser
         /// No live window: restart (resume) the session, then attach Terminal.
         case restartThenAttach
@@ -135,7 +144,8 @@ extension SessionRow {
         case adoptThenAttach
     }
 
-    /// Browser mode always opens claude.ai/code. Terminal mode:
+    /// Browser mode hands off to the browser (per-session deep link or portal,
+    /// resolved in `AppModel.openInBrowser`). Terminal mode:
     ///  - live window → attach to it (no remote control needed);
     ///  - stopped session (a record, not archived) → restart and attach to the
     ///    fresh window (the Restart preconditions still gate this downstream);

@@ -66,8 +66,8 @@ This encoding is lossy and cannot be reversed by string substitution (verified o
 
 - Global "enable for all sessions" is **not** something CCorn should write directly. The only documented controls are the `/config` toggle "Enable Remote Control for all sessions" and Desktop Settings, Claude Code, "Enable remote control by default"; there is no documented `~/.claude.json` key (`remoteControlAtStartup` was an unverified guess) and the toggle has a known reset bug. CCorn cannot reliably script `/config`, so do not attempt the global enable. It is unnecessary regardless: CCorn passes `--rc` on every session it starts, which is fully under its control, so the global setting only affects sessions a user starts outside CCorn.
 - For all sessions CCorn starts or resumes: use `claude --rc` or `claude --resume <uuid> --rc`. Remote control is enabled from session start via the flag; no separate step. Use the interactive `--rc` flag with one window per session, not `claude remote-control` (server mode), which multiplexes many sessions in a single process and conflicts with the one-window-per-session model.
-- **There is no per-session URL to capture** (verified on Claude Code 2.1.169): nothing URL-shaped is printed at launch or in scrollback, and `/status` shows no URL. The Remote Control linkage instead appears in the session's JSONL transcript as a `bridge-session` record (`{type: "bridge-session", sessionId, bridgeSessionId, lastSequenceNum}`). A remote user reaches the session by opening claude.ai/code (or the mobile app) and picking it from the session list by its title, keyed to the Session ID. The title is therefore the only handle a remote user has, so set a clear one when CCorn starts the session (`claude --rc "<title>"`).
-- "Open in Browser" opens `https://claude.ai/code` (the session list), not a per-session deep link, because none is known to exist. The user finds the session by the title CCorn set. Do not synthesize a deep link from the Session ID or `bridgeSessionId`; nothing observed confirms one works.
+- **A per-session URL exists, and CCorn can build it** (Remote Control ≥ 2.1.162; the older "no URL on 2.1.169" finding is superseded). Claude Code prints `https://claude.ai/code/session_<id>` for an RC-active session, and that `session_…` segment equals the **`bridgeSessionId` recorded in the process session registry** (`~/.claude/sessions/<pid>.json`) — verified against real printed URLs on 2026-06-14 (5/7 printed URLs matched a registry handle exactly; the misses were stale registry files). CCorn reads that handle in `StateDetector` and carries it to the row, so "Open in Browser" can deep-link straight to the session. **Caveat — two different `bridgeSessionId`s:** the *registry* value is a `session_…` id and IS the URL segment; the *transcript* `bridge-session` record (`{type: "bridge-session", sessionId, bridgeSessionId, lastSequenceNum}`) carries a `cse_…` id in a different namespace that is **not** URL-valid — use it only as the boolean RC signal, never to build the deep link. The title remains the handle for the portal fallback, so still set a clear one (`claude --rc "<title>"`).
+- "Open in Browser" deep-links to `https://claude.ai/code/<bridgeSessionId>` (the registry `session_…` handle) when it is known, and falls back to `https://claude.ai/code` (the session list) otherwise — the handle is a positive-only signal (the registry file can lag a live bridge), so the fallback is normal, not an error.
 - Remote-control-active detection (for the Running state): the literal string `Remote Control active` is printed right-aligned in the TUI footer from session start and is stable across frames (verified on 2.1.169), so `tmux capture-pane` matching on it is the primary signal. A version-independent secondary signal that does not depend on pane scraping: a `bridge-session` record exists in the session's JSONL transcript. Treat remote control as active if either holds; show the grey warning indicator only when neither does.
 - Remote-control loss: short drops (sleep, brief network loss) reconnect automatically when the machine is back online, so take no action. A sustained ~10-minute outage is different: the session times out and the `claude` process **exits**. Do not send `/rc` to a timed-out session (nothing is there to receive it). Detection marks it Dead (PID gone); recovery is the normal Restart flow (`claude --resume <uuid> --rc`). The `/rc` slash command is only for turning remote control on for a still-alive session.
 
@@ -128,7 +128,7 @@ Two names exist and must not be confused: the **tmux window name** (display/atta
 tmux sessions outlive CCorn, so on every launch CCorn rebuilds its view from what already exists rather than assuming start-time state:
 
 - If the `ccorn` session exists, enumerate its windows by ID. For each, re-derive the live PID from the pane (see Process Identification); previous-run PIDs are meaningless.
-- Re-detect each session's state from pane capture (the `Remote Control active` string) and/or the JSONL `bridge-session` record. There is no per-session URL to restore (none exists), so "Open in Browser" always opens the session list regardless of relaunch.
+- Re-detect each session's state from pane capture (the `Remote Control active` string) and/or the JSONL `bridge-session` record. The per-session URL is not persisted — it is re-derived each launch from the registry `bridgeSessionId`, so "Open in Browser" deep-links once remote control re-activates and falls back to the session list until then.
 - Re-join existing windows to persisted records (see Session Record) by `@ccorn_id`/window ID, not by name.
 
 ### Session Record (Data Model)
@@ -345,8 +345,8 @@ Poll each session every 3 seconds with `tmux capture-pane -t <window-id> -p` (th
 
 **Note:** The literal footer string is `Remote Control active` (verified on 2.1.169). If a future Claude Code version changes the wording, the `bridge-session` JSONL record (see Remote control linkage) is the version-independent fallback.
 
-**Remote control linkage (no URL on 2.1.169):**
-Remote Control on 2.1.169 prints no session URL anywhere, so there is nothing to capture with a regex. Detect that remote control is active via the `Remote Control active` footer string (see the Running state above) or the `bridge-session` record in the session's JSONL. "Open in Browser" opens `https://claude.ai/code`; the user locates the session by its title.
+**Remote control linkage and the per-session URL:**
+Detect that remote control is active via the `Remote Control active` footer string (see the Running state above) or the `bridge-session` record in the session's JSONL. The per-session URL `https://claude.ai/code/session_<id>` (RC ≥ 2.1.162) is not scraped from the pane — its `session_…` id equals the `bridgeSessionId` in the process registry (`~/.claude/sessions/<pid>.json`), which CCorn already reads. "Open in Browser" deep-links to `https://claude.ai/code/<bridgeSessionId>` when the handle is known, falling back to `https://claude.ai/code` (the session list, located by title) otherwise. Do not use the transcript `bridge-session` record's `bridgeSessionId` (a `cse_…`, different namespace) for the URL.
 
 **Warning presentation (one mark per row — no overlay):**
 There is no separate warning indicator next to the dot. A session that is
@@ -851,7 +851,7 @@ verification with the list's existing tap/right-click stack.
 1. User reviews, unchecks any they don’t want to import
 1. Clicks “Import Selected ([X])”
 1. CCorn processes sequentially — one at a time:
-   a. For idle sessions: sends `SIGTERM` to existing terminal process PID, waits 5 seconds, `SIGKILL` if still running. Creates new tmux window, runs `claude --resume <uuid> --rc`, confirms remote control is active (the `Remote Control active` footer string or a `bridge-session` JSONL record — no URL exists to capture).
+   a. For idle sessions: sends `SIGTERM` to existing terminal process PID, waits 5 seconds, `SIGKILL` if still running. Creates new tmux window, runs `claude --resume <uuid> --rc`, confirms remote control is active (the `Remote Control active` footer string or a `bridge-session` JSONL record — liveness is signal-based, not URL-based).
    b. For active sessions: pauses, shows warning alert — user chooses “Wait for Idle” (polls every 10s) or “Import Anyway” (proceeds immediately with same kill flow)
 1. Progress shown per row — waiting → importing spinner → green checkmark
 1. On completion: “All done” state, user clicks Close
@@ -877,8 +877,8 @@ verification with the list's existing tap/right-click stack.
 1. User clicks a session row in the popover (single click) or double-clicks a row in the main window
 1. The handoff follows the **click action** in Settings (5.5):
    - Terminal (default) → attach to the session’s tmux window (6.5). A stopped session has no window, so it is restarted first (resume, flow 6.7, including the missing-dir/missing-transcript dialogs) and the fresh window opened in Terminal. An unmanaged (discovered) row has no window either, so it is imported (adopted) first — flow 6.10, including the take-over confirm and the wait-for-idle guard — and the fresh managed window opened in Terminal. An archived row with no window falls back to the browser
-   - Browser → open `https://claude.ai/code` in the default browser. There is no per-session deep link (verified on 2.1.169), so this opens the session list; the user selects the session by the title CCorn set
-1. The explicit context-menu items override the preference: “Open in Terminal” always attaches (6.5); “Open in Browser” always opens the list, and is greyed out (tooltip “Remote control is not active on this session”) when remote control is not active on the session
+   - Browser → open the session in the default browser: the per-session deep link `https://claude.ai/code/<bridgeSessionId>` when the registry handle is known, else `https://claude.ai/code` (the session list, selected by the title CCorn set)
+1. The explicit context-menu items override the preference: “Open in Terminal” always attaches (6.5); “Open in Browser” deep-links to the session (falling back to the list), and is greyed out (tooltip “Remote control is not active on this session”) when remote control is not active on the session
 
 ### 6.5 Open Session in Terminal
 
@@ -906,7 +906,7 @@ verification with the list's existing tap/right-click stack.
 1. If directory no longer exists → alert: “The project directory no longer exists.”
 1. If a tmux window for this project still exists (a crashed session often leaves its window and shell), reuse it (respawn in place) or kill it first; only create a new window if none exists, to avoid an orphaned dead window plus a `-2` duplicate. Otherwise: `tmux new-window -t ccorn -n <sanitized-name> -c <directory> -P -F "#{window_id}"` (store the returned window ID; see Window Naming and Identity)
 1. Runs `claude --resume <uuid> --rc` — resumes session with remote control enabled
-1. Confirms remote control is active (footer string or `bridge-session` record — no URL exists to capture)
+1. Confirms remote control is active (footer string or `bridge-session` record — liveness is signal-based, not URL-based)
 1. Row updates to green dot
 
 ### 6.8 Rename Session
@@ -942,7 +942,7 @@ verification with the list's existing tap/right-click stack.
 1. Sends `SIGTERM` to existing process PID, waits 5 seconds, sends `SIGKILL` if still running
 1. Creates new tmux window: `tmux new-window -t ccorn -n <folder-name> -c <directory>`
 1. Runs `claude --resume <uuid> --rc` — resumes with remote control enabled
-1. Confirms remote control is active (footer string or `bridge-session` record — no URL exists to capture)
+1. Confirms remote control is active (footer string or `bridge-session` record — liveness is signal-based, not URL-based)
 1. Row updates — unmanaged badge removed, dot fills to correct state
 1. If triggered via “Open in Terminal” or a row click, the fresh managed window opens in Terminal (flow 6.5)
 1. User closes old terminal window
@@ -983,7 +983,7 @@ verification with the list's existing tap/right-click stack.
 ### Remote control strategy
 
 - All new sessions CCorn starts use the `claude --rc` flag directly; all resumed/imported sessions use `claude --resume <uuid> --rc`. This is the reliable path and is fully under CCorn's control.
-- No per-session URL exists (verified on 2.1.169), so "Open in Browser" opens `https://claude.ai/code` and the user finds the session by its title. Remote-control liveness is the `Remote Control active` footer string or the JSONL `bridge-session` record, not a URL.
+- A per-session URL exists (RC ≥ 2.1.162: `claude.ai/code/session_<id>`), and its `session_…` id is the registry `bridgeSessionId`, so "Open in Browser" deep-links to it and falls back to `https://claude.ai/code` (find by title) only when the handle hasn't surfaced. Remote-control liveness is the `Remote Control active` footer string or the JSONL `bridge-session` record. (Do not use the transcript record's `cse_…` id for the URL.)
 - A global "enable for all sessions" toggle exists but has a known reset bug, and the underlying config key is undocumented. Do not depend on it; rely on per-session `--rc`, which CCorn controls.
 - Remote control has a ~10-minute network timeout after which the process exits. CCorn does not re-enable a timed-out session; it detects the process death and offers Restart (see Remote Control in Section 2).
 
@@ -992,7 +992,7 @@ verification with the list's existing tap/right-click stack.
 - Uses Claude Code’s native `/rename` command (added in v2.0.64)
 - Name is consistent across CCorn, claude.ai/code, and Claude mobile app
 - No local nickname system — single source of truth
-- Since no per-session URL exists (see Remote Control in Section 2), the title is the only handle a remote user has to find the session in the claude.ai/code list. Set it at session start with `claude --rc "<title>"` rather than relying on a follow-up `/rename`.
+- The title is the handle a remote user needs to find the session in the claude.ai/code list — the fallback whenever the per-session deep link isn't available (see Remote Control in Section 2). Set it at session start with `claude --rc "<title>"` rather than relying on a follow-up `/rename`.
 
 ### FSEvents for directory watching
 
@@ -1039,7 +1039,7 @@ verification with the list's existing tap/right-click stack.
 |~/.claude.json doesn’t exist                   |No action needed. CCorn does not write a global remote-control key (none is documented); it uses `--rc` per session.                                                                                                                                                           |
 |~/.claude.json exists with other content       |Read existing JSON, merge key, write back — never overwrite entire file                                                                                                                                     |
 |tmux window name conflict                      |Append `-2`, `-3` etc. to window name until unique                                                                                                                                                          |
-|No session URL exists (by design, 2.1.169)      |Expected. "Open in Browser" opens the session list (claude.ai/code); the user finds the session by its title. Liveness uses the `Remote Control active` string or the `bridge-session` JSONL record                                                                                                                          |
+|Per-session URL not yet available               |Expected while remote control is still activating: the registry `bridgeSessionId` is a positive-only signal, so "Open in Browser" falls back to the session list (claude.ai/code, found by title) until the handle surfaces, then deep-links. Liveness uses the `Remote Control active` string or the `bridge-session` JSONL record                                                                                                                          |
 |Ultraplan started in a session                 |Starting an ultraplan session disconnects that session's remote control (both use the claude.ai/code surface). Surfaces as an RC drop; do not treat as an error.|
 |Remote-only picker commands run locally        |`/mcp`, `/plugin`, `/resume` open interactive pickers and work only from the local terminal, not browser/mobile. Not CCorn's concern, but relevant if scripting against a session.|
 |Session idle-archived while process alive      |Separate from the network timeout: after ~10-15 min idle even on a stable network, the remote session can be archived server-side while the local `claude` process keeps running. PID-based detection correctly keeps it out of Dead (shows Running/Stale); note that "Open in Browser" may land on an archived session until a new message reactivates it.|
@@ -1117,8 +1117,8 @@ Process manager only — no chat interface.
 - Do NOT write a global remote-control key to ~/.claude.json (no documented key exists; the control is the `/config` toggle / Desktop setting). Rely on the `--rc` flag per session, which CCorn controls.
 - New sessions: use `claude --rc` flag — do NOT use separate `/rc` send-keys
 - Resumed/imported sessions: use `claude --resume <uuid> --rc`
-- No session URL exists (verified 2.1.169). Detect RC-active via the `Remote Control active` footer string (capture-pane) or a `bridge-session` record in the session JSONL
-- "Open in Browser" opens https://claude.ai/code (the session list); user finds the session by its title (set via `claude --rc "<title>"`)
+- Detect RC-active via the `Remote Control active` footer string (capture-pane) or a `bridge-session` record in the session JSONL
+- "Open in Browser" deep-links to `https://claude.ai/code/<bridgeSessionId>` (the registry `session_…` handle, RC ≥ 2.1.162), falling back to `https://claude.ai/code` (find by title, set via `claude --rc "<title>"`) until the handle surfaces
 - Process kill: SIGTERM first, wait 5s, SIGKILL if still running
 
 ## Build order (recommended)
@@ -1129,7 +1129,7 @@ Process manager only — no chat interface.
 5. Main app window — sidebar + list view
 6. New session flow (claude --rc "<title>", RC-active detection)
 7. Import/resume session flow (SIGTERM/SIGKILL, claude --resume --rc)
-8. Remote-control-active detection (footer string / bridge-session record; no URL exists)
+8. Remote-control-active detection (footer string / bridge-session record; signal-based, not URL-based)
 9. Context menu actions
 10. Rename inline interaction
 11. Settings screen (with remove directory warning)
@@ -1171,7 +1171,7 @@ Build in this order for early testability. Each phase should be runnable and tes
 - Kill session — confirmation → SIGTERM → SIGKILL fallback → dot updates
 - Restart session — resume by ID → `claude --resume <uuid> --rc` → RC-active detection → dot updates
 - Open in Terminal — osascript tmux attach
-- Open in Browser — opens claude.ai/code (no per-session URL exists); find the session by title
+- Open in Browser — deep-links to `claude.ai/code/<bridgeSessionId>` (registry `session_…` handle), falling back to claude.ai/code (find by title) until the handle surfaces
 
 **Phase 4 — Import flow (day 3-4)**
 

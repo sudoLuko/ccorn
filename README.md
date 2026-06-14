@@ -31,7 +31,7 @@ It is a process manager, not a chat interface. You keep talking to Claude in you
 - **Aggregate status in the menu bar.** The corn glyph reflects the most urgent session state across everything it manages.
 - **Triage popover.** Sessions that need attention float to the top; calm sessions stay behind a quiet disclosure.
 - **Full session manager.** A main window with every session: rename, group, archive, kill, restart, import.
-- **One-click handoff.** Open any session in Terminal (it is just a tmux window) or in the browser at claude.ai/code.
+- **One-click handoff.** Open any session in Terminal (it is just a tmux window) or in the browser — a per-session deep link when remote control is active.
 - **Discovery.** Finds existing Claude Code sessions on your machine and offers to import and resume them.
 - **Notifications.** Get pinged when a session needs your input or dies.
 
@@ -92,7 +92,7 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 - **New Session.** Pick a folder; CCorn opens a tmux window there and starts `claude --rc` with a title you choose.
 - **Import.** Adopt sessions you started yourself; CCorn resumes them under management.
 - **Status marks.** A colored dot for routine states, a warning triangle for the broken trio (sign-in needed, remote control unavailable, crashed). See [Status colors](#status-colors) above.
-- **Open in Terminal or Browser.** Jump into the live tmux pane, or open claude.ai/code and find the session by its title.
+- **Open in Terminal or Browser.** Jump into the live tmux pane, or deep-link to the session in the browser (falling back to the claude.ai/code list if remote control hasn't activated yet).
 - **Groups.** Organize sessions into user-defined collections in the sidebar.
 
 ## Known limitations
@@ -101,7 +101,7 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 - No chat UI by design. CCorn manages processes; conversations happen elsewhere.
 - State detection reads the Claude Code TUI's pane text (polled every 3 seconds), so a CLI update can shift wording before CCorn catches up. The preflight suite in `scripts/preflight/` exists to catch exactly that before releases.
 - The App Sandbox is off by design. CCorn spawns `tmux` and `claude`, watches arbitrary directories with FSEvents, and sends AppleEvents to Terminal, none of which a sandboxed app may do.
-- "Open in Browser" lands on the claude.ai/code session list, not a per-session URL (none exists).
+- "Open in Browser" deep-links to the session via its remote-control bridge id (`claude.ai/code/session_…`); until that id surfaces (remote control still activating), it falls back to the claude.ai/code session list.
 
 ## More
 

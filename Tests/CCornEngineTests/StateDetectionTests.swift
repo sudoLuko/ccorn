@@ -588,11 +588,15 @@ struct StubPanes: PaneSource {
                                       bridgeForPid: { _ in "session_01abc" })
         #expect(bridged.remoteControlActive)
         #expect(bridged.state == .waiting)
+        // The handle is also carried out for the per-session browser deep link,
+        // not just collapsed into the RC-active bool.
+        #expect(bridged.bridgeSessionId == "session_01abc")
 
         let unbridged = detector.detect(input: input, panes: panes, transcript: nil,
                                         staleThreshold: 600, now: t0,
                                         bridgeForPid: { _ in nil })
         #expect(!unbridged.remoteControlActive)
+        #expect(unbridged.bridgeSessionId == nil)
     }
 
     /// detect's remote-control signal falls back to the transcript when the pane

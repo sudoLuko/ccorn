@@ -64,6 +64,15 @@ struct DetectionResult: Sendable {
     /// user escalated into bypass mid-session (Shift+Tab). Drives the row's
     /// bypass marker; reflects ACTUAL runtime state, not just the launch flag.
     var bypassActive: Bool = false
+    /// The remote-control bridge handle from the process session registry — a
+    /// `session_…` id equal to the `claude.ai/code/<id>` per-session URL
+    /// segment (verified against the URLs Claude Code prints). nil until the
+    /// bridge links, or while the registry file lags a live bridge
+    /// (positive-only, like the RC signal it feeds). NOT the transcript
+    /// `bridge-session` record's id, which is a `cse_…` in a different
+    /// namespace that is not URL-valid — never build the deep link from that
+    /// one. Drives the per-session "Open in Browser" handoff.
+    var bridgeSessionId: String?
 }
 
 /// Caches the bridge-session transcript check so the 3s refresh hot path does
@@ -413,15 +422,23 @@ struct StateDetector: Sendable {
         result.pid = livePID
 
         let pane = panes.capturePane(windowId: windowId)
+        // The registry bridge handle (a `session_…` id) is read up front: its
+        // mere presence is one of the remote-control-active signals, AND its
+        // value is the `claude.ai/code/<id>` per-session URL segment the browser
+        // handoff opens. Reading it every tick (a tiny per-pid JSON file) keeps
+        // that id fresh for the on-demand action — cheap for the handful of live
+        // sessions this manages.
+        let registryBridge = livePID.flatMap(bridgeForPid)
+        result.bridgeSessionId = registryBridge
         // Remote-control-active is the OR of three positive signals, most
         // reliable first; absence of all three is "not up", never asserted from
         // any one miss. The footer (version-robust: old literal or `/rc` chip)
         // is the CLI's own self-report; the registry bridge handle and the
         // transcript `bridge-session` record are version-independent positives
         // that cover a footer that hasn't repainted yet. `||` short-circuits, so
-        // an engaged footer skips the registry read and transcript I/O entirely.
+        // an engaged footer or a present registry handle skips the transcript I/O.
         result.remoteControlActive = showsRemoteControlEngaged(pane: pane)
-            || livePID.flatMap(bridgeForPid) != nil
+            || registryBridge != nil
             || result.rcCache.hasBridgeSession(path: transcript?.transcriptPath,
                                                mtime: transcript?.modified)
         result.rcPlanNotice = rcPlanNotice(pane: pane)

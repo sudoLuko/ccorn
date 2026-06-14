@@ -6,8 +6,8 @@ import UserNotifications
 /// transitions into Waiting or Dead, detected as edges by the caller — never
 /// on every poll — plus a per-session cooldown here so a flapping session
 /// can't spam. Tapping a notification opens the session in the browser (same
-/// as "Open in Browser": claude.ai/code, found by title — no per-session URL
-/// exists).
+/// as "Open in Browser"): the per-session deep link when the session's bridge
+/// handle was known at post time, else the claude.ai/code list.
 @MainActor
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
@@ -32,7 +32,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Post a notification for a session that just transitioned. The caller
     /// guarantees this is an edge (previous state differed); this layer adds
     /// the cooldown and the content.
-    func notify(sessionKey: String, title: String, state: SessionState, now: Date = Date()) {
+    func notify(sessionKey: String, title: String, state: SessionState,
+                bridgeSessionId: String? = nil, now: Date = Date()) {
         guard state == .waiting || state == .dead || state == .needsAuth else { return }
         // An entry past the cooldown behaves exactly like a missing one, so
         // expired entries are dropped here — keyed by window id (monotonic),
@@ -57,6 +58,12 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             return
         }
         content.sound = .default
+        // Stash the bridge handle so the tap can deep-link to the session even
+        // though this layer has no live model. Captured at post time: if the
+        // bridge wasn't up yet, it's nil and the tap falls back to the portal.
+        if let bridgeSessionId {
+            content.userInfo = ["bridgeSessionId": bridgeSessionId]
+        }
         let request = UNNotificationRequest(identifier: key,
                                             content: content,
                                             trigger: nil)
@@ -65,14 +72,16 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// Tap → open the session in the browser (flow: same as "Open in Browser").
+    /// Tap → open the session in the browser (flow: same as "Open in Browser"):
+    /// the per-session deep link when the bridge handle was stashed at post
+    /// time, else the claude.ai/code portal.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
+        let bridgeSessionId = response.notification.request.content
+            .userInfo["bridgeSessionId"] as? String
         DispatchQueue.main.async {
-            if let url = URL(string: "https://claude.ai/code") {
-                NSWorkspace.shared.open(url)
-            }
+            NSWorkspace.shared.open(AppModel.browserURL(bridgeSessionId: bridgeSessionId))
             completionHandler()
         }
     }
