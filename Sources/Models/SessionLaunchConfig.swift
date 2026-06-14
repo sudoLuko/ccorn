@@ -93,15 +93,27 @@ struct SessionLaunchConfig: Codable, Equatable {
     /// Advanced escape hatch: extra argv tokens, already split (one flag or
     /// value per element). Passed through verbatim after the known flags.
     var extraArgs: [String]
+    /// Launch with remote control (`--rc`): the session syncs to claude.ai and
+    /// the phone, gets a per-session browser URL, and shows `Remote Control
+    /// active`. `false` launches a **local** session — no `--rc`, no remote or
+    /// phone access, no per-session URL. Unlike `--rc`, this choice is NOT
+    /// emitted by `claudeFlagTokens()`: `--rc` is positional (it carries the
+    /// title on a new session and sits after `--resume` on a restart), so the
+    /// engine folds it into the base invocation, not the trailing flag list.
+    /// Persisted so a restart honors local-vs-remote, and consulted by status
+    /// detection so a deliberately-local session is never flagged "no remote".
+    var remoteControl: Bool
 
     init(permissionMode: CCPermissionMode = .auto,
          model: String? = nil,
          additionalDirectories: [String] = [],
-         extraArgs: [String] = []) {
+         extraArgs: [String] = [],
+         remoteControl: Bool = true) {
         self.permissionMode = permissionMode
         self.model = model
         self.additionalDirectories = additionalDirectories
         self.extraArgs = extraArgs
+        self.remoteControl = remoteControl
     }
 
     /// The default new sessions inherit: safe-but-autonomous (`auto`), nothing else.
@@ -116,6 +128,9 @@ struct SessionLaunchConfig: Codable, Equatable {
         model = try c.decodeIfPresent(String.self, forKey: .model)
         additionalDirectories = try c.decodeIfPresent([String].self, forKey: .additionalDirectories) ?? []
         extraArgs = try c.decodeIfPresent([String].self, forKey: .extraArgs) ?? []
+        // Missing in a config written before local sessions existed → remote,
+        // the behavior every such session was launched with.
+        remoteControl = try c.decodeIfPresent(Bool.self, forKey: .remoteControl) ?? true
     }
 
     /// The ordered argv tokens this config contributes after `claude` (and after

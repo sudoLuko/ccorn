@@ -75,7 +75,9 @@ enum SessionMenu {
                 title: "Open in Browser",
                 enabled: row.remoteControlActive,
                 toolTip: row.remoteControlActive ? nil
-                    : "Remote control is not active on this session") { [weak model] in
+                    : (row.remoteControlRequested
+                        ? "Remote control is not active on this session"
+                        : "This is a local session — no browser access")) { [weak model] in
                 model?.openInBrowser(row)
             })
             menu.addItem(ActionMenuItem(title: "Open in Terminal") { [weak model] in

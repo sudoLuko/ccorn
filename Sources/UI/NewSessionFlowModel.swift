@@ -22,6 +22,10 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
     /// Raw extra-args text; whitespace-split into tokens when the session starts
     /// (the advanced escape hatch — one flag/value per token, no quoting).
     @Published var extraArgsText: String
+    /// Launch with remote control (`--rc`). Checked = remote (the default and
+    /// CCorn's historical behavior); unchecked = a local session with no remote
+    /// or phone access and no per-session URL.
+    @Published var remoteControl: Bool
     @Published var showAdvanced = false
 
     private weak var model: AppModel?
@@ -38,6 +42,7 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
         self.modelText = defaultConfig.model ?? ""
         self.additionalDirectories = defaultConfig.additionalDirectories
         self.extraArgsText = defaultConfig.extraArgs.joined(separator: " ")
+        self.remoteControl = defaultConfig.remoteControl
         self.model = model
     }
 
@@ -61,7 +66,8 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
             additionalDirectories: additionalDirectories,
             extraArgs: extraArgsText
                 .split(whereSeparator: { $0 == " " || $0 == "\t" })
-                .map(String.init))
+                .map(String.init),
+            remoteControl: remoteControl)
     }
 
     /// nil = fall through to Claude's AI session title (an empty typed name).

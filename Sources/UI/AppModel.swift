@@ -430,6 +430,10 @@ final class AppModel: ObservableObject {
                 path: path,
                 state: live.state,
                 remoteControlActive: live.remoteControlActive,
+                // A session CCorn started as local (launchConfig says so) is
+                // never flagged "no remote"; adopted/reconciled rows carry no
+                // config (nil) and stay remote-expected.
+                remoteControlRequested: live.record.launchConfig?.remoteControl ?? true,
                 bridgeSessionId: live.bridgeSessionId,
                 rcGraceExpired: now.timeIntervalSince(live.startedAt) > 30,
                 lastActive: lastActive,
@@ -471,6 +475,9 @@ final class AppModel: ObservableObject {
                 path: record.path,
                 state: .stopped,
                 remoteControlActive: false,
+                // Carry the launched posture so a stopped local session keeps
+                // its "Local" tag (and stays excluded from no-remote).
+                remoteControlRequested: record.launchConfig?.remoteControl ?? true,
                 archived: record.archived,
                 lastActive: transcriptIndex[record.uuid]?.modified,
                 groupIDs: record.groupIDs

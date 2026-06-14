@@ -346,6 +346,7 @@ private struct PopoverRowView: View {
                 .foregroundColor(PopoverPalette.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
+            LocalTag(isLocal: row.isLocal, color: PopoverPalette.secondaryText)
             AttentionWord(presentation: row.presentation)
             Spacer(minLength: 8)
             Text(LastActiveFormat.string(from: row.lastActive))

@@ -52,9 +52,16 @@ enum StatusPresentation: String, Equatable {
     /// to the tooltip. Exclusions are unchanged: needsAuth wins (sign-in is
     /// the root cause, missing remote control just its consequence), and
     /// dead/stopped/unmanaged keep their own presentations.
+    ///
+    /// `remoteControlRequested` is the session's intent: a session the user
+    /// launched as local (`--rc` omitted) never has remote control and never
+    /// should — so the no-remote mark is suppressed for it entirely, leaving the
+    /// routine presentation. Defaults true: every session not started as local
+    /// is expected to be remote, the historical behavior.
     static func resolve(state: SessionState,
                         remoteControlActive: Bool,
-                        rcGraceExpired: Bool) -> StatusPresentation {
+                        rcGraceExpired: Bool,
+                        remoteControlRequested: Bool = true) -> StatusPresentation {
         let routine: StatusPresentation
         switch state {
         case .running: routine = .running
@@ -66,6 +73,7 @@ enum StatusPresentation: String, Equatable {
         case .stopped: return .stopped
         case .unmanaged: return .unmanaged
         }
+        guard remoteControlRequested else { return routine }
         return (!remoteControlActive && rcGraceExpired) ? .noRemote : routine
     }
 

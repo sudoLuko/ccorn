@@ -142,7 +142,8 @@ final class SessionEngine: ObservableObject {
             // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
             // title like `$(rm -rf ~)` would execute. Single quotes make it inert.
             tmux.sendCommand(windowId: windowId,
-                             Self.claudeCommand(base: "claude --rc \(TmuxController.shellQuote(label))",
+                             Self.claudeCommand(base: Self.claudeBase(remoteControl: cfg.remoteControl,
+                                                                      newTitle: label),
                                                 config: cfg))
             let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
             guard case let .started(_, pid) = outcome else {
@@ -221,8 +222,11 @@ final class SessionEngine: ObservableObject {
             tmux.setCcornId(windowId: windowId, uuid: uuid)
             // Single-quoted for the same reason as the title in startNewSession: this
             // command is typed into and evaluated by the pane's interactive shell.
+            // A session created as local resumes local (its stored config says
+            // so); adopt/import pass nil config → resume remote, as before.
             tmux.sendCommand(windowId: windowId,
-                             Self.claudeCommand(base: "claude --resume \(TmuxController.shellQuote(uuid)) --rc",
+                             Self.claudeCommand(base: Self.claudeBase(remoteControl: config?.remoteControl ?? true,
+                                                                      resumeUUID: uuid),
                                                 config: config))
             let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
             if case .started = outcome {
@@ -244,12 +248,30 @@ final class SessionEngine: ObservableObject {
         return result
     }
 
+    /// The base `claude` invocation (before the config's flag tokens) for a new
+    /// or resumed session. `--rc` — and, for a new session, the title it carries
+    /// as the remote handle — appears ONLY when `remoteControl` is true; a local
+    /// session omits it entirely, so no bridge ever comes up. `resumeUUID` set =
+    /// restart (`--resume <uuid>`); otherwise a new session with `newTitle`. The
+    /// uuid/title are single-quoted because the whole string is typed into and
+    /// evaluated by the pane's interactive shell. Internal (not private) so the
+    /// local-vs-remote branch is unit-testable.
+    nonisolated static func claudeBase(remoteControl: Bool,
+                                       newTitle: String = "",
+                                       resumeUUID: String? = nil) -> String {
+        if let resumeUUID {
+            let base = "claude --resume \(TmuxController.shellQuote(resumeUUID))"
+            return remoteControl ? "\(base) --rc" : base
+        }
+        return remoteControl ? "claude --rc \(TmuxController.shellQuote(newTitle))" : "claude"
+    }
+
     /// Assemble the `claude` command typed into a pane: the base invocation
-    /// (`--rc "<label>"` or `--resume <uuid> --rc`, already quoted) plus the
-    /// launch config's flag tokens, each token shell-quoted because the whole
-    /// string is evaluated by the pane's interactive shell. Quoting a bare
-    /// `--flag` is harmless; quoting a value (model alias, path, extra-arg) is
-    /// what keeps shell metacharacters in it inert. nil config → base only.
+    /// (from `claudeBase`, already quoted) plus the launch config's flag tokens,
+    /// each token shell-quoted because the whole string is evaluated by the
+    /// pane's interactive shell. Quoting a bare `--flag` is harmless; quoting a
+    /// value (model alias, path, extra-arg) is what keeps shell metacharacters
+    /// in it inert. nil config → base only.
     private nonisolated static func claudeCommand(base: String,
                                                   config: SessionLaunchConfig?) -> String {
         let flags = (config?.claudeFlagTokens() ?? []).map(TmuxController.shellQuote)

@@ -55,6 +55,7 @@ struct NewSessionSheetView: View {
             existingSessionsNote
             nameField
             permissionPicker
+            remoteControlToggle
             advanced
         }
     }
@@ -115,6 +116,21 @@ struct NewSessionSheetView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }
+    }
+
+    // Remote control is the default (and what every CCorn session has shipped
+    // with). Unchecking it launches a local-only session — surfacing the
+    // consequence inline so it is an informed choice, not a surprise.
+    private var remoteControlToggle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Enable Remote Control", isOn: $flow.remoteControl)
+                .toggleStyle(.checkbox)
+            Text(flow.remoteControl
+                 ? "Syncs to claude.ai and your phone, with a per-session browser URL."
+                 : "Local session: no browser or phone access and no per-session URL.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 

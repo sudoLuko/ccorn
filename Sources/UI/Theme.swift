@@ -292,6 +292,32 @@ struct AttentionWord: View {
     }
 }
 
+// MARK: - Local tag
+
+/// The quiet "Local" caption after the title for sessions launched WITHOUT
+/// remote control (`--rc`): no browser/phone access, no per-session URL. It is
+/// metadata, not status — it carries no status color (secondary grey only), so
+/// the one-mark-per-row and status-is-the-only-color rules hold. Shown only on
+/// local rows; remote rows (the default) carry nothing. The color is injected
+/// so one view reads correctly on the light main window (`.secondary`) and the
+/// fixed-dark popover (`PopoverPalette.secondaryText`). Shared by both rows so
+/// the tag matches across surfaces, like `AttentionWord`.
+struct LocalTag: View {
+    let isLocal: Bool
+    var color: Color = .secondary
+
+    var body: some View {
+        if isLocal {
+            Text("Local")
+                .font(.caption)
+                .foregroundColor(color)
+                .lineLimit(1)
+                .fixedSize()
+                .help("Local session — no browser or phone access and no per-session URL")
+        }
+    }
+}
+
 // MARK: - Corn mark
 
 /// CCorn's shared brand glyph: the OpenMoji ear-of-corn (`CornGlyph` asset —

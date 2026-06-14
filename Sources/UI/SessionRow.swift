@@ -24,6 +24,11 @@ struct SessionRow: Identifiable, Equatable {
     let path: String
     let state: SessionState
     let remoteControlActive: Bool
+    /// Whether this session was launched to use remote control (`--rc`). False
+    /// for a session the user created as local — it has no remote control by
+    /// design, so it must never resolve to the no-remote mark. Defaults true:
+    /// records/unmanaged/adopted rows have no local intent and stay remote-expected.
+    let remoteControlRequested: Bool
     /// Remote-control bridge handle (`session_…`) when known — the
     /// `claude.ai/code/<id>` per-session URL segment the browser handoff opens.
     /// nil for rows with no live bridge (stopped/unmanaged, or RC not yet up);
@@ -55,6 +60,7 @@ struct SessionRow: Identifiable, Equatable {
          path: String,
          state: SessionState,
          remoteControlActive: Bool,
+         remoteControlRequested: Bool = true,
          bridgeSessionId: String? = nil,
          rcGraceExpired: Bool = true,
          archived: Bool = false,
@@ -70,6 +76,7 @@ struct SessionRow: Identifiable, Equatable {
         self.path = path
         self.state = state
         self.remoteControlActive = remoteControlActive
+        self.remoteControlRequested = remoteControlRequested
         self.bridgeSessionId = bridgeSessionId
         self.rcGraceExpired = rcGraceExpired
         self.archived = archived
@@ -85,6 +92,12 @@ struct SessionRow: Identifiable, Equatable {
         return false
     }
 
+    /// Launched without remote control (`--rc`) — a local-only session with no
+    /// browser/phone access and no per-session URL. Drives the row's quiet
+    /// "Local" tag. The inverse of `remoteControlRequested`, which defaults true,
+    /// so unmanaged/adopted rows (unknown posture) are never tagged local.
+    var isLocal: Bool { !remoteControlRequested }
+
     var windowId: String? {
         if case let .managed(windowId) = kind { return windowId }
         return nil
@@ -98,7 +111,8 @@ struct SessionRow: Identifiable, Equatable {
     var presentation: StatusPresentation {
         StatusPresentation.resolve(state: state,
                                    remoteControlActive: remoteControlActive,
-                                   rcGraceExpired: rcGraceExpired)
+                                   rcGraceExpired: rcGraceExpired,
+                                   remoteControlRequested: remoteControlRequested)
     }
 
     /// Tooltip for the status mark. No remote keeps its existing text — the

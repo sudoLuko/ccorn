@@ -134,6 +134,27 @@ import Testing
         #expect(unmanaged.openAction(clickAction: .browser) == .browser)
     }
 
+    // MARK: - Local tag (remote vs local denotation)
+
+    /// `isLocal` is the inverse of the launched posture: a row launched without
+    /// remote control is tagged local; the remote default (and unknown-posture
+    /// rows, which default to requested) is not.
+    @Test func isLocalReflectsRemoteControlRequested() {
+        let local = SessionRow(id: "id", kind: .managed(windowId: "@1"), title: "t",
+                               uuid: "u", path: "/p", state: .running,
+                               remoteControlActive: false, remoteControlRequested: false,
+                               lastActive: nil)
+        let remote = SessionRow(id: "id", kind: .managed(windowId: "@1"), title: "t",
+                                uuid: "u", path: "/p", state: .running,
+                                remoteControlActive: true, remoteControlRequested: true,
+                                lastActive: nil)
+        #expect(local.isLocal)
+        #expect(!remote.isLocal)
+        // The tag and the no-remote suppression come from the same fact: a local
+        // row past the grace shows its routine mark, never no-remote.
+        #expect(local.presentation == .running)
+    }
+
     // MARK: - Rename error detection (flow 6.8)
 
     @Test func renameErrorDetectsNewErrorLine() {

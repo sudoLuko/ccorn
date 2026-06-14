@@ -105,9 +105,47 @@ import Testing
         let original = SessionLaunchConfig(permissionMode: .plan,
                                            model: "sonnet",
                                            additionalDirectories: ["/x"],
-                                           extraArgs: ["--y"])
+                                           extraArgs: ["--y"],
+                                           remoteControl: false)
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(SessionLaunchConfig.self, from: data)
         #expect(decoded == original)
+    }
+
+    // MARK: Remote control
+
+    /// New sessions are remote by default (CCorn's historical behavior); the
+    /// flag is positional, so it is NOT one of the trailing flag tokens.
+    @Test func remoteControlDefaultsTrueAndIsNotAFlagToken() {
+        #expect(SessionLaunchConfig.safeDefault.remoteControl)
+        #expect(SessionLaunchConfig().remoteControl)
+        #expect(!SessionLaunchConfig(remoteControl: false).claudeFlagTokens().contains("--rc"))
+        #expect(!SessionLaunchConfig(remoteControl: true).claudeFlagTokens().contains("--rc"))
+    }
+
+    /// A config JSON predating local sessions (no `remoteControl` key) decodes
+    /// to remote — the posture every such session ran with.
+    @Test func remoteControlMissingDecodesToTrue() throws {
+        let config = try JSONDecoder().decode(SessionLaunchConfig.self, from: Data("{}".utf8))
+        #expect(config.remoteControl)
+    }
+
+    // MARK: Base invocation (`--rc` placement)
+
+    /// Remote new session: `--rc` carries the title; remote restart: `--rc`
+    /// trails `--resume <uuid>`.
+    @Test func remoteBaseIncludesRC() {
+        #expect(SessionEngine.claudeBase(remoteControl: true, newTitle: "ccorn")
+                == "claude --rc 'ccorn'")
+        #expect(SessionEngine.claudeBase(remoteControl: true, resumeUUID: "abc")
+                == "claude --resume 'abc' --rc")
+    }
+
+    /// Local session omits `--rc` entirely — no title handle on a new session,
+    /// a plain `--resume` on a restart.
+    @Test func localBaseOmitsRC() {
+        #expect(SessionEngine.claudeBase(remoteControl: false, newTitle: "ccorn") == "claude")
+        #expect(SessionEngine.claudeBase(remoteControl: false, resumeUUID: "abc")
+                == "claude --resume 'abc'")
     }
 }

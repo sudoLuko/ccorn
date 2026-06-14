@@ -8,10 +8,12 @@ import Testing
 
     private func resolve(_ state: SessionState,
                          rc: Bool,
-                         graceExpired: Bool = true) -> StatusPresentation {
+                         graceExpired: Bool = true,
+                         requested: Bool = true) -> StatusPresentation {
         StatusPresentation.resolve(state: state,
                                    remoteControlActive: rc,
-                                   rcGraceExpired: graceExpired)
+                                   rcGraceExpired: graceExpired,
+                                   remoteControlRequested: requested)
     }
 
     // MARK: No-remote resolution
@@ -40,6 +42,16 @@ import Testing
         #expect(resolve(.working, rc: true) == .working)
         #expect(resolve(.waiting, rc: true) == .waiting)
         #expect(resolve(.stale, rc: true) == .stale)
+    }
+
+    /// A session launched as local (`--rc` omitted) has no remote control by
+    /// design — it keeps its routine presentation and is never flagged
+    /// no-remote, even with RC inactive past the grace.
+    @Test func localSessionNeverResolvesToNoRemote() {
+        for state: SessionState in [.running, .working, .waiting, .stale] {
+            #expect(resolve(state, rc: false, requested: false) != .noRemote)
+            #expect(resolve(state, rc: false, requested: false) == resolve(state, rc: true))
+        }
     }
 
     /// The existing exclusions hold: needsAuth wins over no-remote (sign-in

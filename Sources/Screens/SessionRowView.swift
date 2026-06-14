@@ -117,6 +117,7 @@ struct SessionRowView: View {
                     })
             }
             if !isRenaming {
+                LocalTag(isLocal: row.isLocal)
                 AttentionWord(presentation: row.presentation)
             }
         }
