@@ -33,6 +33,17 @@ struct PopoverView: View {
         }
         .padding(12)
         .frame(width: 280)
+        // Pin the content to the TOP and let the dark fill grow to whatever
+        // height the panel currently is. The panel frame is animated top-
+        // anchored (PopoverPanelController.applyPreferredSize), so the popover
+        // must unroll and retract from the BOTTOM only. Without this the
+        // hosting view (pinned to all four panel edges) hands the content the
+        // window's animating height; mid-animation that differs from the
+        // content's natural height, so SwiftUI CENTERS it — the header drifts
+        // up while the footer falls down, and the gap below the fill briefly
+        // exposes the desktop. Filling from a top alignment keeps the header
+        // fixed and the fill always covering the panel.
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(PopoverPalette.background)
         // The hosting panel is borderless and clear, so the content supplies
         // its own chrome: the rounded clip shapes the window (and its
@@ -58,7 +69,8 @@ struct PopoverView: View {
         // (DebugCommandChannel `popovercalm`), so the expanded state can be
         // screenshot-verified.
         .onReceive(NotificationCenter.default.publisher(for: Self.debugToggleCalm)) { _ in
-            withAnimation(.easeInOut(duration: 0.2)) { calmExpanded.toggle() }
+            // Match the real button: snap the state, let the panel wipe animate.
+            calmExpanded.toggle()
         }
         #endif
     }
@@ -185,13 +197,15 @@ struct PopoverView: View {
         }
         // The DISPLAYED sequence, not the managed set (F1): a tier crossing
         // moves an id between the two sub-arrays, so the row's move between
-        // sections animates like the calm toggle does — while within-section
-        // state flips (running -> working) change nothing and stay quiet.
-        // Severity reorders inside the attention section animate too.
+        // sections animates — while within-section state flips (running ->
+        // working) change nothing and stay quiet. Severity reorders inside the
+        // attention section animate too. The calm expand/collapse is
+        // deliberately NOT in this value: its height change is animated by the
+        // panel-frame wipe alone, so the calm rows are revealed/hidden by the
+        // growing/shrinking panel instead of fading on a second, competing
+        // timeline (which made expand look unfinished).
         .animation(.easeInOut(duration: 0.2),
-                   value: attentionRows.map(\.id)
-                       + [calmExpanded ? "+" : "-"]
-                       + calmRows.map(\.id))
+                   value: attentionRows.map(\.id) + calmRows.map(\.id))
     }
 
     private func popoverRow(_ row: SessionRow) -> some View {
@@ -207,15 +221,22 @@ struct PopoverView: View {
     /// attention rows above it, it doubles as the all-clear line.
     private var calmDisclosure: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                calmExpanded.toggle()
-            }
+            // Snap the disclosure state. The panel-frame animation
+            // (PopoverPanelController.applyPreferredSize) is the ONLY thing
+            // that animates the height — it unrolls/retracts the rows from the
+            // bottom. Animating the rows here too put two 0.2s animations in
+            // conflict on expand (rows fading/sliding in while the panel wiped
+            // open); collapse hid it behind the shrinking fill, expand did not.
+            calmExpanded.toggle()
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .medium))
                     .foregroundColor(PopoverPalette.secondaryText)
                     .rotationEffect(.degrees(calmExpanded ? 90 : 0))
+                    // Rotate the chevron smoothly without re-animating the row
+                    // layout (which the panel wipe now owns).
+                    .animation(.easeInOut(duration: 0.2), value: calmExpanded)
                     .frame(width: StatusMark.slotWidth)
                 if attentionRows.isEmpty {
                     Text("All clear")
