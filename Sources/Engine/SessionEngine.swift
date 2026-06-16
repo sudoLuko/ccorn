@@ -348,8 +348,15 @@ final class SessionEngine: ObservableObject {
     /// canonical kill-window → SIGTERM → SIGKILL routine. Returns the session
     /// UUID ("" when it never became known; nothing persists, the row simply
     /// disappears — there is nothing to resume).
+    ///
+    /// `archived` folds the archived flag into that same identity-persisting
+    /// merge (default false: Stop leaves the flag untouched). Setting it here,
+    /// before `terminate` drops the window from `liveSessions`, means the store
+    /// already reads archived by the time any rebuild can observe the gone
+    /// window, so the record routes straight to Archived instead of flashing as
+    /// a Stopped row in All Sessions (flow 6.9).
     @discardableResult
-    func killSession(windowId: String) async -> String {
+    func killSession(windowId: String, archived: Bool = false) async -> String {
         var uuid = ""
         if let live = liveSessions[windowId] {
             uuid = live.sessionUUID
@@ -366,7 +373,8 @@ final class SessionEngine: ObservableObject {
                 await Task.detached {
                     store.mergeRecord(uuid: frozen,
                                       path: record.path.isEmpty ? nil : record.path,
-                                      title: record.title.isEmpty ? nil : record.title)
+                                      title: record.title.isEmpty ? nil : record.title,
+                                      archived: archived ? true : nil)
                 }.value
             }
         }
@@ -503,12 +511,16 @@ final class SessionEngine: ObservableObject {
     // MARK: - Archive
 
     /// Archive (flow 6.9): a running session is killed first (the caller has
-    /// already confirmed), then the record is flagged. The killSession step
-    /// persists the record, so the flag always has something to land on.
+    /// already confirmed), with the archived flag folded into the kill's own
+    /// identity merge (`archived: true`) so the record is flagged *before* the
+    /// window leaves `liveSessions`; a rebuild during the SIGTERM wait then
+    /// routes it straight to Archived instead of flashing as a Stopped row in
+    /// All Sessions. The trailing merge is the fallback for an already-stopped
+    /// record (no live window to kill) or a uuid learned only at kill time.
     func archiveSession(uuid: String, windowId: String?) async {
         var uuid = uuid
         if let windowId, liveSessions[windowId] != nil {
-            let killed = await killSession(windowId: windowId)
+            let killed = await killSession(windowId: windowId, archived: true)
             if uuid.isEmpty { uuid = killed }
         }
         guard !uuid.isEmpty else { return }

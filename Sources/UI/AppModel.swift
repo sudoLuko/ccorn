@@ -50,6 +50,16 @@ final class AppModel: ObservableObject {
     /// wait-for-idle poll, so a second click is ignored until the first settles.
     private var importingUUIDs: Set<String> = []
 
+    /// Session uuids with an archive in flight; held from the moment the user
+    /// confirms until the post-mutation refresh lands. While set, `rebuildRows`
+    /// treats the uuid as already-archived, so the gap between the kill (the
+    /// window leaving `liveSessions`) and the persisted `archived` flag can't
+    /// publish the session as a transient top-of-list Stopped row in All
+    /// Sessions: the row simply leaves its current position and reappears in
+    /// Archived. Cleared on every exit path (defer), so a failed or cancelled
+    /// archive never strands the session invisible in both views.
+    private var archivingUUIDs: Set<String> = []
+
     /// User-defined groups (docs/CCORN_SPEC.md 5.11), mirrored from
     /// settings so the sidebar re-renders on every mutation. Definitions
     /// live in settings; membership lives on the session records.
@@ -466,6 +476,13 @@ final class AppModel: ObservableObject {
         for record in records
         where !managedUUIDs.contains(record.uuid)
             && !discovered.liveUUIDs.contains(record.uuid) {
+            // An archive in flight counts as already-archived even before its
+            // flag persists: during the kill's SIGTERM wait the window has left
+            // liveSessions but the store still reads archived == false, and
+            // without this the record would surface as a transient Stopped row
+            // at the top of All Sessions before the flag lands (see
+            // `archivingUUIDs`).
+            let isArchived = record.archived || archivingUUIDs.contains(record.uuid)
             let row = SessionRow(
                 id: "record:\(record.uuid)",
                 kind: .record,
@@ -479,11 +496,11 @@ final class AppModel: ObservableObject {
                 // Carry the launched posture so a stopped local session keeps
                 // its "Local" tag (and stays excluded from no-remote).
                 remoteControlRequested: record.launchConfig?.remoteControl ?? true,
-                archived: record.archived,
+                archived: isArchived,
                 lastActive: transcriptIndex[record.uuid]?.modified,
                 groupIDs: record.groupIDs
             )
-            if record.archived {
+            if isArchived {
                 archived.append(row)
             } else {
                 built.append(row)
@@ -1002,8 +1019,16 @@ final class AppModel: ObservableObject {
                                  message: "Archive and stop it?",
                                  action: "Archive") else { return }
         }
+        // Arm the transient-suppression guard only after the user confirms, and
+        // clear it on every exit path: rebuildRows routes this uuid to Archived
+        // for the whole kill→flag→refresh window, so All Sessions never sees the
+        // intermediate Stopped row. A bound uuid is required for the guard to
+        // match a record; an empty (still-binding) uuid simply skips it.
+        let uuid = row.uuid
+        archivingUUIDs.insert(uuid)
         Task {
-            await engine.archiveSession(uuid: row.uuid, windowId: row.windowId)
+            defer { archivingUUIDs.remove(uuid) }
+            await engine.archiveSession(uuid: uuid, windowId: row.windowId)
             await refreshAfterMutation()
         }
     }
