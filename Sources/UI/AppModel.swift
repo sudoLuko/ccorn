@@ -1379,9 +1379,19 @@ final class AppModel: ObservableObject {
         switch result {
         case .started:
             break
-        case .windowCreatedNoProcess:
-            Alerts.info(title: "Claude Code didn't \(verb)",
-                        message: "No claude process appeared. Make sure Claude Code is installed and authenticated (run `claude` in a terminal; use /login if prompted).")
+        case let .windowCreatedNoProcess(_, pane):
+            // No child appeared, but the pane may say why. A signed-out first
+            // session prints the login prompt and exits before any child shows,
+            // so mine the captured pane for that signal (same recognition the
+            // root/sudo fatal line uses) and lead with the sign-in fix rather
+            // than implying Claude Code may not be installed.
+            if let notice = engine.detector.authNotice(pane: pane) {
+                let content = Self.authAlertContent(notice: notice)
+                Alerts.info(title: content.title, message: content.message)
+            } else {
+                Alerts.info(title: "Claude Code didn't \(verb)",
+                            message: "No claude process started. Check that Claude Code is installed and signed in.")
+            }
         case let .failed(reason):
             Alerts.info(title: "Could not \(verb) the session", message: reason)
         }

@@ -6,8 +6,10 @@ enum StartResult: Sendable {
     case started(windowId: String, pid: Int32)
     /// The window was created but no claude child appeared within the spawn
     /// timeout. The orphan window has already been killed; the id is purely
-    /// informational.
-    case windowCreatedNoProcess(windowId: String)
+    /// informational. The final captured pane is carried so the failure alert
+    /// can mine it for a more specific cause (e.g. a signed-out login prompt)
+    /// instead of always blaming a missing install.
+    case windowCreatedNoProcess(windowId: String, pane: String)
     case failed(String)
 }
 
@@ -301,7 +303,7 @@ final class SessionEngine: ObservableObject {
         if let fatal = StateDetector().launchFatalError(pane: finalPane) {
             return .failed(fatal)
         }
-        return .windowCreatedNoProcess(windowId: windowId)
+        return .windowCreatedNoProcess(windowId: windowId, pane: finalPane)
     }
 
     /// Find the UUID of the session running in `directory` by choosing the
