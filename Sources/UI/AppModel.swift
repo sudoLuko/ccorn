@@ -409,6 +409,13 @@ final class AppModel: ObservableObject {
         var managedPaths = Set<String>()
         var managedUUIDs = Set<String>()
         let recordUUIDs = Set(records.map(\.uuid))
+        // Sessions the user removed from CCorn: skipped on every rebuild so an
+        // untracked session never re-surfaces: neither as a Stopped/Archived
+        // record row, a live external row, nor a dormant-directory summary,
+        // even after the conversation is resumed from the terminal. Read live
+        // from settings (updated the instant a removal commits), so this holds
+        // on the immediate post-mutation rebuild too, before discovery re-runs.
+        let ignored = Set(engine.settings.ignoredSessionUUIDs)
         // Group membership for managed rows: their record is skipped below
         // (the live window is the row), so look its membership up by uuid.
         let groupsByUUID = Dictionary(records.map { ($0.uuid, $0.groupIDs) },
@@ -475,7 +482,8 @@ final class AppModel: ObservableObject {
         // now — is the same session, surfaced elsewhere; skip it here.
         for record in records
         where !managedUUIDs.contains(record.uuid)
-            && !discovered.liveUUIDs.contains(record.uuid) {
+            && !discovered.liveUUIDs.contains(record.uuid)
+            && !ignored.contains(record.uuid) {
             // An archive in flight counts as already-archived even before its
             // flag persists: during the kill's SIGTERM wait the window has left
             // liveSessions but the store still reads archived == false, and
@@ -508,9 +516,10 @@ final class AppModel: ObservableObject {
         }
 
         // Live external sessions: one stable row each, keyed by UUID. Two
-        // sessions sharing a directory are two distinct rows — no directory
-        // collapse, no most-recent flip.
-        for session in discovered.live {
+        // sessions sharing a directory are two distinct rows: no directory
+        // collapse, no most-recent flip. A removed (ignored) UUID stays hidden
+        // even once its conversation is resumed externally.
+        for session in discovered.live where !ignored.contains(session.uuid) {
             built.append(SessionRow(
                 id: "unmanaged:session:\(session.uuid)",
                 kind: .unmanaged,
@@ -533,6 +542,10 @@ final class AppModel: ObservableObject {
             guard let project = projectsByKey[key],
                   let path = project.resolvedPath else { continue }
             let uuid = project.mostRecentSession?.uuid ?? ""
+            // Once a removed session's record is gone, its directory would
+            // otherwise re-collapse to a dormant summary keyed by that same
+            // UUID; skip it so the removal stays sticky.
+            if ignored.contains(uuid) { continue }
             built.append(SessionRow(
                 id: "unmanaged:dir:\(project.encodedKey)",
                 kind: .unmanaged,
@@ -1036,6 +1049,36 @@ final class AppModel: ObservableObject {
     func unarchiveSession(_ row: SessionRow) {
         Task {
             await engine.unarchiveSession(uuid: row.uuid)
+            await refreshAfterMutation()
+        }
+    }
+
+    // MARK: - Remove from CCorn (untrack)
+
+    /// "Remove from CCorn": stop tracking this session entirely. A light,
+    /// reassuring confirm (this is not destructive: the conversation is
+    /// untouched), then one mutation in the engine: stop any live window, drop
+    /// the record from both All Sessions and Archived, and add the UUID to the
+    /// ignore-list so discovery never re-surfaces it. CCorn never touches the
+    /// Claude transcript on disk; the user can still resume it with
+    /// `claude --resume` from the terminal. Offered everywhere Archive is (live
+    /// and dead rows), on archived rows, and on unmanaged rows the user wants to
+    /// stop seeing.
+    func removeFromCCorn(_ row: SessionRow) {
+        // isAliveState covers a session whose claude process is still up
+        // (running/working/waiting/needsAuth/stale); only those need the
+        // "stop it first" wording. Dead/stopped/unmanaged just leave the list.
+        let lead = row.state.isAliveState
+            ? "This stops the session and removes it from your list. "
+            : "This removes the session from your list. "
+        guard Alerts.confirm(
+            title: "Remove “\(row.title)” from CCorn?",
+            message: lead + "Your conversation stays on disk and can be resumed anytime.",
+            action: "Remove") else { return }
+        let uuid = row.uuid
+        let windowId = row.windowId
+        Task {
+            await engine.removeFromCCorn(uuid: uuid, windowId: windowId)
             await refreshAfterMutation()
         }
     }

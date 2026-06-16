@@ -147,6 +147,22 @@ final class SessionStore: @unchecked Sendable {
         }
     }
 
+    /// Drop one record by UUID identity, the "Remove from CCorn" untrack
+    /// action. CCorn forgets only its own bookkeeping: the Claude transcript on
+    /// disk is never touched (the caller records the UUID in the settings
+    /// ignore-list so discovery does not re-surface it).
+    func removeRecord(uuid: String) {
+        guard !uuid.isEmpty else { return }
+        queue.sync {
+            var records = loadRecordsLocked()
+            let before = records.count
+            records.removeAll { $0.uuid == uuid }
+            if records.count != before {
+                saveRecordsLocked(records)
+            }
+        }
+    }
+
     /// Drop records for sessions that can no longer be resumed. `keep` is the
     /// set of UUIDs that must survive regardless (live windows).
     func pruneRecords(withoutTranscriptIn transcripts: Set<String>, keeping keep: Set<String>) {

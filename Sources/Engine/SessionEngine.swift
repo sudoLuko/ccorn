@@ -536,6 +536,43 @@ final class SessionEngine: ObservableObject {
         await Task.detached { store.mergeRecord(uuid: uuid, archived: false) }.value
     }
 
+    // MARK: - Remove from CCorn (untrack)
+
+    /// "Remove from CCorn": forget a session entirely. Unlike Stop/Archive this
+    /// keeps NO record; it tears down any live window via `terminate` (which,
+    /// unlike `killSession`, persists nothing), drops the persisted record from
+    /// both All Sessions and Archived, and adds the UUID to the ignore-list so
+    /// discovery never re-surfaces it (sticky even if the conversation is later
+    /// resumed from the terminal). The Claude transcript on disk is never
+    /// touched: `claude --resume <uuid>` from a terminal still works. A live
+    /// session is identified before its window goes (the registry file goes
+    /// stale once the process dies), mirroring `killSession`.
+    func removeFromCCorn(uuid: String, windowId: String?) async {
+        var uuid = uuid
+        if let windowId, let live = liveSessions[windowId] {
+            if uuid.isEmpty, let pid = live.pid {
+                uuid = await Task.detached {
+                    ClaudeSessionRegistry.info(forPid: pid)?.sessionId ?? ""
+                }.value
+            }
+            await terminate(windowId: windowId)
+        }
+        guard !uuid.isEmpty else { return }
+        ignoreSessionUUID(uuid)
+        let store = self.store
+        let frozen = uuid
+        await Task.detached { store.removeRecord(uuid: frozen) }.value
+    }
+
+    /// Add a UUID to the persisted ignore-list (deduped), through the same
+    /// settings write everything else uses so it survives relaunch.
+    private func ignoreSessionUUID(_ uuid: String) {
+        guard !uuid.isEmpty, !settings.ignoredSessionUUIDs.contains(uuid) else { return }
+        var updated = settings
+        updated.ignoredSessionUUIDs.append(uuid)
+        updateSettings(updated)
+    }
+
     // MARK: - Discovery
 
     func discoverProjects() async -> [DiscoveredProject] {

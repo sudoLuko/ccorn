@@ -62,6 +62,7 @@ enum SessionMenu {
             menu.addItem(ActionMenuItem(title: "Unarchive") { [weak model] in
                 model?.unarchiveSession(row)
             })
+            menu.addItem(removeItem(for: row, model: model))
             menu.addItem(.separator())
             menu.addItem(groupsItem(for: row, model: model))
             menu.addItem(.separator())
@@ -95,6 +96,7 @@ enum SessionMenu {
             menu.addItem(ActionMenuItem(title: "Archive") { [weak model] in
                 model?.archiveSession(row)
             })
+            menu.addItem(removeItem(for: row, model: model))
             menu.addItem(.separator())
             menu.addItem(copyItem)
 
@@ -113,6 +115,7 @@ enum SessionMenu {
             menu.addItem(ActionMenuItem(title: "Archive") { [weak model] in
                 model?.archiveSession(row)
             })
+            menu.addItem(removeItem(for: row, model: model))
             menu.addItem(.separator())
             menu.addItem(copyItem)
 
@@ -133,13 +136,28 @@ enum SessionMenu {
                 model?.importSession(row)
             })
             menu.addItem(.separator())
+            menu.addItem(removeItem(for: row, model: model))
             menu.addItem(copyItem)
         }
         return menu
     }
 
-    /// The "Groups" submenu (5.11): one check-state item per group — the one
-    /// control that assigns, unassigns, and shows membership inline — plus
+    /// "Remove from CCorn" (untrack): drops CCorn's own record and adds the
+    /// session's UUID to the ignore-list so discovery stops surfacing it; the
+    /// Claude conversation on disk is never touched, so it can still be resumed
+    /// from the terminal. Offered wherever Archive is (live + dead rows), after
+    /// Unarchive on archived rows, and on unmanaged rows. Disabled only when
+    /// there is nothing to act on: a row with neither a live window to stop nor
+    /// a bound UUID to ignore (e.g. an empty dormant directory summary).
+    private static func removeItem(for row: SessionRow, model: AppModel) -> NSMenuItem {
+        let actionable = row.windowId != nil || !row.uuid.isEmpty
+        return ActionMenuItem(title: "Remove from CCorn", enabled: actionable) { [weak model] in
+            model?.removeFromCCorn(row)
+        }
+    }
+
+    /// The "Groups" submenu (5.11): one check-state item per group (the one
+    /// control that assigns, unassigns, and shows membership inline), plus
     /// "New Group…", which creates a group, assigns the session, and opens
     /// the sidebar's inline editor for naming. Gated until the session's
     /// uuid has bound: membership keys on the uuid, and a brand-new session
