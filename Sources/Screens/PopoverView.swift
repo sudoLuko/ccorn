@@ -15,12 +15,14 @@ struct PopoverView: View {
     private let rowHeight: CGFloat = 32
     private let maxVisibleRows = 8
 
-    /// Calm sessions expanded under the disclosure. Collapsed again on every
-    /// open: triage starts from the summary, never from yesterday's state.
-    /// The panel keeps this view alive across orderOut/orderFront, so
-    /// .onAppear does not refire on reopen — PopoverPanelController posts
-    /// `resetTriage` from its close path instead.
-    @State private var calmExpanded = false
+    /// Calm sessions expanded under the disclosure. Persisted, not transient
+    /// view state, so it survives the panel's orderOut/orderFront: once the
+    /// user expands or collapses it, the popover reopens in that same state.
+    /// The default is folded, so an untouched user still opens to the summary;
+    /// only an explicit toggle moves it off the calm-folded default. Backed
+    /// by UserDefaults like the main window's DISCOVERED disclosure
+    /// (`discoveredSectionCollapsed`), so the choice also outlives a restart.
+    @AppStorage("popoverCalmExpanded") private var calmExpanded = false
     @State private var disclosureHovering = false
 
     var body: some View {
@@ -56,14 +58,6 @@ struct PopoverView: View {
         // The panel orders out but this tree stays alive: the row marks gate
         // their repeatForever motion on the panel's actual visibility.
         .environment(\.rowMotionEnabled, model.popoverOnScreen)
-        .onAppear { calmExpanded = false }
-        .onReceive(NotificationCenter.default.publisher(for: Self.resetTriage)) { _ in
-            // Posted while the panel is hidden; disable animations anyway so
-            // a reopen never shows a collapse.
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { calmExpanded = false }
-        }
         #if DEBUG
         // Scripted stand-in for clicking the calm disclosure
         // (DebugCommandChannel `popovercalm`), so the expanded state can be
@@ -74,9 +68,6 @@ struct PopoverView: View {
         }
         #endif
     }
-
-    /// Posted by PopoverPanelController after every close (see calmExpanded).
-    static let resetTriage = Notification.Name("ccorn.popover.reset-triage")
 
     #if DEBUG
     static let debugToggleCalm = Notification.Name("ccorn.debug.popover.toggle-calm")

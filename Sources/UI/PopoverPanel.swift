@@ -163,11 +163,6 @@ final class PopoverPanelController {
         isClosing = false
         // The tree stays alive in the hidden panel — stop the mark motion.
         model.popoverOnScreen = false
-        // Triage contract: the calm disclosure is collapsed on every open.
-        // orderOut keeps the SwiftUI view alive in the panel, so .onAppear
-        // does not refire on reopen — reset explicitly instead, here while
-        // hidden so the open never shows a collapse animation.
-        NotificationCenter.default.post(name: PopoverView.resetTriage, object: nil)
     }
 
     // MARK: - Geometry
