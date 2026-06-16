@@ -86,9 +86,7 @@ enum LaunchEnvironment {
 /// `--print`, so it is a no-op in CCorn's interactive `--rc` sessions.
 struct SessionLaunchConfig: Codable, Equatable {
     var permissionMode: CCPermissionMode
-    /// Model alias (`opus`/`sonnet`/`fable`) or full id; nil/empty = account default.
-    var model: String?
-    /// `--add-dir` entries — additional directories the session may touch.
+    /// `--add-dir` entries: additional directories the session may touch.
     var additionalDirectories: [String]
     /// Advanced escape hatch: extra argv tokens, already split (one flag or
     /// value per element). Passed through verbatim after the known flags.
@@ -105,12 +103,10 @@ struct SessionLaunchConfig: Codable, Equatable {
     var remoteControl: Bool
 
     init(permissionMode: CCPermissionMode = .auto,
-         model: String? = nil,
          additionalDirectories: [String] = [],
          extraArgs: [String] = [],
          remoteControl: Bool = true) {
         self.permissionMode = permissionMode
-        self.model = model
         self.additionalDirectories = additionalDirectories
         self.extraArgs = extraArgs
         self.remoteControl = remoteControl
@@ -125,7 +121,6 @@ struct SessionLaunchConfig: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         permissionMode = try c.decodeIfPresent(CCPermissionMode.self, forKey: .permissionMode) ?? .auto
-        model = try c.decodeIfPresent(String.self, forKey: .model)
         additionalDirectories = try c.decodeIfPresent([String].self, forKey: .additionalDirectories) ?? []
         extraArgs = try c.decodeIfPresent([String].self, forKey: .extraArgs) ?? []
         // Missing in a config written before local sessions existed → remote,
@@ -154,9 +149,6 @@ struct SessionLaunchConfig: Codable, Equatable {
             tokens += ["--allow-dangerously-skip-permissions"]
         case .bypass:
             tokens += ["--dangerously-skip-permissions"]
-        }
-        if let model, !model.isEmpty {
-            tokens += ["--model", model]
         }
         for dir in additionalDirectories where !dir.isEmpty {
             tokens += ["--add-dir", dir]

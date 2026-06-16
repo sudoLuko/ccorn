@@ -16,8 +16,6 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
     @Published var directory: String
     @Published var name: String = ""
     @Published var permissionMode: CCPermissionMode
-    /// Model alias/id as typed; empty = account default.
-    @Published var modelText: String
     @Published var additionalDirectories: [String]
     /// Raw extra-args text; whitespace-split into tokens when the session starts
     /// (the advanced escape hatch — one flag/value per token, no quoting).
@@ -39,7 +37,6 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
         // so the picker never opens on an unavailable selection.
         self.permissionMode = (LaunchEnvironment.isRoot && defaultConfig.permissionMode.involvesBypass)
             ? .auto : defaultConfig.permissionMode
-        self.modelText = defaultConfig.model ?? ""
         self.additionalDirectories = defaultConfig.additionalDirectories
         self.extraArgsText = defaultConfig.extraArgs.joined(separator: " ")
         self.remoteControl = defaultConfig.remoteControl
@@ -59,10 +56,8 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
 
     /// The per-session override assembled from the fields.
     var finalConfig: SessionLaunchConfig {
-        let trimmedModel = modelText.trimmingCharacters(in: .whitespaces)
         return SessionLaunchConfig(
             permissionMode: permissionMode,
-            model: trimmedModel.isEmpty ? nil : trimmedModel,
             additionalDirectories: additionalDirectories,
             extraArgs: extraArgsText
                 .split(whereSeparator: { $0 == " " || $0 == "\t" })

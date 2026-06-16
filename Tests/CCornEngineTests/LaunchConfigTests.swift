@@ -45,7 +45,6 @@ import Testing
         for mode in CCPermissionMode.allCases {
             let tokens = SessionLaunchConfig(
                 permissionMode: mode,
-                model: "opus",
                 additionalDirectories: ["/tmp/a"],
                 extraArgs: ["--verbose"]).claudeFlagTokens()
             let hasDangerous = tokens.contains("--dangerously-skip-permissions")
@@ -54,16 +53,7 @@ import Testing
         }
     }
 
-    // MARK: Model / dirs / extra-args
-
-    @Test func modelEmittedWhenNonEmptyOnly() {
-        #expect(SessionLaunchConfig(model: "opus").claudeFlagTokens()
-            .firstIndex(of: "--model").map { idx in
-                SessionLaunchConfig(model: "opus").claudeFlagTokens()[idx + 1]
-            } == "opus")
-        #expect(!SessionLaunchConfig(model: "").claudeFlagTokens().contains("--model"))
-        #expect(!SessionLaunchConfig(model: nil).claudeFlagTokens().contains("--model"))
-    }
+    // MARK: Dirs / extra-args
 
     @Test func eachAdditionalDirectoryGetsItsOwnAddDir() {
         let tokens = SessionLaunchConfig(additionalDirectories: ["/a", "/b"]).claudeFlagTokens()
@@ -87,7 +77,6 @@ import Testing
 
     @Test func safeDefaultIsAuto() {
         #expect(SessionLaunchConfig.safeDefault.permissionMode == .auto)
-        #expect(SessionLaunchConfig.safeDefault.model == nil)
         #expect(SessionLaunchConfig.safeDefault.additionalDirectories.isEmpty)
     }
 
@@ -103,7 +92,6 @@ import Testing
 
     @Test func roundTripsThroughJSON() throws {
         let original = SessionLaunchConfig(permissionMode: .plan,
-                                           model: "sonnet",
                                            additionalDirectories: ["/x"],
                                            extraArgs: ["--y"],
                                            remoteControl: false)

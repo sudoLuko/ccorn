@@ -170,21 +170,10 @@ struct NewSessionSheetView: View {
 
             if flow.showAdvanced {
                 VStack(alignment: .leading, spacing: 14) {
-                    modelField
                     additionalDirectories
                     extraArgsField
                 }
             }
-        }
-    }
-
-    private var modelField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Model")
-                .font(.caption.weight(.medium))
-                .foregroundColor(.secondary)
-            TextField("Account default (e.g. opus, sonnet)", text: $flow.modelText)
-                .textFieldStyle(.roundedBorder)
         }
     }
 
@@ -219,6 +208,9 @@ struct NewSessionSheetView: View {
                 .font(.caption.weight(.medium))
                 .buttonStyle(.plain)
                 .foregroundColor(.primary)
+            Text("Folders outside this project that the session can also read and edit.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
