@@ -24,14 +24,6 @@ struct SessionRowView: View {
     /// Unmanaged and archived rows are secondary content: quieter title,
     /// regular weight, tertiary metadata.
     private var isMuted: Bool { row.kind == .unmanaged || row.archived }
-    /// Managed and stopped (record) rows can be renamed; unmanaged discovery
-    /// rows cannot.
-    private var canRename: Bool {
-        switch row.kind {
-        case .managed, .record: return true
-        case .unmanaged: return false
-        }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,12 +101,13 @@ struct SessionRowView: View {
                     .foregroundColor(isMuted ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    // Double-click the title to rename (5.8). High priority so it
-                    // beats the row's double-click-to-open; gated to renameable
-                    // rows so unmanaged rows still open on double-click.
-                    .modifier(DoubleClickRename(enabled: canRename) {
-                        model.beginRename(row)
-                    })
+                    // No double-click-to-rename here. A title hit sat under the
+                    // row's double-click-to-open, separated only by an invisible
+                    // target, so a near-miss on open silently started a rename.
+                    // A rename fires a live `/rename` to claude.ai and the
+                    // phone. Double-clicking anywhere on the row now opens; rename
+                    // is a deliberate act via the context-menu "Rename" or Return
+                    // on the selected row (5.8).
             }
             if !isRenaming {
                 // Unmanaged rows have no live window, so a Terminal-mode open
@@ -131,7 +124,8 @@ struct SessionRowView: View {
     }
 
     /// Inline rename (5.8): same font/position, subtle border, pre-selected
-    /// text. Enter commits, Escape cancels, empty commits cancel.
+    /// text. Enter commits; Escape or clicking outside cancels; an empty Enter
+    /// cancels too.
     private var renameField: some View {
         TextField("", text: $renameDraft)
             .textFieldStyle(.plain)
@@ -142,13 +136,16 @@ struct SessionRowView: View {
             .onSubmit { model.commitRename(row, to: renameDraft) }
             .onExitCommand { model.cancelRename() }
             // Clicking outside resigns first responder (the window-root
-            // resigner), which lands here as a focus loss: commit, the same as
-            // Return. Guarded so Escape (cancelRename clears the id first),
-            // Enter's own commit, and the in-flight disable don't re-fire it.
+            // resigner), which lands here as a focus loss. Cancel, don't commit:
+            // committing would push a live `/rename` to claude.ai and the phone,
+            // so a click-away (often a mis-aimed open) must discard the edit, not
+            // broadcast it. Only Enter (onSubmit) commits; Escape and this both
+            // cancel. Guarded so Escape (cancelRename clears the id first) and
+            // the in-flight commit don't re-fire it.
             .onChange(of: renameFocused) { focused in
                 guard !focused, model.renamingRowId == row.id, !model.renameInFlight
                 else { return }
-                model.commitRename(row, to: renameDraft)
+                model.cancelRename()
             }
             .padding(.horizontal, 3)
             .overlay(
@@ -194,21 +191,5 @@ struct SessionRowView: View {
         .buttonStyle(.plain)
         .opacity(hovering ? 1 : 0)
         .accessibilityLabel("Session actions")
-    }
-}
-
-/// Applies a double-click-to-rename gesture only when enabled. A swallowed
-/// gesture on a non-renameable row would block its double-click-to-open, so the
-/// modifier adds nothing when disabled. High priority beats the ancestor row's
-/// double-click handler.
-private struct DoubleClickRename: ViewModifier {
-    let enabled: Bool
-    let action: () -> Void
-    func body(content: Content) -> some View {
-        if enabled {
-            content.highPriorityGesture(TapGesture(count: 2).onEnded(action))
-        } else {
-            content
-        }
     }
 }

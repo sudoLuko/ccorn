@@ -127,7 +127,9 @@ final class MainWindowController {
             }
 
             // Return begins inline rename of the selected row (Finder-style),
-            // complementing the double-click-title gesture. Scoped to this
+            // alongside the context-menu "Rename", the two deliberate rename
+            // affordances now that the title double-click no longer renames (a
+            // near-miss on open must not fire a live `/rename`). Scoped to this
             // window; skipped while a text field is first responder (the rename
             // editor itself) so typing is never hijacked. Key events arrive on
             // the main thread, so touching the main-actor model here is safe.
@@ -223,7 +225,7 @@ final class MainWindowController {
     /// raised to `.floating` by keep-in-front must still count, or the policy
     /// would drop to `.accessory` while it is on screen).
     /// Managed and stopped (record) rows can be renamed; unmanaged discovery
-    /// rows cannot. Mirrors SessionRowView.canRename.
+    /// rows cannot. Gates the Return-key rename trigger.
     private static func isRenameable(_ row: SessionRow) -> Bool {
         switch row.kind {
         case .managed, .record: return true
