@@ -15,6 +15,11 @@ struct PopoverView: View {
     private let rowHeight: CGFloat = 32
     private let maxVisibleRows = 8
 
+    /// The aggregate header mark renders at 9px vs the 7px row-dot standard
+    /// (StatusMark's internal dot), applied as a scaleEffect so only this
+    /// summary mark grows (see `header`).
+    private static let aggregateMarkScale: CGFloat = 9.0 / 7.0
+
     /// Calm sessions expanded under the disclosure. Persisted, not transient
     /// view state, so it survives the panel's orderOut/orderFront: once the
     /// user expands or collapses it, the popover reopens in that same state.
@@ -109,6 +114,16 @@ struct PopoverView: View {
             CornMark(size: 18)
             Spacer()
             aggregateMark
+                // The aggregate is the popover's one summary mark; size it up
+                // from the 7px row-dot standard toward the corn glyph so its
+                // working breath reads at a glance. A scaleEffect (not a native
+                // resize) scales the dot, its breath, and the halo together and
+                // keeps this a header-local tweak; the shared StatusMark /
+                // RowStatusIndicator 7px dot every other surface depends on is
+                // untouched. scaleEffect does not grow the layout frame, so the
+                // mark stays in its slot and only overflows it visually (it sits
+                // alone at the trailing edge with room to spare).
+                .scaleEffect(Self.aggregateMarkScale)
                 // Crossfade worst-presentation swaps like the row marks do
                 // (F5); the mark sits in a fixed 14pt slot, so no layout
                 // moves with it.
@@ -119,14 +134,20 @@ struct PopoverView: View {
         .padding(.horizontal, 8)
     }
 
-    /// Worst presentation across all sessions — same resolution as the rows,
+    /// Worst presentation across all sessions, same resolution as the rows,
     /// so a broken-tier worst shows the exclamation symbol colored by
     /// severity, not a dot. Empty/outline dot when no session has an active
-    /// color.
+    /// color. Uses the full RowStatusIndicator (not the static StatusMark) so
+    /// the aggregate mark carries the same motions the rows do: the working
+    /// brightness breath and the waiting halo. The popover's rowMotionEnabled
+    /// environment (set on the whole tree above) gates it, so it stops when the
+    /// panel is off screen just like the rows. A constant identity gives it a
+    /// stable, fixed breath phase; it is the lone aggregate, so there is no
+    /// unison to avoid.
     @ViewBuilder
     private var aggregateMark: some View {
         if let presentation = model.aggregatePresentation {
-            StatusMark(presentation: presentation)
+            RowStatusIndicator(presentation: presentation, identity: "aggregate")
         } else {
             Circle()
                 .strokeBorder(StatusPalette.stoppedOutline, lineWidth: 1)
@@ -330,7 +351,7 @@ private struct PopoverRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            RowStatusIndicator(presentation: row.presentation)
+            RowStatusIndicator(presentation: row.presentation, identity: row.id)
                 .help(row.statusTooltip)
             Text(row.title)
                 .font(.subheadline.weight(.medium))

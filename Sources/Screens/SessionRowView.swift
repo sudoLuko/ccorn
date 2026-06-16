@@ -90,7 +90,7 @@ struct SessionRowView: View {
 
     private var nameColumn: some View {
         HStack(spacing: 8) {
-            RowStatusIndicator(presentation: row.presentation)
+            RowStatusIndicator(presentation: row.presentation, identity: row.id)
                 .help(row.statusTooltip)
             if isRenaming {
                 renameField

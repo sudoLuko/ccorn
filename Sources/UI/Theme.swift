@@ -126,9 +126,17 @@ extension StatusPresentation {
 
 // MARK: - Status mark
 
-/// KEEP-OR-CUT (review item 1, "Process"): subtle breath on the Working dot —
-/// a slow scale+opacity oscillation of the dot itself, NOT an expanding halo
-/// (the halo stays exclusive to Waiting). Flip to false to cut.
+/// KEEP-OR-CUT (review item 1, "Process"): the Working dot's gentle brightness
+/// breath: the dot stays clearly blue, full size, and full opacity, and only
+/// its brightness oscillates in a narrow band, so it reads as quietly alive
+/// rather than blinking or fading. The motion is a continuous sine driven from
+/// a linear phase (no dwell or hold at the trough, unlike easeInOut+autoreverse
+/// which parks at the extremes and reads as a flicker), and each row carries a
+/// stable phase offset so a list never breathes in unison. Breathing in place
+/// keeps it subordinate to the waiting halo's outward expansion (the halo stays
+/// exclusive to Waiting). Flip to false to cut. Renders only in
+/// RowStatusIndicator (live rows); the static StatusMark used in
+/// legends/headers stays a plain solid dot.
 enum WorkingBreath {
     static let enabled = true
 }
@@ -200,30 +208,79 @@ extension EnvironmentValues {
 }
 
 /// Status mark for list rows, plus the two motions. Waiting keeps its slow
-/// expanding halo exactly as before: the dot never dims — at any frozen
+/// expanding halo exactly as before: the dot never dims; at any frozen
 /// instant the row shows a solid attention dot; the halo ring starts hidden
 /// underneath and drifts outward, so the motion is felt on a scan without
-/// anything flashing. Working gets the optional breath (see WorkingBreath).
-/// State changes fade the mark over briefly. Both loops require
-/// rowMotionEnabled: when the hosting window leaves the screen the mark is
-/// rebuilt at its resting solid state (identity flip — see .id below) and
-/// motion restarts on the next show.
+/// anything flashing. Working gets the optional brightness breath (see
+/// WorkingBreath): the blue dot stays full size and full opacity while its
+/// brightness oscillates on a continuous sine, quietly alive, in place, so it
+/// stays subordinate to the waiting halo's outward expansion. State changes
+/// fade the mark over briefly. Both loops require rowMotionEnabled: when the
+/// hosting window leaves the screen the mark is rebuilt at its resting solid
+/// state (identity flip, see .id below) and motion restarts on the next show.
 struct RowStatusIndicator: View {
     let presentation: StatusPresentation
+    /// Stable per-row identifier (the SessionRow id), hashed into a fixed phase
+    /// offset so a list of working dots breathes out of sync (see phaseOffset).
+    var identity: String = ""
 
     @Environment(\.rowMotionEnabled) private var motionEnabled
 
     @State private var pulsing = false
-    @State private var breathing = false
+    /// Linear breath clock: held at 1 while a working row is on screen and
+    /// driven 0→1 forever by the repeatForever linear animation below; the
+    /// BreathBrightness modifier maps it through a sine. 0 at rest.
+    @State private var breathPhase: Double = 0
+
+    /// Peak brightness the breath adds to the base working blue (it oscillates
+    /// in [0, peak], so the dot only ever brightens, never darkens or fades).
+    /// Narrow on purpose: noticeable up close, calm across a list.
+    private static let breathPeak: Double = 0.16
+    /// Seconds per full sine cycle: slow, so many rows together feel calm.
+    private static let breathPeriod: Double = 3.0
+
+    /// Deterministic phase offset in [0,1) from the row id, so rows do not
+    /// breathe in unison. A small FNV-1a hash, NOT String.hashValue (which is
+    /// seeded per process and so is not stable across launches); this is stable
+    /// across every render and run for a given id.
+    private var phaseOffset: Double {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in identity.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211
+        }
+        return Double(hash % 1000) / 1000
+    }
+
+    private var isWorking: Bool {
+        presentation == .working && WorkingBreath.enabled
+    }
 
     var body: some View {
         StatusMark(presentation: presentation)
-            .scaleEffect(breathing ? 1.18 : 1)
-            .opacity(breathing ? 0.7 : 1)
-            .animation(motionEnabled && presentation == .working && WorkingBreath.enabled
-                       ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true)
-                       : .easeInOut(duration: 0.2),
-                       value: breathing)
+            // Working: a gentle in-place brightness breath. The base blue dot
+            // is redrawn so .brightness touches ONLY the working mark (never
+            // other states'), keeping full size and full opacity while its
+            // brightness eases on a continuous sine, driven from a linear
+            // phase, so it never dwells at the trough the way easeInOut +
+            // autoreverse does. Breathing in place (not expanding) keeps it
+            // quietly alive and subordinate to the waiting halo. At rest /
+            // motion-off the overlay matches the base dot, so a hidden or
+            // non-breathing working row is a plain blue dot.
+            .overlay {
+                if isWorking {
+                    Circle()
+                        .fill(StatusPalette.working)
+                        .frame(width: 7, height: 7)
+                        .modifier(BreathBrightness(phase: breathPhase,
+                                                   offset: phaseOffset,
+                                                   peak: Self.breathPeak))
+                        .animation(motionEnabled
+                                   ? .linear(duration: Self.breathPeriod).repeatForever(autoreverses: false)
+                                   : .easeInOut(duration: 0.2),
+                                   value: breathPhase)
+                        .transition(.opacity)
+                }
+            }
             .background(
                 Circle()
                     .stroke(StatusPalette.attention, lineWidth: 1)
@@ -254,8 +311,8 @@ struct RowStatusIndicator: View {
             }
             // Visibility flips swap the mark's IDENTITY, not just its state:
             // a value write does not cancel an in-flight repeatForever
-            // animator (measured — the hidden tree kept rendering at the
-            // visible rate after pulsing/breathing were retargeted to rest),
+            // animator (measured: the hidden tree kept rendering at the
+            // visible rate after pulsing/breathPhase were retargeted to rest),
             // but destroying the view kills its animators dead. The fresh
             // mark starts at rest (@State resets) and its onAppear restarts
             // motion when the window is back. Presentation changes never
@@ -265,7 +322,33 @@ struct RowStatusIndicator: View {
 
     private func syncMotion(presentation: StatusPresentation, motionEnabled: Bool) {
         pulsing = motionEnabled && presentation == .waiting
-        breathing = motionEnabled && presentation == .working && WorkingBreath.enabled
+        // Hold the breath clock at 1 (the repeatForever linear animation cycles
+        // it 0→1 perpetually) while a working row is on screen; 0 settles it at
+        // rest when not working or when the window is hidden.
+        breathPhase = (motionEnabled && presentation == .working && WorkingBreath.enabled) ? 1 : 0
+    }
+}
+
+/// Maps a linearly-advancing phase (0→1, driven by a repeatForever animation)
+/// through a sine, so the working dot's brightness eases continuously and never
+/// dwells at the extremes the way easeInOut + autoreverse parks at them. The
+/// phase runs exactly one sine cycle over 0→1, so the repeatForever loop is
+/// seamless (sin is identical at phase 0 and 1). `offset` (stable per row)
+/// desyncs rows; brightness stays in [0, peak], so the dot only brightens from
+/// its base blue, full size, full opacity, never darkening or fading.
+private struct BreathBrightness: ViewModifier, Animatable {
+    var phase: Double
+    let offset: Double
+    let peak: Double
+
+    var animatableData: Double {
+        get { phase }
+        set { phase = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let s = sin((phase + offset) * 2 * .pi)   // [-1, 1]
+        return content.brightness(peak * 0.5 * (1 + s))   // [0, peak]
     }
 }
 
