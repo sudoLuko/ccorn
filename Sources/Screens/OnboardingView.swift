@@ -49,9 +49,19 @@ struct OnboardingView: View {
                 .font(.title2.weight(.medium))
                 .foregroundColor(.primary)
 
-            Text("Where do you keep your projects?")
+            // One-line value statement, the only "what is this" copy on the
+            // card (5.3): name what CCorn does before asking for directories.
+            // Onboarding stays a single question, not a tour.
+            Text("Watch all your Claude Code sessions from the menu bar, and control them from your phone.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 6)
+                .padding(.bottom, 20)
+
+            Text("Where do you keep your projects?")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.primary)
                 .padding(.bottom, 24)
 
             directoryList
