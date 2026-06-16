@@ -24,6 +24,7 @@ struct SettingsView: View {
             watchDirectoriesSection
             behaviorSection
             launchDefaultsSection
+            statusLegendSection
             aboutSection
         }
         .formStyle(.grouped)
@@ -252,6 +253,32 @@ struct SettingsView: View {
                  : "New sessions start local: no remote or phone access, and no per-session URL.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+        }
+    }
+
+    // MARK: Section: Status Legend
+
+    /// What every status mark means, in one place (review: five of the nine
+    /// states are color-only on a row, so a first-time user had to hover each
+    /// dot to learn it). Each row renders the real `StatusMark` and the real
+    /// `displayName`, so the legend reads exactly what a session row shows and
+    /// cannot drift from the palette.
+    private var statusLegendSection: some View {
+        Section("Status Legend") {
+            ForEach(StatusPresentation.legendOrder, id: \.self) { presentation in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    StatusMark(presentation: presentation)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(presentation.displayName)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Text(presentation.legendDescription)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                }
+            }
         }
     }
 

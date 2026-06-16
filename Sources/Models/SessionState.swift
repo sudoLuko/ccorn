@@ -152,4 +152,29 @@ enum StatusPresentation: String, Equatable {
         case .running, .working, .stale, .stopped, .unmanaged: return nil
         }
     }
+
+    /// One-line gloss for the Settings status legend: the words behind a mark
+    /// for the color-only states a first-time user would otherwise have to
+    /// hover to learn. The mark and color stay sourced from `StatusMark`, so
+    /// the legend can never drift from what a row actually shows.
+    var legendDescription: String {
+        switch self {
+        case .running: return "Alive and idle, ready for input"
+        case .working: return "Claude is actively running a task"
+        case .waiting: return "Paused for your input or approval"
+        case .stale: return "Idle past the stale threshold"
+        case .stopped: return "You stopped this session"
+        case .unmanaged: return "Discovered, but not imported into CCorn"
+        case .needsAuth: return "Blocked on a sign-in prompt"
+        case .noRemote: return "Remote control never came up, so there is no phone access"
+        case .crashed: return "The process exited unexpectedly"
+        }
+    }
+
+    /// The nine marks in legend order (the six routine dots, then the broken
+    /// trio) for the Settings legend to render with the real `StatusMark`.
+    static let legendOrder: [StatusPresentation] = [
+        .running, .working, .waiting, .stale, .stopped, .unmanaged,
+        .needsAuth, .noRemote, .crashed,
+    ]
 }
