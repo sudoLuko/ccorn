@@ -158,6 +158,11 @@ private struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            // Keep the list's own translucent sidebar material hidden so the
+            // column's opaque fill (applied to the VStack below) shows through and
+            // the labels paint crisp rather than vibrancy-blended. The opaque
+            // surface now lives on the enclosing column, not on the List alone, so
+            // the header above and the footer below share the same shade.
             .scrollContentBackground(.hidden)
 
             Spacer(minLength: 0)
@@ -166,6 +171,15 @@ private struct SidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 12)
         }
+        // One opaque surface for the whole sidebar column. The fill lives on the
+        // container (header + List + footer), not just the List: applied to the
+        // List alone, the "New Session" header above and the settings-gear footer
+        // below still rendered against the default translucent sidebar material,
+        // a lighter band at each end. Expanding to fill the column edge to edge
+        // first means the fill also covers any translucency at the column's edges,
+        // so the sidebar reads as one solid surface, top to bottom.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.windowBackgroundColor))
     }
 
     /// One group row: name, member count, rename/delete context menu.
