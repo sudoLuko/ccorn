@@ -124,6 +124,67 @@ import Testing
         #expect(detector.rcPlanNotice(pane: pane) == nil)
     }
 
+    // MARK: Definitive vs transient RC failure
+
+    /// A genuine plan/account limitation classifies definitive, the kind that
+    /// earns the account verdict (local fallback + the one-time plan modal).
+    @Test func definitivePlanLineIsDefinitive() {
+        let pane = "⏺ ok\n Remote Control requires a Pro, Max, Team, or Enterprise plan.\n"
+        let failure = detector.rcFailure(pane: pane)
+        #expect(failure?.kind == .definitive)
+        #expect(failure?.message.contains("requires") == true)
+    }
+
+    /// THE overstated case: "Remote Control failed to connect because the remote
+    /// credentials fetch failed" is transient/ambiguous (a fetch hiccup, maybe
+    /// network), NOT a plan limit, so it must classify transient and never fire
+    /// the definitive account modal.
+    @Test func credentialsFetchFailureIsTransientNotDefinitive() {
+        let pane = "⏺ ok\n Remote Control failed to connect because the remote credentials fetch failed.\n"
+        #expect(detector.rcFailure(pane: pane)?.kind == .transient)
+    }
+
+    /// A line carrying both a transient and a definitive word reads as the
+    /// definitive limitation it names (definitive is checked first).
+    @Test func definitiveOutranksTransientOnSameLine() {
+        let pane = "⏺ ok\n Remote Control failed: not available on your plan.\n"
+        #expect(detector.rcFailure(pane: pane)?.kind == .definitive)
+    }
+
+    /// A failure line scrolled up into history (above the last rule line) is not
+    /// read as current; the same line inside the live region is.
+    @Test func rcFailureIgnoresScrollbackAboveLiveRegion() {
+        let rule = String(repeating: "─", count: 60)
+        let scrollbackOnly =
+            "Remote Control requires an upgrade.\n" + rule + "\n❯ \n" + rule + "\n ? for shortcuts\n"
+        #expect(detector.rcFailure(pane: scrollbackOnly) == nil)
+
+        let inLiveRegion = rule + "\n❯ \n" + rule + "\n Remote Control requires an upgrade.\n"
+        #expect(detector.rcFailure(pane: inLiveRegion)?.kind == .definitive)
+    }
+
+    /// detect() only reads a failure line when remote control is NOT up: the
+    /// same definitive line, with RC active (here via the registry bridge),
+    /// yields no notice and no kind; a line lingering after RC reconnected can
+    /// never re-assert the account verdict.
+    @Test func detectSuppressesFailureLineWhenRemoteControlActive() {
+        let pane = "claude\n? for shortcuts\n Remote Control requires a Pro or Max plan.\n"
+        let input = DetectionInput(windowId: "@1", pid: getpid())   // alive
+        let panes = StubPanes(pane: pane)
+
+        let down = detector.detect(input: input, panes: panes, transcript: nil,
+                                   staleThreshold: 600, now: t0, bridgeForPid: { _ in nil })
+        #expect(!down.remoteControlActive)
+        #expect(down.rcFailureKind == .definitive)
+        #expect(down.rcPlanNotice?.contains("requires a Pro or Max plan") == true)
+
+        let up = detector.detect(input: input, panes: panes, transcript: nil,
+                                 staleThreshold: 600, now: t0, bridgeForPid: { _ in "session_x" })
+        #expect(up.remoteControlActive)
+        #expect(up.rcFailureKind == nil)
+        #expect(up.rcPlanNotice == nil)
+    }
+
     // MARK: Aggregate severity
 
     /// needsAuth slots between Crashed and No remote: blocked-on-sign-in

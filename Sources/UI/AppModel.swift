@@ -118,11 +118,12 @@ final class AppModel: ObservableObject {
     /// detector behind Waiting/Dead notifications. First observation of a
     /// session records silently; only a real change can notify.
     private var stateMemory: [String: SessionState] = [:]
-    /// Rows that already showed their one-shot section-8 alert (login needed /
-    /// remote-control plan restriction), so a persisting pane can't re-alert
-    /// every poll tick. Pruned alongside `stateMemory`.
+    /// Rows that already showed their one-shot section-8 sign-in alert, so a
+    /// persisting login pane can't re-alert every poll tick. Pruned alongside
+    /// `stateMemory`. (The remote-control plan modal is gated once per *account*
+    /// by `settings.rcKnownUnavailable`, not per row; see
+    /// `reconcileRCAccountCapability`.)
     private var authAlerted = Set<String>()
-    private var rcPlanAlerted = Set<String>()
 
     init(engine: SessionEngine) {
         self.engine = engine
@@ -559,8 +560,8 @@ final class AppModel: ObservableObject {
     /// recorded silently — whatever state it is first seen in is not a
     /// transition CCorn watched. Also hosts the section-8 one-shot alerts.
     private func emitStateTransitions(_ rows: [SessionRow], adoptedIds: Set<String>) {
+        reconcileRCAccountCapability()
         for row in rows where row.kind != .unmanaged {
-            presentRCPlanAlertIfNeeded(row)
             let baseline: SessionState? =
                 (row.isManaged && !adoptedIds.contains(row.id)) ? .running : nil
             let previous = stateMemory[row.id] ?? baseline
@@ -588,7 +589,6 @@ final class AppModel: ObservableObject {
             let liveIds = Set(rows.map(\.id))
             stateMemory = stateMemory.filter { liveIds.contains($0.key) }
             authAlerted = authAlerted.filter { liveIds.contains($0) }
-            rcPlanAlerted = rcPlanAlerted.filter { liveIds.contains($0) }
         }
     }
 
@@ -621,18 +621,72 @@ final class AppModel: ObservableObject {
         return ("Authenticate Claude Code first", lines.joined(separator: "\n\n"))
     }
 
-    /// Remote-control plan restriction (section 8): the pane reported that
-    /// remote control could not be enabled for plan/credential reasons. Once
-    /// per session, same start-feedback gate as the auth alert.
-    private func presentRCPlanAlertIfNeeded(_ row: SessionRow) {
-        guard let notice = row.rcPlanNotice, row.isManaged, !row.rcGraceExpired,
-              !rcPlanAlerted.contains(row.id) else { return }
-        rcPlanAlerted.insert(row.id)
+    /// Remote-control account capability (section 8). CCorn launches with `--rc`
+    /// by default, so an account that genuinely cannot use remote control would
+    /// otherwise fail (and re-alert) on every session. This reconciles the
+    /// learned `settings.rcKnownUnavailable` flag against the live sessions each
+    /// poll:
+    ///
+    ///  - RC active on *any* managed session proves the account is capable:
+    ///    clear a prior verdict, which lets the user's stored remote/local
+    ///    preference drive `effectiveDefaultConfig` again. Not grace-gated: RC
+    ///    can link at any time, and this is what makes the flag reversible (the
+    ///    user can re-opt a session into remote; once it connects, the lock
+    ///    lifts).
+    ///  - Otherwise the first *definitive* account/plan failure within a
+    ///    session's start grace earns the verdict: set the flag so
+    ///    `effectiveDefaultConfig` forces local (preference untouched) and later
+    ///    sessions stop passing `--rc`, and show the plan modal, but only
+    ///    once per account (the flag gates it), so already-running peers that
+    ///    also failed don't re-fire it. A *transient* failure never reaches here
+    ///    (its kind is `.transient`); it surfaces only as the row's soft
+    ///    No-remote signal and may reconnect on its own.
+    private func reconcileRCAccountCapability() {
+        let sessions = engine.liveSessions.values
+        let now = Date()
+
+        if sessions.contains(where: { $0.remoteControlActive }) {
+            if engine.settings.rcKnownUnavailable {
+                var updated = engine.settings
+                updated.rcKnownUnavailable = false
+                engine.updateSettings(updated)
+            }
+            return
+        }
+
+        guard !engine.settings.rcKnownUnavailable,
+              let failed = sessions.first(where: {
+                  $0.rcFailureKind == .definitive
+                      && !$0.remoteControlActive
+                      && now.timeIntervalSince($0.startedAt) <= 30
+              })
+        else { return }
+
+        let notice = failed.rcPlanNotice
+        var updated = engine.settings
+        updated.rcKnownUnavailable = true
+        engine.updateSettings(updated)
+        // Deferred a turn: this runs inside rebuildRows on the poll path, and
+        // the rows must publish before a modal can block the main actor.
         Task {
             Alerts.sheetOrModal(
                 title: "Remote Control isn't available on this account",
-                message: "Claude Code says: “\(notice)”\n\nRemote Control is available on Pro, Max, Team, and Enterprise plans (Team/Enterprise need an admin to enable it); API keys and inference-only tokens are not supported.")
+                message: Self.rcPlanAlertMessage(notice: notice))
         }
+    }
+
+    /// Section-8 plan-modal copy: lead with the CLI's own line when captured,
+    /// then the plan requirements, then what CCorn now does (fall back to local,
+    /// reversibly).
+    static func rcPlanAlertMessage(notice: String?) -> String {
+        var lines = [
+            "Remote Control needs a Pro, Max, Team, or Enterprise plan.",
+            "New sessions start locally, but you can still pick Remote; CCorn switches back once one connects.",
+        ]
+        if let notice, !notice.isEmpty {
+            lines.insert("Claude Code says: “\(notice)”", at: 0)
+        }
+        return lines.joined(separator: "\n\n")
     }
 
     /// Display-name chain: the title CCorn set explicitly (a real `--rc` title
@@ -811,7 +865,7 @@ final class AppModel: ObservableObject {
         // be) before presenting.
         openMainWindow?()
         newSessionFlow = NewSessionFlowModel(directory: canonical,
-                                             defaultConfig: engine.settings.defaultLaunchConfig,
+                                             defaultConfig: engine.settings.effectiveDefaultConfig,
                                              model: self)
     }
 

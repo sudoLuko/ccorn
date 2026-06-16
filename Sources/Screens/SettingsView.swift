@@ -227,21 +227,29 @@ struct SettingsView: View {
                 }
             }
 
-            Picker("Model", selection: Binding(
-                get: { engine.settings.defaultLaunchConfig.model ?? "" },
+            // Seeds the New Session sheet's Remote Control checkbox so a user who
+            // works local doesn't uncheck it every time. A learned
+            // `rcKnownUnavailable` verdict still forces local on top of this
+            // (CCornSettings.effectiveDefaultConfig); the stored choice here is
+            // left intact and resumes once the account proves RC-capable again.
+            Picker("Remote control", selection: Binding(
+                get: { engine.settings.defaultLaunchConfig.remoteControl },
                 set: { value in
                     var settings = engine.settings
-                    settings.defaultLaunchConfig.model = value.isEmpty ? nil : value
+                    settings.defaultLaunchConfig.remoteControl = value
                     model.applySettings(settings)
                 }
             )) {
-                Text("Account default").tag("")
-                Text("Opus").tag("opus")
-                Text("Sonnet").tag("sonnet")
-                Text("Fable").tag("fable")
+                Text("On").tag(true)
+                Text("Off").tag(false)
             }
 
             Text(engine.settings.defaultLaunchConfig.permissionMode.summary)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Text(engine.settings.defaultLaunchConfig.remoteControl
+                 ? "New sessions sync to claude.ai and your phone, and get a per-session URL."
+                 : "New sessions start local: no remote or phone access, and no per-session URL.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

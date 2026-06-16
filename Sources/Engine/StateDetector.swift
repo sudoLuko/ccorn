@@ -42,6 +42,18 @@ struct DetectionInput: Sendable {
     }
 }
 
+/// Whether a captured remote-control failure names a genuine account/plan
+/// limitation (RC truly unsupported for this auth: an API key, an
+/// inference-only token, or a plan that lacks it) or a transient/ambiguous
+/// failure (a credentials-fetch hiccup, a network blip, a timeout) that may
+/// clear on its own. Only `.definitive` earns the account verdict: the modal
+/// and the local fallback; `.transient` stays a soft No-remote signal
+/// (docs/CCORN_SPEC.md section 8).
+enum RCFailureKind: Sendable, Equatable {
+    case definitive
+    case transient
+}
+
 /// What a detection pass decided; applied back to the LiveSession on the main actor.
 struct DetectionResult: Sendable {
     var state: SessionState
@@ -59,6 +71,11 @@ struct DetectionResult: Sendable {
     /// The CLI's own line when remote control failed for plan/credential
     /// reasons (section 8's plan-restriction alert).
     var rcPlanNotice: String?
+    /// The kind of that failure (`.definitive` account/plan limitation vs
+    /// `.transient` recoverable hiccup), nil when none was seen. Only set when
+    /// remote control is not currently up (see `detect`), so a failure line that
+    /// lingers in the pane after RC reconnected never re-asserts a verdict.
+    var rcFailureKind: RCFailureKind?
     /// True when the pane footer reports permissions are being bypassed right
     /// now — a session launched with `--dangerously-skip-permissions` or one the
     /// user escalated into bypass mid-session (Shift+Tab). Drives the row's
@@ -219,13 +236,29 @@ struct StateDetector: Sendable {
         return nil
     }
 
-    /// Remote-control plan/credential failure phrases (section 8's
-    /// plan-restriction alert). Matched as a pane *line* containing
-    /// "remote control" plus a failure word, so the stable footer string
-    /// `Remote Control active` can never trip it.
-    static let rcPlanFailureWords = [
-        "not available", "not supported", "requires", "unavailable",
-        "upgrade", "not enabled", "not yet enabled", "disabled by", "failed",
+    /// Definitive account/plan limitations: remote control is genuinely
+    /// unsupported for this authentication (an API key or inference-only token,
+    /// or a plan/org policy that lacks it). A pane line pairing "remote control"
+    /// with one of these is the account verdict; it fires the one-time plan
+    /// modal and flips new sessions to local. Checked before the transient set,
+    /// so a line carrying both ("…failed: not available on your plan") is read
+    /// as the definitive limitation it names.
+    static let rcPlanDefinitiveWords = [
+        "not available", "not supported", "requires", "upgrade",
+        "inference-only", "inference only", "api key",
+        "not enabled", "not yet enabled", "disabled by",
+    ]
+
+    /// Transient or ambiguous failures: a credentials-fetch hiccup, a network
+    /// blip, a timeout, a handshake that didn't complete. These can clear on
+    /// their own (short drops reconnect, docs/CCORN_SPEC.md section 2), so they
+    /// must NOT assert an account limitation; they surface only as the soft
+    /// No-remote signal. Note `unavailable` is transient on purpose; the
+    /// definitive phrasing is the two-word "not available", caught above.
+    static let rcPlanTransientWords = [
+        "failed", "fetch failed", "unavailable", "timed out", "timeout",
+        "network", "could not connect", "couldn't connect", "reconnect",
+        "try again",
     ]
 
     /// How long a freshly created window may sit without a `claude` child before
@@ -325,19 +358,36 @@ struct StateDetector: Sendable {
         return nil
     }
 
-    /// The CLI's remote-control failure line, if the pane reports that remote
-    /// control could not be enabled for plan/credential reasons.
-    func rcPlanNotice(pane: String) -> String? {
-        for line in pane.split(whereSeparator: \.isNewline) {
+    /// The CLI's remote-control failure line plus its kind, if the pane's *live
+    /// region* reports that remote control could not be enabled. Scoped to the
+    /// live region (not the whole pane) so a stale failure line scrolled up into
+    /// history is not read as current; the same `livePromptRegion` scoping the
+    /// Waiting scan uses. The stable `Remote Control active` footer never trips
+    /// it; a definitive account/plan match outranks a transient one on the same
+    /// line.
+    func rcFailure(pane: String) -> (message: String, kind: RCFailureKind)? {
+        for line in Self.livePromptRegion(pane).split(whereSeparator: \.isNewline) {
             guard line.localizedCaseInsensitiveContains("remote control"),
                   !line.contains(Self.remoteControlMarker) else { continue }
-            if Self.rcPlanFailureWords.contains(where: {
+            if Self.rcPlanDefinitiveWords.contains(where: {
                 line.localizedCaseInsensitiveContains($0)
             }) {
-                return Self.cleanTUILine(line)
+                return (Self.cleanTUILine(line), .definitive)
+            }
+            if Self.rcPlanTransientWords.contains(where: {
+                line.localizedCaseInsensitiveContains($0)
+            }) {
+                return (Self.cleanTUILine(line), .transient)
             }
         }
         return nil
+    }
+
+    /// The CLI's remote-control failure line (either kind), nil when none: the
+    /// row tooltip's soft No-remote text. The verdict-bearing kind comes from
+    /// `rcFailure`.
+    func rcPlanNotice(pane: String) -> String? {
+        rcFailure(pane: pane)?.message
     }
 
     /// Strip TUI chrome (box-drawing borders, prompt glyphs) and surrounding
@@ -441,7 +491,14 @@ struct StateDetector: Sendable {
             || registryBridge != nil
             || result.rcCache.hasBridgeSession(path: transcript?.transcriptPath,
                                                mtime: transcript?.modified)
-        result.rcPlanNotice = rcPlanNotice(pane: pane)
+        // Only read a failure line when remote control is NOT currently up: a
+        // line that lingers after RC reconnected must never re-assert a verdict
+        // (the account-verdict gate in AppModel relies on this, and `rcFailure`
+        // additionally scopes to the live region against stale scrollback).
+        if !result.remoteControlActive, let failure = rcFailure(pane: pane) {
+            result.rcPlanNotice = failure.message
+            result.rcFailureKind = failure.kind
+        }
         result.bypassActive = showsBypass(pane: pane)
 
         let verdict = classifyPane(pane: pane,

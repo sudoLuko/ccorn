@@ -107,8 +107,10 @@ final class SessionEngine: ObservableObject {
         let label = userTitle ?? URL(fileURLWithPath: directory).lastPathComponent
         let storedTitle = userTitle ?? ""
         // A new session inherits the user's configured default unless the New
-        // Session sheet passed an explicit per-session override.
-        let cfg = config ?? settings.defaultLaunchConfig
+        // Session sheet passed an explicit per-session override. `effective…`,
+        // not the raw default, so a known-RC-unavailable account still launches
+        // local even on this no-override path (e.g. the "start new here" retry).
+        let cfg = config ?? settings.effectiveDefaultConfig
         let mouse = settings.mouseMode
         let tmux = self.tmux
         let store = self.store

@@ -79,6 +79,25 @@ struct CCornSettings: Codable, Equatable {
     /// the tmux global, so a user's own `set -g mouse` is left untouched
     /// (TmuxController.setMouseMode / applyMouseMode).
     var mouseMode: Bool
+    /// Learned: this account cannot use remote control (a session reported a
+    /// *definitive* account/plan failure, not a transient credentials-fetch or
+    /// network hiccup). Set once, it forces `effectiveDefaultConfig` to local so
+    /// new sessions stop passing `--rc` and re-failing, and gates the plan modal
+    /// to once per account, without overwriting the user's stored
+    /// `defaultLaunchConfig.remoteControl` preference, so flipping it back to
+    /// remote restores the user's choice rather than a hardcoded default.
+    /// Reversible: a session the user opts back into remote that then connects
+    /// clears it, so a one-off bad match never permanently locks a real RC
+    /// account into local (AppModel.reconcileRCAccountCapability).
+    var rcKnownUnavailable: Bool
+    /// Durable Claude session UUIDs the user removed from CCorn ("Remove from
+    /// CCorn"): discovery skips them so an untracked session never re-surfaces,
+    /// even if its conversation is later resumed from the terminal. Sticky by
+    /// design and persisted here (the same store-backed JSON the archived flag
+    /// lives in) so a future "manage untracked" surface can read and clear it.
+    /// Removing a session only forgets CCorn's own record and remembers the
+    /// UUID here; the Claude transcript on disk is never touched.
+    var ignoredSessionUUIDs: [String]
 
     static let `default` = CCornSettings(
         watchDirectories: [],
@@ -95,7 +114,9 @@ struct CCornSettings: Codable, Equatable {
          clickAction: SessionClickAction = .terminal,
          defaultLaunchConfig: SessionLaunchConfig = .safeDefault,
          keepWindowInFront: Bool = false,
-         mouseMode: Bool = true) {
+         mouseMode: Bool = true,
+         rcKnownUnavailable: Bool = false,
+         ignoredSessionUUIDs: [String] = []) {
         self.watchDirectories = watchDirectories
         self.staleThresholdSeconds = staleThresholdSeconds
         self.autoRestartOnLaunch = autoRestartOnLaunch
@@ -105,6 +126,8 @@ struct CCornSettings: Codable, Equatable {
         self.defaultLaunchConfig = defaultLaunchConfig
         self.keepWindowInFront = keepWindowInFront
         self.mouseMode = mouseMode
+        self.rcKnownUnavailable = rcKnownUnavailable
+        self.ignoredSessionUUIDs = ignoredSessionUUIDs
     }
 
     /// Every field decodes with a default so a settings.json written by an
@@ -130,5 +153,23 @@ struct CCornSettings: Codable, Equatable {
             ?? Self.default.keepWindowInFront
         mouseMode = try c.decodeIfPresent(Bool.self, forKey: .mouseMode)
             ?? Self.default.mouseMode
+        rcKnownUnavailable = try c.decodeIfPresent(Bool.self, forKey: .rcKnownUnavailable)
+            ?? Self.default.rcKnownUnavailable
+        ignoredSessionUUIDs = try c.decodeIfPresent([String].self, forKey: .ignoredSessionUUIDs)
+            ?? Self.default.ignoredSessionUUIDs
+    }
+
+    /// The launch config a brand-new session actually inherits: the user's
+    /// `defaultLaunchConfig` preference, except remote control is forced off
+    /// when this account is known to lack it (`rcKnownUnavailable`). The learned
+    /// flag wins over the preference (new sessions stop passing `--rc` and
+    /// re-failing) but the stored `defaultLaunchConfig.remoteControl` choice is
+    /// left untouched, so it takes effect again the moment the account proves
+    /// capable and the flag clears. Both the New Session sheet seed and the
+    /// engine's no-override fallback read this, not `defaultLaunchConfig`.
+    var effectiveDefaultConfig: SessionLaunchConfig {
+        var config = defaultLaunchConfig
+        if rcKnownUnavailable { config.remoteControl = false }
+        return config
     }
 }

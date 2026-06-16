@@ -99,6 +99,11 @@ final class LiveSession: ObservableObject {
     /// runs after every apply — no need to publish.
     var authNotice: String?
     var rcPlanNotice: String?
+    /// The kind of the latest RC failure: `.definitive` names an account/plan
+    /// limitation that flips new sessions to local, `.transient` a recoverable
+    /// hiccup that stays a soft No-remote signal. nil when RC is up or no
+    /// failure was seen. Read only during rebuildRows like the notices above.
+    var rcFailureKind: RCFailureKind?
     /// True when the session is running with permissions bypassed (detector pane
     /// signal). Read only during rebuildRows like the notices above, so not
     /// published — the row it produces republishes on change.
@@ -168,6 +173,7 @@ final class LiveSession: ObservableObject {
         rcCache = result.rcCache
         authNotice = result.authNotice
         rcPlanNotice = result.rcPlanNotice
+        rcFailureKind = result.rcFailureKind
         bypassActive = result.bypassActive
         bridgeSessionId = result.bridgeSessionId
     }
