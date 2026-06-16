@@ -1097,10 +1097,10 @@ final class AppModel: ObservableObject {
         // Dedupe rapid clicks: the row stays Unmanaged until the next refresh,
         // so a second click would otherwise kick off a second kill + resume.
         guard !importingUUIDs.contains(uuid) else { return }
-        guard Alerts.confirm(
-            title: "Import this session?",
-            message: "CCorn will take over this session. Your existing terminal window will stop working.",
-            action: "Import") else { return }
+        guard Alerts.confirmDestructive(
+            title: "Take over this session?",
+            message: "Your existing terminal session will stop, but no work is lost. CCorn resumes the conversation where it left off.",
+            action: "Take Over") else { return }
         importingUUIDs.insert(uuid)
         let path = row.path
         Task {
@@ -1110,9 +1110,9 @@ final class AppModel: ObservableObject {
             if await engine.isExternalSessionWorking(uuid: uuid, directory: path) {
                 let wait = Alerts.choice(
                     title: "Claude is mid-task in \(row.title)",
-                    message: "Importing now may interrupt active work.",
+                    message: "Taking over now may interrupt active work.",
                     primary: "Wait for Idle",
-                    secondary: "Import Anyway")
+                    secondary: "Take Over Anyway")
                 if wait {
                     while await engine.isExternalSessionWorking(uuid: uuid, directory: path) {
                         try? await Task.sleep(nanoseconds: 10_000_000_000) // 10s

@@ -121,18 +121,23 @@ enum SessionMenu {
 
         case .unmanaged:
             let canImport = !row.uuid.isEmpty && !row.path.isEmpty
-            // Both adopt the session (kill external claude → resume under CCorn);
-            // "Open in Terminal" also attaches the fresh window. The import
-            // confirm spells out the takeover either way.
+            // An unmanaged row is someone else's running session. Both items
+            // adopt it (SIGTERM the external claude → `claude --resume` under
+            // CCorn, which preserves the conversation); the first also attaches
+            // the fresh window in Terminal. Both labels say "Take Over", never a
+            // bare "Open in Terminal" like a managed row (line 83), so the
+            // takeover is plain before the click, and the confirm
+            // (confirmDestructive) spells out the consequences.
             menu.addItem(ActionMenuItem(
-                title: "Open in Terminal",
+                title: "Take Over & Open in Terminal",
                 enabled: canImport,
-                toolTip: "Import this session into CCorn, then open it in Terminal") { [weak model] in
+                toolTip: "Take over this session, then open it in Terminal. Your existing terminal stops working; the conversation is preserved.") { [weak model] in
                 model?.importSession(row, attachInTerminal: true)
             })
             menu.addItem(ActionMenuItem(
-                title: "Import Session",
-                enabled: canImport) { [weak model] in
+                title: "Take Over Session",
+                enabled: canImport,
+                toolTip: "Take over this session under CCorn. Your existing terminal stops working; the conversation is preserved.") { [weak model] in
                 model?.importSession(row)
             })
             menu.addItem(.separator())

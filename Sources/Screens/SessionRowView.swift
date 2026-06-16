@@ -117,6 +117,12 @@ struct SessionRowView: View {
                     })
             }
             if !isRenaming {
+                // Unmanaged rows have no live window, so a Terminal-mode open
+                // adopts them (openAction → .adoptThenAttach). Surface that
+                // consequence before the click; managed rows just open.
+                if row.kind == .unmanaged {
+                    AdoptTag()
+                }
                 LocalTag(isLocal: row.isLocal)
                 AttentionWord(presentation: row.presentation)
             }

@@ -59,6 +59,27 @@ enum Alerts {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
+    /// Destructive confirmation with Cancel as the default — the deliberate
+    /// mirror of `confirmStop`. Here the confirming action is irreversible from
+    /// the user's side (the unmanaged-session takeover, flow 6.10, SIGTERMs the
+    /// external claude and breaks their terminal), so a reflexive Return must
+    /// NOT trigger it. Cancel is added first, which makes it NSAlert's default
+    /// button (Return) and gives it Escape; the action is the second button,
+    /// `hasDestructiveAction` (red bezel, and excluded from Return) — confirming
+    /// takes an intentional click. Returns true only when the action is chosen.
+    static func confirmDestructive(title: String, message: String, action: String) -> Bool {
+        activate()
+        let alert = NSAlert()
+        alert.icon = cornIcon
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Cancel")
+        let confirm = alert.addButton(withTitle: action)
+        confirm.hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
     /// One-button alert that attaches as a sheet when a regular CCorn window
     /// is visible (non-blocking, lands on what the user is looking at) and
     /// falls back to the app-modal alert otherwise (menu-bar-only state).

@@ -318,6 +318,33 @@ struct LocalTag: View {
     }
 }
 
+// MARK: - Adopt tag
+
+/// The "Take over" tag on an unmanaged discovery row: opening or double-clicking
+/// it adopts the session (flow 6.10): CCorn takes over the running session, the
+/// user's existing terminal stops working, and the same conversation resumes
+/// under CCorn. That consequence belongs in front of the click, so it rides next
+/// to the title as a quiet bordered pill, with the full story in the tooltip.
+/// Greyscale only (0.5px separator border, secondary text) so the status mark
+/// stays the sole color and decoration rules hold; main-window-only, so semantic
+/// colors are correct. Caller gates it to unmanaged rows.
+struct AdoptTag: View {
+    var body: some View {
+        Text("Take over")
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            )
+            .help("Not managed by CCorn. Opening adopts it: CCorn takes over the session (your existing terminal stops working) and resumes the conversation, so no work is lost.")
+    }
+}
+
 // MARK: - Corn mark
 
 /// CCorn's shared brand glyph: the OpenMoji ear-of-corn (`CornGlyph` asset —
