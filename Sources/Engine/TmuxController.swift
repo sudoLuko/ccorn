@@ -100,6 +100,45 @@ struct TmuxController: Sendable {
     /// `attachViewCommand` sets it on each view too.
     func setMouseMode(_ enabled: Bool) {
         tmux(["set-option", "-t", Self.sessionName, "mouse", enabled ? "on" : "off"])
+        installCopyModeSelectBindings()
+    }
+
+    /// Rebind mouse-release in copy-mode so dragging to select text COPIES to the
+    /// macOS clipboard without cancelling copy-mode. Two problems with the stock
+    /// `MouseDragEnd1Pane` → `copy-pipe-and-cancel` are fixed here:
+    ///
+    /// 1. `-and-cancel` exits copy-mode, which snaps the pane back to the live
+    ///    bottom position on every release — the "jump to the bottom" the moment
+    ///    you let go of a selection. `copy-pipe-no-clear` leaves copy-mode
+    ///    untouched, so the scroll position holds; the user returns to the live
+    ///    view with `q`/Escape on their own timing.
+    /// 2. The selection never reached the system clipboard. CCorn attaches through
+    ///    Terminal.app, which does not honor the OSC 52 clipboard escape that
+    ///    tmux's default `set-clipboard` path relies on, so a stock copy silently
+    ///    went nowhere. Piping the selection to `pbcopy` writes the macOS
+    ///    pasteboard directly, independent of the terminal's OSC 52 support.
+    ///
+    /// Only reachable with `mouse` on (a drag is what enters copy-mode), so it
+    /// pairs with `setMouseMode`.
+    ///
+    /// Key tables are SERVER-GLOBAL — unlike the `mouse` session option there is
+    /// no per-session key table, and in Release CCorn shares the user's default
+    /// tmux server. So the binding is guarded to fire only inside CCorn's own
+    /// sessions: `#{m:ccorn*,#{session_name}}` matches `ccorn` and the
+    /// `ccorn-view-*` view sessions and falls through to the stock
+    /// `copy-pipe-and-cancel` everywhere else, leaving the user's other tmux work
+    /// on tmux's default copy behavior — the same restraint `setMouseMode` shows
+    /// by never touching their `set -g mouse`. Both the emacs (`copy-mode`) and
+    /// vi (`copy-mode-vi`) tables are rebound since `mode-keys` selects the live one.
+    private func installCopyModeSelectBindings() {
+        for table in ["copy-mode", "copy-mode-vi"] {
+            tmux([
+                "bind-key", "-T", table, "MouseDragEnd1Pane",
+                "if-shell", "-F", "#{m:ccorn*,#{session_name}}",
+                "send-keys -X copy-pipe-no-clear pbcopy",
+                "send-keys -X copy-pipe-and-cancel",
+            ])
+        }
     }
 
     /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
