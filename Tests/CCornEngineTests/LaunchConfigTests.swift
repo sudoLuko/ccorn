@@ -112,7 +112,7 @@ import Testing
     }
 
     /// A config JSON predating local sessions (no `remoteControl` key) decodes
-    /// to remote — the posture every such session ran with.
+    /// to remote, the posture every such session ran with.
     @Test func remoteControlMissingDecodesToTrue() throws {
         let config = try JSONDecoder().decode(SessionLaunchConfig.self, from: Data("{}".utf8))
         #expect(config.remoteControl)
@@ -129,7 +129,7 @@ import Testing
                 == "claude --resume 'abc' --rc")
     }
 
-    /// Local session omits `--rc` entirely — no title handle on a new session,
+    /// Local session omits `--rc` entirely: no title handle on a new session,
     /// a plain `--resume` on a restart.
     @Test func localBaseOmitsRC() {
         #expect(SessionEngine.claudeBase(remoteControl: false, newTitle: "ccorn") == "claude")

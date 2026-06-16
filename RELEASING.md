@@ -2,7 +2,7 @@
 
 Releases ship as a **signed, notarized, stapled** `CCorn.app` zipped for GitHub
 Releases. Notarization requires an Apple Developer Program membership; nothing
-credential-shaped is ever committed — identity and notary auth live in your
+credential-shaped is ever committed; identity and notary auth live in your
 keychain and reach the script through the environment.
 
 ## One-time setup
@@ -31,7 +31,7 @@ keychain and reach the script through the environment.
 1. Bump `MARKETING_VERSION` in `project.yml` if needed (the script reads the
    version from there), commit, and tag.
 2. Run the preflight suite against the current Claude Code CLI
-   (`scripts/preflight/README.md`) — it catches TUI wording drift that breaks
+   (`scripts/preflight/README.md`); it catches TUI wording drift that breaks
    state detection.
 3. Build, sign, notarize, staple, package:
 

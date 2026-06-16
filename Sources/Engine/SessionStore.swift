@@ -2,13 +2,13 @@ import Foundation
 
 /// JSON persistence under `~/Library/Application Support/CCorn/`.
 /// Persists session records (identity = session UUID) and user settings.
-/// Live state (PID, current state, hashes, window id) is never persisted — it is
+/// Live state (PID, current state, hashes, window id) is never persisted; it is
 /// re-derived on launch (see docs/CCORN_SPEC.md "Session Record" / "Launch Reconciliation").
 ///
 /// @unchecked Sendable: all reads and writes are serialized through `queue`.
 ///
 /// Retention: records whose transcript no longer exists (and which have no
-/// live window) are pruned at launch — `claude --resume` would have nothing to
+/// live window) are pruned at launch; `claude --resume` would have nothing to
 /// resume, so the record is dead weight (see AppModel.pruneOrphanedRecords).
 final class SessionStore: @unchecked Sendable {
     static let shared = SessionStore()
@@ -132,7 +132,7 @@ final class SessionStore: @unchecked Sendable {
 
     /// Clear a deleted group's id from every record's membership (the
     /// definition lives in settings; this removes the dangling references).
-    /// Records — and therefore sessions — are never deleted or archived here.
+    /// Records, and therefore sessions, are never deleted or archived here.
     func removeGroupID(_ groupID: String) {
         queue.sync {
             var records = loadRecordsLocked()
@@ -182,8 +182,8 @@ final class SessionStore: @unchecked Sendable {
 
     /// Retention policy (launch, after the transcript-existence prune): drop
     /// archived records whose transcript has been inactive past
-    /// `archivedMaxAge`, then cap the total at `maxRecords` — evicting
-    /// archived records before active ones, oldest transcript activity first —
+    /// `archivedMaxAge`, then cap the total at `maxRecords` (evicting
+    /// archived records before active ones, oldest transcript activity first)
     /// so the store cannot grow unbounded. `keep` (live windows) always
     /// survives; age comes from the transcript mtime, the same last-activity
     /// signal the rows display, so no schema change is needed.

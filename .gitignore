@@ -16,17 +16,17 @@ CCorn.xcodeproj/
 Sources/Info.plist
 build-release/
 
-# Local Claude Code state (settings.local.json, worktrees) — never commit
+# Local Claude Code state (settings.local.json, worktrees); never commit
 .claude/
 
-# Firecrawl MCP local working dir — local tool state, never commit
+# Firecrawl MCP local working dir; local tool state, never commit
 .firecrawl/
 
-# Internal research / working notes — kept out of the public repo
+# Internal research / working notes, kept out of the public repo
 docs/research/
 docs/ANIMATION_AUDIT_VERIFICATION.md
 
-# Design-process artifacts (iteration screenshots, source files) — the shipped
+# Design-process artifacts (iteration screenshots, source files); the shipped
 # assets live in Sources/Assets.xcassets and docs/images; these are working history
 docs/screenshots/
 design-assets/corn-glyph/

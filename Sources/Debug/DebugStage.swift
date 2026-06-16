@@ -5,13 +5,13 @@ import AppKit
 /// of seeded rows (every state, realistic titles/paths/ages) and an in-process
 /// window screenshot helper. Driven by DebugCommandChannel (`seed`, `shoot`,
 /// `appearance`); compiled out of release builds entirely. Seeding goes
-/// through AppModel.debugSeed, which stops the live poll first — the real
+/// through AppModel.debugSeed, which stops the live poll first; the real
 /// store, tmux session, and discovery are never touched.
 enum DebugStage {
 
     // MARK: - Seed data
 
-    /// Sidebar groups for the seeded set. Definitions only — seeding swaps
+    /// Sidebar groups for the seeded set. Definitions only; seeding swaps
     /// AppModel's PUBLISHED list; settings.json is never written.
     static let seedGroups: [SessionGroup] = [
         SessionGroup(id: "seed-group-client", name: "Client work"),
@@ -22,11 +22,11 @@ enum DebugStage {
 
     /// A realistic mix covering every presentation: routine dots (working,
     /// waiting, running, stale, stopped), the full broken trio (sign-in,
-    /// no-remote — one generic, one with the captured plan notice — and
+    /// no-remote (one generic, one with the captured plan notice) and
     /// crashed), a few unmanaged discoveries, and an archived pair. Group
     /// coverage: members of each seed group, one session in BOTH groups, an
     /// archived-and-grouped record, and one brand-new UNBOUND session (empty
-    /// uuid — the Groups control must gate disabled on it).
+    /// uuid, the Groups control must gate disabled on it).
     static func seedRows(now: Date = Date()) -> (all: [SessionRow], archived: [SessionRow]) {
         func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
         let home = NSHomeDirectory()
@@ -151,7 +151,7 @@ enum DebugStage {
                        lastActive: ago(40 * 86_400)),
         ]
 
-        // Same sort the real rebuild applies (most recent first) — debugSeed
+        // Same sort the real rebuild applies (most recent first); debugSeed
         // bypasses rebuildRows, so unsorted seeds would render unsorted.
         let all = (managed + unmanaged)
             .sorted { ($0.lastActive ?? .distantPast) > ($1.lastActive ?? .distantPast) }
@@ -195,7 +195,7 @@ enum DebugStage {
     }
 
     /// All-clear set: only calm sessions (working/running/stale/stopped), no
-    /// attention tier — exercises the popover's all-clear line and its calm
+    /// attention tier; exercises the popover's all-clear line and its calm
     /// disclosure without attention rows above it.
     static func seedCalmRows(now: Date = Date()) -> [SessionRow] {
         func ago(_ seconds: TimeInterval) -> Date { now.addingTimeInterval(-seconds) }
@@ -240,7 +240,7 @@ enum DebugStage {
     // MARK: - Window screenshots
 
     /// Render a window's full frame (title bar included) to a PNG via
-    /// `cacheDisplay` — no screen-recording permission needed, and the render
+    /// `cacheDisplay`, no screen-recording permission needed, and the render
     /// honors the current NSApp.appearance. Targets: main / popover /
     /// settings / onboarding / sheet / key.
     @MainActor

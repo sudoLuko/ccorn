@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Onboarding card (docs/CCORN_SPEC.md 5.3, flow 6.1). First launch only,
-/// required — no skip: the window has no close button and "Start Scanning"
+/// required, no skip: the window has no close button and "Start Scanning"
 /// stays disabled until at least one directory is added. Semantic colors so
 /// the card follows light/dark like the rest of the main UI.
 struct OnboardingView: View {
@@ -39,7 +39,7 @@ struct OnboardingView: View {
     private var card: some View {
         VStack(spacing: 0) {
             // The in-app brand mark is the shared OpenMoji corn glyph (CornMark),
-            // the same artwork as the app icon — one bundled asset across every
+            // the same artwork as the app icon, one bundled asset across every
             // surface (replaces the old system corn emoji).
             CornMark(size: 44)
                 .frame(height: 48)

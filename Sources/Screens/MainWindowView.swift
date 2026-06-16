@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Main app window (docs/CCORN_SPEC.md section 5.1): NavigationSplitView with a
 /// 200px fixed sidebar and the session list (All Sessions or Archived).
-/// Semantic colors only — the window follows system appearance. Also hosts the
+/// Semantic colors only; the window follows system appearance. Also hosts the
 /// first-run import sheet (5.4).
 struct MainWindowView: View {
     @ObservedObject var model: AppModel
@@ -33,7 +33,7 @@ struct MainWindowView: View {
         .hiddenWindowTitle()
         // App identity: the corn glyph lives in the title bar as a trailing
         // titlebar accessory (see MainWindowController.show). It is deliberately
-        // not an NSToolbar item — a toolbar would add AppKit's "Icon and Text /
+        // not an NSToolbar item; a toolbar would add AppKit's "Icon and Text /
         // Icon Only" right-click menu, and a plain accessory has no such chrome.
         .frame(minWidth: 720, minHeight: 480)
         .sheet(item: $model.importFlow) { flow in
@@ -75,10 +75,10 @@ enum SidebarNav: Hashable {
     case group(String)
 }
 
-/// Left sidebar: branded header (the lockup is where app identity lives —
+/// Left sidebar: branded header (the lockup is where app identity lives;
 /// the title bar hides its text), New Session button, SESSIONS nav (All
 /// Sessions + indented Archived), pinned settings gear. Below the header,
-/// no borders between items — hierarchy through indentation and weight only.
+/// no borders between items; hierarchy through indentation and weight only.
 private struct SidebarView: View {
     @ObservedObject var model: AppModel
     @Binding var nav: SidebarNav
@@ -185,7 +185,7 @@ private struct SidebarView: View {
     /// One group row: name, member count, rename/delete context menu.
     /// SwiftUI `.contextMenu` here (not the RowRightClickCatcher overlay):
     /// it bridges to a native menu, and the catcher does not compose with
-    /// List's row selection — the NSMenu rule's intent (no custom-styled
+    /// List's row selection; the NSMenu rule's intent (no custom-styled
     /// menus) is preserved.
     private func groupRow(_ group: SessionGroup) -> some View {
         HStack(spacing: 4) {

@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Launch sequence (flow 6.1)
 
-    /// Dependency gates first — the app halts until tmux and claude exist —
+    /// Dependency gates first, the app halts until tmux and claude exist,
     /// then onboarding (first launch) or a normal engine start.
     private func launchSequence() async {
         await ensureDependencies()
@@ -178,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popoverPanel.show(relativeTo: button)
     }
 
-    /// Before onboarding completes there is no usable main window — route every
+    /// Before onboarding completes there is no usable main window. Route every
     /// "open" request to the onboarding card instead (it is the required flow).
     private func openMainWindow() {
         popoverPanel.close()

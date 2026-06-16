@@ -1,8 +1,8 @@
 # Shared helpers for the hermetic app e2e scripts (sourced, not executed).
 #
 # Callers set: SOCKET (tmux -L name), SESSION (tmux session name), E2E (run
-# dir), then call e2e_setup + launch_app. Everything — tmux server, support
-# dir, debug channel — lives under the run's own namespace; nothing touches
+# dir), then call e2e_setup + launch_app. Everything (tmux server, support
+# dir, debug channel) lives under the run's own namespace; nothing touches
 # the user's default tmux server or a normally-running CCorn.
 
 TMUX() { command tmux -L "$SOCKET" "$@"; }
@@ -52,7 +52,7 @@ assert_row_state() { # <path> <state> <timeout-seconds> <label>
     if wait_row_state "$1" "$2" "$3"; then
         pass "$4 (state: $2)"
     else
-        fail "$4 — expected $2, got '$(row_state "$1")'"
+        fail "$4, expected $2, got '$(row_state "$1")'"
     fi
 }
 
@@ -98,7 +98,7 @@ launch_app() {
     trap 'kill "$APP_PID" 2>/dev/null || true; TMUX kill-server 2>/dev/null || true' EXIT
 
     # The channel deletes any pre-existing cmd file when it starts, so a
-    # command written too early is eaten — probe with retries.
+    # command written too early is eaten; probe with retries.
     local up=false
     for _ in 1 2 3 4; do
         if cmd dump | grep -q '^\['; then up=true; break; fi
@@ -114,8 +114,8 @@ launch_app() {
 finish() {
     echo
     if ((FAILS > 0)); then
-        echo "[$(basename "$0" .sh)] $FAILS assertion(s) FAILED — logs: $E2E/app.log, shots: $SHOTS"
+        echo "[$(basename "$0" .sh)] $FAILS assertion(s) FAILED; logs: $E2E/app.log, shots: $SHOTS"
         exit 1
     fi
-    echo "[$(basename "$0" .sh)] all assertions passed — shots: $SHOTS"
+    echo "[$(basename "$0" .sh)] all assertions passed; shots: $SHOTS"
 }

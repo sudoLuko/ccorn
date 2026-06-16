@@ -434,7 +434,7 @@ final class DebugCommandChannel {
             return DebugStage.shoot(target: parts[1], path: parts[2])
 
         case "windowid" where parts.count >= 2:
-            // CGWindowID for `screencapture -l` — real compositor pixels,
+            // CGWindowID for `screencapture -l`: real compositor pixels,
             // which render materials/vibrancy faithfully where cacheDisplay
             // cannot.
             guard let number = DebugStage.windowNumber(for: parts[1]) else {

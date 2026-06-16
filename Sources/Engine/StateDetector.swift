@@ -77,17 +77,17 @@ struct DetectionResult: Sendable {
     /// lingers in the pane after RC reconnected never re-asserts a verdict.
     var rcFailureKind: RCFailureKind?
     /// True when the pane footer reports permissions are being bypassed right
-    /// now — a session launched with `--dangerously-skip-permissions` or one the
+    /// now: a session launched with `--dangerously-skip-permissions` or one the
     /// user escalated into bypass mid-session (Shift+Tab). Drives the row's
     /// bypass marker; reflects ACTUAL runtime state, not just the launch flag.
     var bypassActive: Bool = false
-    /// The remote-control bridge handle from the process session registry — a
+    /// The remote-control bridge handle from the process session registry: a
     /// `session_…` id equal to the `claude.ai/code/<id>` per-session URL
     /// segment (verified against the URLs Claude Code prints). nil until the
     /// bridge links, or while the registry file lags a live bridge
     /// (positive-only, like the RC signal it feeds). NOT the transcript
     /// `bridge-session` record's id, which is a `cse_…` in a different
-    /// namespace that is not URL-valid — never build the deep link from that
+    /// namespace that is not URL-valid; never build the deep link from that
     /// one. Drives the per-session "Open in Browser" handoff.
     var bridgeSessionId: String?
 }
@@ -145,7 +145,7 @@ struct StateDetector: Sendable {
     /// chip vocabulary below covers 2.1.172+.
     ///
     /// Chip states: `active` is connected; `connecting`/`reconnecting` are the
-    /// transient bring-up/recovery handshake — remote control is engaging, not
+    /// transient bring-up/recovery handshake; remote control is engaging, not
     /// failed, so they must read as engaged and never trip "No remote";
     /// `failed` is the genuine failure (alongside the verbose
     /// "Remote Control … {disabled,unavailable,…}" messages, see `rcPlanNotice`).
@@ -154,7 +154,7 @@ struct StateDetector: Sendable {
     static let rcChipConnecting = ["/rc connecting", "/rc reconnecting"]
     static let rcChipFailed = "/rc failed"
 
-    /// Active-bypass footer: a session running with permission checks skipped —
+    /// Active-bypass footer: a session running with permission checks skipped,
     /// launched with `--dangerously-skip-permissions`, or escalated into bypass
     /// mid-session via Shift+Tab (the `--allow-dangerously-skip-permissions`
     /// path). Claude renders a status-bar line like `⏵ bypass permissions on`;
@@ -171,7 +171,7 @@ struct StateDetector: Sendable {
 
     /// Braille spinner frames older/newer renderers may use. Dead on
     /// 2.1.169/2.1.170 (which cycle `·✢✳✶✻✽` instead, glyphs that also persist
-    /// after finish) — kept only as a forward-compat fallback; it cannot
+    /// after finish). Kept only as a forward-compat fallback; it cannot
     /// false-positive on current versions because braille never renders.
     static let spinnerChars = Set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
@@ -189,14 +189,14 @@ struct StateDetector: Sendable {
     /// finished, idle sessions as needs-input (the `idle-conversational-*`
     /// fixture). Because a genuine prompt always carries the structural chrome
     /// above, dropping the prose costs no real detection. The persistent `>`
-    /// input box is likewise not a signal — it is present even when idle.
+    /// input box is likewise not a signal; it is present even when idle.
     static let waitingPhrases = [
         "❯ 1.", "1. Yes", "(y/n)", "[y/N]", "Enter to confirm",
     ]
 
     /// Login-prompt phrases (docs/CCORN_SPEC.md section 8, "User not
-    /// authenticated"). Anchored to whole UI/error renders — the login picker,
-    /// the OAuth flow, and the invalid-credential errors — never a bare
+    /// authenticated"). Anchored to whole UI/error renders (the login picker,
+    /// the OAuth flow, and the invalid-credential errors), never a bare
     /// "/login", which could appear in ordinary conversation text. A session
     /// matching one of these is blocked on sign-in, which is a different
     /// problem than Waiting (needs input): it gets its own state so the row
@@ -213,7 +213,7 @@ struct StateDetector: Sendable {
     ]
 
     /// Fatal launch errors that make `claude` exit immediately, leaving no child
-    /// process — so the spawn watch times out and would otherwise report the
+    /// process; so the spawn watch times out and would otherwise report the
     /// generic "no claude process appeared". The clearest case is the bypass root
     /// refusal (`--dangerously-skip-permissions cannot be used with root/sudo
     /// privileges …`). Matched loosely so version wording can drift.
@@ -223,7 +223,7 @@ struct StateDetector: Sendable {
     ]
 
     /// The CLI's own fatal-launch line if the pane shows one (e.g. the bypass
-    /// root refusal), nil otherwise — so the failed-start alert can lead with
+    /// root refusal), nil otherwise; so the failed-start alert can lead with
     /// Claude Code's words instead of a generic message.
     func launchFatalError(pane: String) -> String? {
         for line in pane.split(whereSeparator: \.isNewline) {
@@ -277,11 +277,11 @@ struct StateDetector: Sendable {
         return pane.contains(where: { Self.spinnerChars.contains($0) })
     }
 
-    /// True when the footer reports remote control *engaged* — connected, or in
+    /// True when the footer reports remote control *engaged*: connected, or in
     /// the transient connecting/reconnecting handshake. Matches both the
     /// pre-2.1.172 `Remote Control active` literal and the 2.1.172+ `/rc` chip,
     /// so detection is version-robust. `/rc failed` and an absent chip are
-    /// deliberately excluded — that is the no-remote case, decided elsewhere.
+    /// deliberately excluded; that is the no-remote case, decided elsewhere.
     /// This is a *positive* signal only: its absence does not prove RC is down
     /// (the footer can lag in an un-repainted idle TUI), which is why `detect`
     /// ORs it with the registry/transcript bridge signals rather than treating
@@ -299,7 +299,7 @@ struct StateDetector: Sendable {
 
     /// True when a pane shows any trace of ever having hosted Claude Code.
     /// Used by launch reconciliation to tell a died claude session from a bare
-    /// shell window — e.g. the default window `tmux new-session` spawns, which
+    /// shell window, e.g. the default window `tmux new-session` spawns, which
     /// automatic-rename labels "zsh". Generous on purpose: a stale TUI frame
     /// (runtime findings T2), a clean-exit `claude --resume` hint, or a typed
     /// `claude` command all count; only a pane with no claude trace at all is
@@ -323,14 +323,14 @@ struct StateDetector: Sendable {
 
     /// The bottom "live UI" region of a captured frame: the suffix from the last
     /// horizontal-rule line onward. A confirmation prompt replaces the input box
-    /// and renders as the bottom-most rule-delimited block — verified on 2.1.173
+    /// and renders as the bottom-most rule-delimited block, verified on 2.1.173
     /// for the trust dialog and the tool-permission dialog (see the `waiting-*`
-    /// fixtures) — so the real prompt chrome lives here, while finished
+    /// fixtures), so the real prompt chrome lives here, while finished
     /// conversation (a pasted option list, a `(y/n)` written in prose) sits in the
     /// scrollback above. Scoping the Waiting scan to this region keeps that
     /// lingering chrome from flagging an idle session (the
-    /// `idle-marker-in-scrollback` fixture). With no rule line at all — a bare
-    /// pane, never a real live TUI — it returns the whole pane: conservative, so a
+    /// `idle-marker-in-scrollback` fixture). With no rule line at all (a bare
+    /// pane, never a real live TUI) it returns the whole pane: conservative, so a
     /// genuine prompt is never missed.
     static func livePromptRegion(_ pane: String) -> String {
         let lines = pane.split(separator: "\n", omittingEmptySubsequences: false)
@@ -412,15 +412,15 @@ struct StateDetector: Sendable {
     // MARK: - Detection
 
     /// One detection pass. Pure with respect to shared state: reads tmux/process
-    /// facts through `panes`/ProcessControl, never mutates the store — the caller
+    /// facts through `panes`/ProcessControl, never mutates the store; the caller
     /// applies the returned result on the main actor.
     ///
     /// Dead is decided from PID liveness, never from pane content: an exited
     /// window keeps stale `Bash(` / `Remote Control active` markers
     /// (runtime findings T2). When the tracked pid is missing or gone, the pid is
     /// re-derived from the pane's shell (claude may have just spawned, or been
-    /// restarted manually in the window); only if no claude child exists — and the
-    /// pane shell is older than the spawn grace window — is the session Dead.
+    /// restarted manually in the window); only if no claude child exists, and the
+    /// pane shell is older than the spawn grace window, is the session Dead.
     func detect(input: DetectionInput,
                 panes: PaneSource,
                 transcript: DiscoveredSession?,
@@ -449,7 +449,7 @@ struct StateDetector: Sendable {
 
         if livePID == nil {
             // Re-derive: find the claude child of the pane's shell (argv/exec-path
-            // match among the shell's descendants only — never a global scan).
+            // match among the shell's descendants only, never a global scan).
             if let shellPID = panes.panePID(windowId: windowId) {
                 livePID = ProcessControl.findClaude(belowShell: shellPID)
                 if livePID == nil,
@@ -476,7 +476,7 @@ struct StateDetector: Sendable {
         // mere presence is one of the remote-control-active signals, AND its
         // value is the `claude.ai/code/<id>` per-session URL segment the browser
         // handoff opens. Reading it every tick (a tiny per-pid JSON file) keeps
-        // that id fresh for the on-demand action — cheap for the handful of live
+        // that id fresh for the on-demand action; cheap for the handful of live
         // sessions this manages.
         let registryBridge = livePID.flatMap(bridgeForPid)
         result.bridgeSessionId = registryBridge
@@ -545,7 +545,7 @@ struct StateDetector: Sendable {
         if authNotice(pane: pane) != nil { return (.needsAuth, hash, hashChange) }
         if isWaiting(pane: pane) { return (.waiting, hash, hashChange) }
         // Change-fallback (covers marker-less renderers): a changed pane reads as
-        // Working — EXCEPT on the live-activity present->absent edge. There the
+        // Working, EXCEPT on the live-activity present->absent edge. There the
         // turn just finished (the marker "disappears the moment the turn
         // finishes"), and the change is only the final render settling, so flip
         // straight to the idle classification below instead of costing one more

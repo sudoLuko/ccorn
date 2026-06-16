@@ -60,7 +60,7 @@ enum DebugLife {
     }
 
     /// Resident memory of this process: (phys_footprint, resident_size) in
-    /// bytes — footprint is what Activity Monitor's "Memory" approximates.
+    /// bytes; footprint is what Activity Monitor's "Memory" approximates.
     /// (0, 0) if the task_info call fails.
     static func memoryBytes() -> (footprint: UInt64, resident: UInt64) {
         var info = task_vm_info_data_t()

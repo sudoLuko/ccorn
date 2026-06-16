@@ -18,7 +18,7 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
     @Published var permissionMode: CCPermissionMode
     @Published var additionalDirectories: [String]
     /// Raw extra-args text; whitespace-split into tokens when the session starts
-    /// (the advanced escape hatch — one flag/value per token, no quoting).
+    /// (the advanced escape hatch: one flag/value per token, no quoting).
     @Published var extraArgsText: String
     /// Launch with remote control (`--rc`). Checked = remote (the default and
     /// CCorn's historical behavior); unchecked = a local session with no remote
@@ -49,7 +49,7 @@ final class NewSessionFlowModel: ObservableObject, Identifiable {
     /// Home-relative folder display ("~/dev/ccorn").
     var displayDirectory: String { (directory as NSString).abbreviatingWithTildeInPath }
 
-    /// Sessions already alive in the chosen folder — a passive heads-up shown in
+    /// Sessions already alive in the chosen folder; a passive heads-up shown in
     /// the sheet, not a gate. Read live from the model so it tracks the Change…
     /// button re-picking the directory (`directory` is @Published).
     var activeSessionsHere: Int { model?.activeSessionCount(in: directory) ?? 0 }

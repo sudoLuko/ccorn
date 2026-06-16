@@ -1,8 +1,8 @@
 import Foundation
 
 /// Thin CLI over the production `StateDetector`: classifies captured pane
-/// frames exactly as the engine's pure classifier would (first observation —
-/// no previous hash — and a huge stale threshold so idle frames read Running,
+/// frames exactly as the engine's pure classifier would (first observation,
+/// no previous hash, and a huge stale threshold so idle frames read Running,
 /// never Stale) and prints one TSV row per file.
 ///
 /// Columns:

@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Borderless menu-bar surface replacing NSPopover: flat-topped (no arrow),
 /// appears instantly like a native status menu. Deliberately an NSPanel
-/// subclass — MainWindowController.updateActivationPolicy excludes NSPanel,
-/// which keeps the .accessory/.regular switch blind to this surface — and
+/// subclass (MainWindowController.updateActivationPolicy excludes NSPanel,
+/// which keeps the .accessory/.regular switch blind to this surface) and
 /// named "Popover…" so DebugStage's window lookup (class name containing
 /// "Popover") still resolves it.
 final class PopoverPanel: NSPanel {
@@ -45,18 +45,18 @@ final class PopoverPanelController {
     private var resignKeyObserver: NSObjectProtocol?
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    /// Status-button screen rect captured at show time — the anchor every
+    /// Status-button screen rect captured at show time; the anchor every
     /// later size change re-pins the top edge to.
     private var anchorRect: NSRect?
     /// Visible frame of the screen holding the clicked status item (not
-    /// NSScreen.main — multi-display menu bars differ), for edge clamping.
+    /// NSScreen.main, multi-display menu bars differ), for edge clamping.
     private var screenVisibleFrame: NSRect?
     private weak var statusButton: NSStatusBarButton?
     private var isClosing = false
     /// Re-entrancy brakes for the size tracking: the KVO fires inside
     /// SwiftUI's render pass (and again, same value, on every layout tick of
     /// the window's own frame animation). Setting the window frame right
-    /// there re-enters layout and recurses until the stack dies — so the
+    /// there re-enters layout and recurses until the stack dies, so the
     /// reaction hops to the next runloop turn, and echoes of a size already
     /// applied are dropped.
     private var sizeUpdateScheduled = false
@@ -124,7 +124,7 @@ final class PopoverPanelController {
             self?.scheduleSizeUpdate()
         }
 
-        // Key loss means another window (ours or not) took over — close.
+        // Key loss means another window (ours or not) took over; close.
         // NSApplication.didResignActive is NOT a usable proxy here: the app
         // runs .accessory and the panel shows without activating it.
         resignKeyObserver = NotificationCenter.default.addObserver(
@@ -161,7 +161,7 @@ final class PopoverPanelController {
         removeMonitors()
         panel.orderOut(nil)
         isClosing = false
-        // The tree stays alive in the hidden panel — stop the mark motion.
+        // The tree stays alive in the hidden panel; stop the mark motion.
         model.popoverOnScreen = false
     }
 
@@ -268,7 +268,7 @@ final class PopoverPanelController {
 
     /// Close on any outside click EXCEPT one on the status-item button: there
     /// the mouse-DOWN would close the panel, then the button's mouse-up action
-    /// would see isVisible == false and immediately reopen — a close-then-
+    /// would see isVisible == false and immediately reopen, a close-then-
     /// reopen flicker. The AppDelegate toggle owns clicks on the button.
     private func handleClickElsewhere(_ event: NSEvent) {
         guard panel.isVisible else { return }

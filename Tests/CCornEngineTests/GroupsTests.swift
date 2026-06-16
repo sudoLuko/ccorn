@@ -3,7 +3,7 @@ import Testing
 
 /// User-defined groups (docs/CCORN_SPEC.md 5.11): definitions persist in
 /// settings (field-by-field-defaulting decode), membership merges onto
-/// records keyed by the session uuid — the archived-flag pattern — and
+/// records keyed by the session uuid (the archived-flag pattern) and
 /// inherits the record store's lifecycle.
 @Suite struct GroupsTests {
 
@@ -20,7 +20,7 @@ import Testing
         store.mergeRecord(uuid: "u1", path: "/p", groupIDs: ["g1", "g2"])
         let record = store.loadRecords().first { $0.uuid == "u1" }
         #expect(record?.groupIDs == ["g1", "g2"])
-        // The merge creates the record if absent — same as the archived flag.
+        // The merge creates the record if absent, same as the archived flag.
         #expect(record?.path == "/p")
     }
 
@@ -42,7 +42,7 @@ import Testing
         #expect(store.loadRecords().first { $0.uuid == "u1" }?.groupIDs == ["g1"])
     }
 
-    /// An empty uuid never creates a record (mergeRecord's guard) — the
+    /// An empty uuid never creates a record (mergeRecord's guard), the
     /// storage-level backstop behind the UI's bound-uuid gating.
     @Test func emptyUUIDNeverCreatesARecord() {
         let store = scratchStore()

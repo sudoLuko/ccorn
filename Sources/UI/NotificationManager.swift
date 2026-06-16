@@ -3,8 +3,8 @@ import UserNotifications
 
 /// Local notifications for session-state changes worth surfacing while the
 /// user is not looking at the app (docs/CCORN_SPEC.md 5.10): fire ONLY on
-/// transitions into Waiting or Dead, detected as edges by the caller — never
-/// on every poll — plus a per-session cooldown here so a flapping session
+/// transitions into Waiting or Dead, detected as edges by the caller (never
+/// on every poll), plus a per-session cooldown here so a flapping session
 /// can't spam. Tapping a notification opens the session in the browser (same
 /// as "Open in Browser"): the per-session deep link when the session's bridge
 /// handle was known at post time, else the claude.ai/code list.
@@ -23,7 +23,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     #endif
 
     /// Requested on first launch after onboarding (and idempotently on every
-    /// launch thereafter — the system only prompts once).
+    /// launch thereafter; the system only prompts once).
     func requestPermission() {
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -36,7 +36,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                 bridgeSessionId: String? = nil, now: Date = Date()) {
         guard state == .waiting || state == .dead || state == .needsAuth else { return }
         // An entry past the cooldown behaves exactly like a missing one, so
-        // expired entries are dropped here — keyed by window id (monotonic),
+        // expired entries are dropped here; keyed by window id (monotonic),
         // the map would otherwise grow for the lifetime of the app.
         lastFired = lastFired.filter { now.timeIntervalSince($0.value) < cooldown }
         let key = "\(sessionKey)|\(state.rawValue)"
@@ -50,10 +50,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             content.body = "Claude needs your input or approval."
         case .needsAuth:
             content.title = "\(title) needs sign-in"
-            content.body = "Claude Code is not authenticated. Open the session in Terminal and run /login."
+            content.body = "Open the session in Terminal and run /login."
         case .dead:
             content.title = "\(title) died"
-            content.body = "The session's process is gone. Restart it from CCorn."
+            content.body = "The process is gone; restart it from CCorn."
         default:
             return
         }

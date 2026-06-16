@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// Precedence resolution for the discovered ("unmanaged") surface — the fix for
+/// Precedence resolution for the discovered ("unmanaged") surface: the fix for
 /// the directory-keyed flip, where two concurrent sessions in one directory
 /// collapsed into a single row that alternated identity as each wrote its
 /// transcript. The surface is now session-granular: live external sessions are
@@ -30,7 +30,7 @@ import Testing
     // MARK: - The flip
 
     /// Two concurrent live sessions in ONE directory must become TWO distinct
-    /// UUID-keyed rows — never a single directory row. This is the core fix.
+    /// UUID-keyed rows, never a single directory row. This is the core fix.
     @Test func twoLiveSessionsInOneDirectoryAreTwoRows() {
         let dir = "/Users/luke/dev/ccorn"
         let proj = project("-Users-luke-dev-ccorn", path: dir, sessions: [
@@ -49,11 +49,11 @@ import Testing
         #expect(r.live.allSatisfy { $0.path == dir })
         #expect(r.liveUUIDs == ["uuid-A", "uuid-B"])
         // The directory has live sessions, so it does NOT also emit a dormant
-        // summary — the 36 historical transcripts don't flood the list.
+        // summary; the 36 historical transcripts don't flood the list.
         #expect(r.dormantDirKeys.isEmpty)
     }
 
-    /// Resolution is independent of which transcript was written most recently —
+    /// Resolution is independent of which transcript was written most recently,
     /// the property that broke before (most-recent-wins flip).
     @Test func resolutionIsStableAcrossTranscriptRecency() {
         let dir = "/Users/luke/dev/ccorn"
@@ -85,7 +85,7 @@ import Testing
     }
 
     /// A directory that holds a persisted record is already represented by that
-    /// record's Stopped row — no dormant summary on top of it.
+    /// record's Stopped row; no dormant summary on top of it.
     @Test func directoryWithRecordHasNoDormantSummary() {
         let proj = project("-d", path: "/Users/luke/dev/x",
                            sessions: [session("rec-uuid"), session("other")])
@@ -96,7 +96,7 @@ import Testing
     }
 
     /// A directory with a managed CCorn window emits no dormant summary (the
-    /// managed row represents it) — matched by path, so it holds even when the
+    /// managed row represents it), matched by path, so it holds even when the
     /// managed session's UUID isn't among the directory's discovered transcripts.
     @Test func managedDirectoryHasNoDormantSummary() {
         let dir = "/Users/luke/dev/ccorn"
@@ -149,7 +149,7 @@ import Testing
     }
 
     /// A live candidate with no sessionId (process-table fallback shape) is not
-    /// a discovered row — discovery needs the durable UUID key.
+    /// a discovered row; discovery needs the durable UUID key.
     @Test func candidateWithoutUUIDIgnored() {
         let r = DiscoveryMerge.resolve(
             projects: [],

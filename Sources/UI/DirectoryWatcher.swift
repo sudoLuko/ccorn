@@ -3,7 +3,7 @@ import CoreServices
 
 /// FSEvents wrapper that watches one directory tree and fires a debounced
 /// callback on the main queue. Used on `~/.claude/projects/` so discovery
-/// re-runs when transcripts appear or change — never by polling
+/// re-runs when transcripts appear or change, never by polling
 /// (CLAUDE.md: "Use FSEvents, not polling, for directory watching").
 final class DirectoryWatcher {
     private var stream: FSEventStreamRef?

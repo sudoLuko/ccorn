@@ -35,7 +35,7 @@ final class ImportFlowModel: ObservableObject, Identifiable {
     var importedCount: Int { items.filter { $0.phase == .done }.count }
 
     /// Build items off-main: each candidate is probed for a live external
-    /// claude (registry/cwd match) and recent transcript activity — the
+    /// claude (registry/cwd match) and recent transcript activity, the
     /// Working/Idle badge. A session with no live process imports trivially
     /// (no kill step), so it is always "Idle".
     static func probe(candidates: [SessionRow],
@@ -83,7 +83,7 @@ final class ImportFlowModel: ObservableObject, Identifiable {
         for (n, idx) in selected.enumerated() {
             progress = (n, selected.count)
 
-            // State 3 — active session warning. "Wait for Idle" polls every
+            // State 3: active session warning. "Wait for Idle" polls every
             // 10s and auto-continues once the session goes quiet.
             if await isActivelyWorking(items[idx]) {
                 let wait = Alerts.choice(

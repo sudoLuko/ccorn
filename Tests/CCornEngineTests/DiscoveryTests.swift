@@ -8,7 +8,7 @@ import Testing
 /// Serialized because the suite materializes the transcript's real cwd on disk:
 /// Foundation's `resolvingSymlinksInPath` only normalizes `/private/tmp/x` → the
 /// shorter `/tmp/x` form when the leaf actually exists, so the project dir must be
-/// present for canonicalization (and watch-dir matching) to be deterministic —
+/// present for canonicalization (and watch-dir matching) to be deterministic,
 /// exactly the state a live project is in.
 @Suite(.serialized) final class DiscoveryTests {
 
@@ -32,7 +32,7 @@ import Testing
         let all = discovery.discoverAll()
         #expect(all.count == 1)
         let project = try #require(all.first)
-        // Opaque, lossy directory key — never decoded.
+        // Opaque, lossy directory key, never decoded.
         #expect(project.encodedKey == "-private-tmp-ccorn-fix-probe")
         // Real path resolved from the transcript `cwd`, not from the dir name.
         #expect(project.resolvedPath == Self.cwdCanonical)
@@ -98,7 +98,7 @@ import Testing
 }
 
 /// Session-title extraction (M2 fixes): the display name comes from the LAST
-/// `ai-title` record — `{"type":"ai-title","aiTitle":...}` — which Claude
+/// `ai-title` record (`{"type":"ai-title","aiTitle":...}`), which Claude
 /// re-appends as the session progresses, so the final one is current.
 @Suite struct TranscriptTitleTests {
 
@@ -171,7 +171,7 @@ import Testing
 @Suite struct DiscoveryDedupTests {
 
     /// Two encoded project dirs whose transcripts resolve to the SAME cwd: the
-    /// dedup winner must be deterministic — the most recently modified project —
+    /// dedup winner must be deterministic (the most recently modified project),
     /// regardless of directory enumeration order.
     @Test func dedupPicksMostRecentlyModifiedProject() throws {
         let fm = FileManager.default
@@ -202,7 +202,7 @@ import Testing
         #expect(kept.count == 1)
         #expect(kept.first?.encodedKey == "-tmp-ccorn-dedup-probe") // the newer one
 
-        // Flip recency: the OTHER project must now win — proof the choice is
+        // Flip recency: the OTHER project must now win, proof the choice is
         // driven by mtime, not enumeration order.
         let newest = Date(timeIntervalSince1970: 3_000_000)
         let otherTranscript = root

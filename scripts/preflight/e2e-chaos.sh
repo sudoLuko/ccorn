@@ -1,13 +1,13 @@
 #!/bin/bash
 # tmux chaos suite: things users and crashes do to CCorn's tmux world behind
 # its back. Runs against a hermetic app instance on its OWN tmux server
-# (CCORN_DEBUG_TMUX_SOCKET) — the kill-server scenario below is only safe
+# (CCORN_DEBUG_TMUX_SOCKET); the kill-server scenario below is only safe
 # because of that isolation; it must never run against the default server.
 #
 # Scenarios:
 #   A  junk typed into a healthy session's pane  -> settles back to Running
 #   B  claude SIGKILLed, window+shell survive    -> Dead (T2: pane still looks
-#      alive — PID liveness must decide, never pane content)
+#      alive; PID liveness must decide, never pane content)
 #   C  kill-window behind CCorn's back           -> Dead
 #   D  restart of the killed session             -> back to Running
 #   E  tmux kill-server mid-run                  -> app survives, all rows

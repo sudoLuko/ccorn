@@ -8,7 +8,7 @@ enum SessionColumns {
 }
 
 /// Main panel (docs/CCORN_SPEC.md sections 5.1, 5.6, 5.9). Managed sessions
-/// are the primary content and render first, with no chrome above them — the
+/// are the primary content and render first, with no chrome above them; the
 /// sidebar already names the view. Unmanaged sessions discovered on the system
 /// are ambient context: they sit below a collapsible DISCOVERED divider,
 /// visibly de-emphasized, so a glance lands on your sessions first.
@@ -31,7 +31,7 @@ struct SessionListView: View {
 
     private var archived: Bool { nav == .archived }
 
-    /// The list's source per sidebar view — All Sessions, Archived, or one
+    /// The list's source per sidebar view: All Sessions, Archived, or one
     /// group's members (record-backed, non-archived).
     private var managedRows: [SessionRow] {
         switch nav {
@@ -133,7 +133,7 @@ struct SessionListView: View {
     }
 
     /// Managed list is empty but discovery found sessions: a quiet inline
-    /// hint, not the full empty state — the discovered rows below are the
+    /// hint, not the full empty state; the discovered rows below are the
     /// likely next step.
     private var noManagedHint: some View {
         VStack(spacing: 8) {

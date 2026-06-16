@@ -31,8 +31,8 @@ import Testing
         #expect(store.loadRecords().map(\.uuid).sorted() == ["uuid-2", "uuid-3"])
     }
 
-    /// A record with no transcript mtime at all counts as infinitely old —
-    /// the transcript-existence prune normally removes it first, but retention
+    /// A record with no transcript mtime at all counts as infinitely old.
+    /// The transcript-existence prune normally removes it first, but retention
     /// must not treat "unknown" as "fresh".
     @Test func archivedWithoutMtimeCountsAsOld() throws {
         let store = try makeStore()

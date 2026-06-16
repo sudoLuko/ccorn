@@ -8,7 +8,7 @@ import Testing
     // MARK: - CCornSettings decode tolerance
 
     /// A settings.json written by an older build (no onboardingComplete) must
-    /// decode with the user's values intact — a wholesale decode failure would
+    /// decode with the user's values intact; a wholesale decode failure would
     /// silently reset to defaults and re-run onboarding.
     @Test func oldSettingsDecodeWithDefaults() throws {
         let old = #"{"watchDirectories":["/Users/x/dev"],"staleThresholdSeconds":600,"autoRestartOnLaunch":true}"#
@@ -34,7 +34,7 @@ import Testing
     }
 
     /// The default click action is Terminal, and a settings.json from a build
-    /// predating the field must adopt that default — never silently land on
+    /// predating the field must adopt that default, never silently land on
     /// browser (the old behavior) on upgrade (5.5, flow 6.4).
     @Test func clickActionDefaultsToTerminal() throws {
         #expect(CCornSettings.default.clickAction == .terminal)
@@ -86,7 +86,7 @@ import Testing
         #expect(live.openAction(clickAction: .browser) == .browser)
     }
 
-    /// Terminal mode attaches to a live window — even with remote control off,
+    /// Terminal mode attaches to a live window, even with remote control off,
     /// since attach needs none (this is the No-remote win).
     @Test func terminalModeAttachesToLiveWindow() {
         let live = sampleRow(kind: .managed(windowId: "@1"), state: .running, rc: false)
@@ -100,7 +100,7 @@ import Testing
         #expect(stopped.openAction(clickAction: .terminal) == .restartThenAttach)
     }
 
-    /// An archived record is never auto-restarted by a click — it falls back to
+    /// An archived record is never auto-restarted by a click; it falls back to
     /// the browser (the menu's Unarchive/Restart is the deliberate path).
     @Test func terminalModeArchivedRecordFallsBackToBrowser() {
         let archived = sampleRow(kind: .record, state: .stopped, archived: true)
@@ -108,7 +108,7 @@ import Testing
     }
 
     /// An unmanaged discovery (uuid + path known) imports under CCorn then
-    /// attaches in Terminal mode — the click-to-adopt path (flow 6.4 / 6.10).
+    /// attaches in Terminal mode, the click-to-adopt path (flow 6.4 / 6.10).
     @Test func terminalModeUnmanagedAdoptsThenAttaches() {
         let unmanaged = sampleRow(kind: .unmanaged, state: .unmanaged)
         #expect(unmanaged.openAction(clickAction: .terminal) == .adoptThenAttach)
@@ -165,7 +165,7 @@ import Testing
     }
 
     /// Error-shaped text that was already on screen before the rename must not
-    /// fail the rename — only NEW lines count.
+    /// fail the rename; only NEW lines count.
     @Test func renameErrorIgnoresPreexistingErrorText() {
         let before = "old output: name already exists\n> idle"
         let after = before + "\nRenamed session"
@@ -173,7 +173,7 @@ import Testing
     }
 
     /// Unrelated streamed content (even containing the word "error") must not
-    /// flag — only the rename-shaped phrases count.
+    /// flag; only the rename-shaped phrases count.
     @Test func renameErrorIgnoresUnrelatedNewContent() {
         let before = "> working"
         let after = before + "\n⏺ Bash(grep error main.swift)\ncompile error in module X"
@@ -206,7 +206,7 @@ import Testing
         #expect(!records[0].archived)
     }
 
-    /// nil parameters leave existing fields untouched — a caller that only
+    /// nil parameters leave existing fields untouched; a caller that only
     /// knows part of a session's identity can't clobber the rest.
     @Test func mergeRecordPartialUpdateKeepsOtherFields() throws {
         let (store, dir) = try temporaryStore()
@@ -230,7 +230,7 @@ import Testing
 
     // MARK: - UnmanagedClaudeFinder registry filtering
 
-    /// Registry files for dead pids linger (runtime findings F3) — they must
+    /// Registry files for dead pids linger (runtime findings F3); they must
     /// never produce a candidate.
     @Test func registryRejectsDeadPidFiles() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -239,7 +239,7 @@ import Testing
         try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        // 99_999_999 is far above macOS's pid range — guaranteed dead.
+        // 99_999_999 is far above macOS's pid range, guaranteed dead.
         let stale = #"{"pid":99999999,"sessionId":"abc","cwd":"/tmp/x"}"#
         try Data(stale.utf8).write(to: sessions.appendingPathComponent("99999999.json"))
         // Non-numeric names are ignored outright.

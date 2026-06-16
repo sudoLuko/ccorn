@@ -18,8 +18,8 @@ import Testing
 
     // MARK: No-remote resolution
 
-    /// The old circled-exclamation overlay condition — alive (running/working/
-    /// waiting/stale) with RC inactive past the 30s activation grace — now
+    /// The old circled-exclamation overlay condition, alive (running/working/
+    /// waiting/stale) with RC inactive past the 30s activation grace, now
     /// resolves the whole row to the no-remote presentation, regardless of
     /// the underlying activity.
     @Test func aliveStatesWithoutRemoteControlResolveToNoRemote() {
@@ -45,7 +45,7 @@ import Testing
     }
 
     /// A session launched as local (`--rc` omitted) has no remote control by
-    /// design — it keeps its routine presentation and is never flagged
+    /// design; it keeps its routine presentation and is never flagged
     /// no-remote, even with RC inactive past the grace.
     @Test func localSessionNeverResolvesToNoRemote() {
         for state: SessionState in [.running, .working, .waiting, .stale] {
@@ -121,7 +121,7 @@ import Testing
         }
     }
 
-    /// Attention rows order by the aggregate severity ladder, worst first —
+    /// Attention rows order by the aggregate severity ladder, worst first;
     /// the popover sorts its attention section with exactly this key.
     @Test func attentionOrderFollowsSeverityLadder() {
         let sorted: [StatusPresentation] = [.waiting, .crashed, .noRemote, .needsAuth]

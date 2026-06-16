@@ -1,14 +1,14 @@
 #!/bin/bash
 # Builds, signs, notarizes, staples, and packages the CCorn release artifact.
 #
-# Credentials come from the environment and the keychain — NEVER from the repo:
+# Credentials come from the environment and the keychain, NEVER from the repo:
 #   CCORN_SIGN_IDENTITY   Developer ID Application identity, e.g.
 #                         "Developer ID Application: Jane Doe (TEAM123456)"
 #   CCORN_NOTARY_PROFILE  notarytool keychain profile name (one-time setup:
 #                         see RELEASING.md)
 #
-# Output: dist/CCorn-v<version>.zip — a stapled, notarized app ready for a
-# GitHub release — plus dist/CCorn.app for local validation.
+# Output: dist/CCorn-v<version>.zip, a stapled, notarized app ready for a
+# GitHub release, plus dist/CCorn.app for local validation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,7 +24,7 @@ ZIP="$DIST/CCorn-v$VERSION.zip"
 rm -rf "$DIST"
 mkdir -p "$DIST"
 
-echo "[release] v$VERSION — generating project and building Release"
+echo "[release] v$VERSION, generating project and building Release"
 xcodegen generate > /dev/null
 xcodebuild -project CCorn.xcodeproj -scheme CCorn -configuration Release \
     -derivedDataPath ./build-release build 2>&1 | grep -E "^\*\*" || true

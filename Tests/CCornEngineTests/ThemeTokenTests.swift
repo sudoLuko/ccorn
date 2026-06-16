@@ -44,7 +44,7 @@ import Testing
     // MARK: One attention amber
 
     /// The waiting dot, both recoverable warning triangles, and every amber
-    /// attention word all point at the one token — the second amber is gone.
+    /// attention word all point at the one token; the second amber is gone.
     @Test func attentionAmberIsTheOnlyAmber() {
         #expect(StatusPresentation.waiting.dotFill == StatusPalette.attention)
         #expect(StatusPresentation.needsAuth.symbolColor == StatusPalette.attention)
@@ -52,7 +52,7 @@ import Testing
         for amberWorded: StatusPresentation in [.waiting, .needsAuth, .noRemote] {
             #expect(amberWorded.labelColor == StatusPalette.attention)
         }
-        // The terminal tier stays red — as the symbol and as the word.
+        // The terminal tier stays red, as the symbol and as the word.
         #expect(StatusPresentation.crashed.symbolColor == StatusPalette.dead)
         #expect(StatusPresentation.crashed.labelColor == StatusPalette.dead)
     }
@@ -70,7 +70,7 @@ import Testing
     // MARK: Word contrast (WCAG AA, normal text: 4.5:1)
 
     /// The attention word is caption-size TEXT, so the light amber must clear
-    /// AA against the light row background — both the spec's #FAFAFA and the
+    /// AA against the light row background, both the spec's #FAFAFA and the
     /// real macOS windowBackgroundColor, which is darker. The old #D97706
     /// managed only ~3:1; that is why the light face darkened.
     @Test func lightAttentionWordClearsAAOnLightBackground() {
@@ -99,7 +99,7 @@ import Testing
 
     // MARK: Running green (adaptive faces, per-ground contrast)
 
-    /// Running green: green-600 light face, green-500 dark face — and the
+    /// Running green: green-600 light face, green-500 dark face, and the
     /// fixed-dark popover resolves the dark face, which is the point.
     @Test func runningGreenResolvesPerAppearance() {
         let color = NSColor(StatusPalette.running)
@@ -110,7 +110,7 @@ import Testing
     }
 
     /// The dot is a graphical UI component: 3:1 per face, each on the grounds
-    /// it actually renders over — light face on the light backgrounds, dark
+    /// it actually renders over: light face on the light backgrounds, dark
     /// face on the resolved dark window background and the fixed-dark popover.
     /// The dark face is deliberately NOT held to the light grounds: green-500
     /// sits near 2.3:1 on white, which is exactly why it is dark-face only.
@@ -128,7 +128,7 @@ import Testing
 
     // MARK: Hollow grey's one home
 
-    /// Stopped outline: fixed grey pair — #8A8A8F on light, zinc-400 on dark,
+    /// Stopped outline: fixed grey pair, #8A8A8F on light, zinc-400 on dark,
     /// which is exactly what the fixed-dark popover resolves to, so no
     /// per-surface parameter exists anymore.
     @Test func stoppedOutlineResolvesPerAppearance() {
@@ -140,7 +140,7 @@ import Testing
     }
 
     /// The stopped ring is a UI component, so its light face needs 3:1 on the
-    /// light row backgrounds — pure white and the spec's #FAFAFA. The old
+    /// light row backgrounds, pure white and the spec's #FAFAFA. The old
     /// light face (system tertiaryLabelColor, ~#BDBDBD on white) managed only
     /// ~1.6:1 and the ring all but disappeared; that is why it became fixed.
     @Test func stoppedOutlineLightFaceClearsUIComponentContrast() {
@@ -152,7 +152,7 @@ import Testing
 
     // MARK: Working blue (adaptive faces, per-ground contrast)
 
-    /// Working blue: blue-600 light face, blue-500 dark face — and the
+    /// Working blue: blue-600 light face, blue-500 dark face, and the
     /// fixed-dark popover resolves the dark face, which is the point.
     @Test func workingBlueResolvesPerAppearance() {
         let color = NSColor(StatusPalette.working)

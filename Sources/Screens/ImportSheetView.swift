@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// First-run import sheet (docs/CCORN_SPEC.md 5.4): native macOS sheet, 480px
-/// wide, four states — discovery (checkboxes + Working/Idle badges),
+/// wide, four states: discovery (checkboxes + Working/Idle badges),
 /// importing progress (locked list, per-row phase), the active-session
 /// warning (an NSAlert raised by the flow model), and complete.
 struct ImportSheetView: View {

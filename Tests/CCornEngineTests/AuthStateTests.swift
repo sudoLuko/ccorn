@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// Login-prompt and remote-control plan-restriction detection
-/// (docs/CCORN_SPEC.md section 8). The login fixture is SYNTHETIC — the probe
+/// (docs/CCORN_SPEC.md section 8). The login fixture is SYNTHETIC: the probe
 /// machine was authenticated (runtime findings: Claude Max OAuth), so no real
 /// unauthenticated frame could be captured. It is modeled on the 2.1.x login
 /// picker, whose option list ("❯ 1.", "Enter to confirm") is exactly what
@@ -21,7 +21,7 @@ import Testing
 
     /// THE section-8 mislabel: the login picker renders the same option-list
     /// chrome as a permission prompt ("❯ 1.", "Enter to confirm"), so the
-    /// Waiting patterns match it — but it must classify NeedsAuth, because
+    /// Waiting patterns match it, but it must classify NeedsAuth, because
     /// "Claude needs your input" is the wrong message for "sign in first".
     @Test func loginPickerIsNeedsAuthNotWaiting() {
         let pane = Fixtures.paneText("needs-auth-login.txt")
@@ -49,7 +49,7 @@ import Testing
     }
 
     /// REAL signed-out login screen (fresh CLAUDE_CONFIG_DIR first run),
-    /// captured on 2.1.172 by the preflight harness (runtime findings P4) —
+    /// captured on 2.1.172 by the preflight harness (runtime findings P4),
     /// the live counterpart of the modeled needs-auth-login fixture.
     @Test func realFreshLoginScreenIsNeedsAuth() {
         let pane = Fixtures.paneText("needs-auth-fresh-login-2172.txt")
@@ -62,7 +62,7 @@ import Testing
     }
 
     /// A freshly rendered login screen (pane changed since last poll) reads
-    /// NeedsAuth immediately, not Working — same precedence rule as Waiting.
+    /// NeedsAuth immediately, not Working; same precedence rule as Waiting.
     @Test func freshlyRenderedLoginScreenIsNeedsAuthNotWorking() {
         let pane = Fixtures.paneText("needs-auth-login.txt")
         let state = detector.classifyPane(pane: pane,

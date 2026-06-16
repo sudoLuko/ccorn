@@ -13,7 +13,7 @@
 #   scripts/preflight/run.sh --classify-only re-assert existing frames
 #
 # Exit code: 0 all hard assertions pass; 1 otherwise. Soft assertions report
-# FINDING, never fail the run — they are hypotheses about unverified CLI
+# FINDING, never fail the run; they are hypotheses about unverified CLI
 # behavior, and a miss is information.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -116,7 +116,7 @@ assert_flag() { # <frame> <column> <expected> <label>
     if [[ "$actual" == "$3" ]]; then
         pass "$1: $4"
     else
-        fail "$1: $4 — expected $3, got ${actual:-<missing>}"
+        fail "$1: $4, expected $3, got ${actual:-<missing>}"
     fi
 }
 
@@ -126,7 +126,7 @@ assert_grep() { # <frame> <fixed-string> <label>
     if grep -qiF -- "$2" "$frame"; then
         pass "$1: $3"
     else
-        fail "$1: $3 — '$2' not found in pane"
+        fail "$1: $3, '$2' not found in pane"
     fi
 }
 
@@ -158,12 +158,12 @@ fixtures_selftest() {
     check_fx needs-auth-fresh-login-2172.txt needsAuth
     check_fx needs-auth-invalid-key-2172.txt needsAuth
     check_fx waiting-trust-2172.txt waiting
-    # dead-exited reads running from pane text alone — T2: Dead is decided by
+    # dead-exited reads running from pane text alone. T2: Dead is decided by
     # PID liveness, never pane content. The pane-only result is pinned here so
     # a change in that behavior is noticed, not silently absorbed.
     check_fx dead-exited.txt running
     if ((failures > 0)); then
-        echo "[fixtures] $failures fixture(s) misclassified — aborting before live capture"
+        echo "[fixtures] $failures fixture(s) misclassified; aborting before live capture"
         exit 1
     fi
 }
@@ -186,14 +186,14 @@ echo "[classify] classifying captured frames"
 echo
 echo "=== contract assertions ==="
 
-# Verified contracts (runtime findings C2/T1/T2/T5, fixture probe) — hard.
+# Verified contracts (runtime findings C2/T1/T2/T5, fixture probe), hard.
 assert_state idle-fresh running
 assert_state idle-finished running
 assert_state login-screen needsAuth
 assert_grep  exited "claude --resume" "resume hint after clean exit (T2)"
 assert_flag  exited 5 true "exited pane still shows claude evidence (reconciliation)"
 
-# Remote control engaged: the engine ORs two signals — the footer literal
+# Remote control engaged: the engine ORs two signals, the footer literal
 # (C2; stopped rendering in 2.1.172) and a bridge-session transcript record
 # (C1). Hard-require that at least one is live, via the production checks.
 RC_FOOTER=$(col "$OUT/idle-finished.txt" 4)
@@ -220,7 +220,7 @@ else
 fi
 
 # Trust prompt fires only on a never-trusted dir; when captured it must read
-# Waiting (G1; wording changed by 2.1.172 — see capture-frames.sh). Hard if
+# Waiting (G1; wording changed by 2.1.172, see capture-frames.sh). Hard if
 # present, noted if the capture was skipped.
 if [[ -f "$OUT/trust-prompt.txt" ]]; then
     assert_state trust-prompt waiting
@@ -236,11 +236,11 @@ else
 fi
 
 # Signed-out first run (fresh CLAUDE_CONFIG_DIR) must land on the login screen
-# in one of the two captured frames — verified live on 2.1.172.
+# in one of the two captured frames, verified live on 2.1.172.
 assert_state_any needsAuth fresh-config-1 fresh-config-2
 
-# Hypothesis (never verified): an invalid key surfaces an auth-phrase error —
-# at launch, or in the error rendered by the first real send. Soft — see task:
+# Hypothesis (never verified): an invalid key surfaces an auth-phrase error,
+# at launch, or in the error rendered by the first real send. Soft; see task:
 # validate auth phrases. A FINDING here means the authPhrases list needs work,
 # not that the build broke.
 expect_state_any needsAuth invalid-api-key-1 invalid-api-key-error

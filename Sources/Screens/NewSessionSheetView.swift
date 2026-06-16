@@ -2,7 +2,7 @@ import SwiftUI
 
 /// New Session sheet (docs/CCORN_SPEC.md 6.3): native macOS sheet, 480px wide,
 /// matching the import sheet's chrome. The folder is chosen first via
-/// `NSOpenPanel`; this sheet collects the name, the permission mode (visible —
+/// `NSOpenPanel`; this sheet collects the name, the permission mode (visible,
 /// the one knob people vary per session), and, behind an Advanced disclosure,
 /// the model / additional directories / extra args. Everything is seeded from
 /// the Settings default (inherit → override).
@@ -62,7 +62,7 @@ struct NewSessionSheetView: View {
 
     // Passive awareness, not a gate: when the chosen folder already has live
     // sessions, surface the count so starting another is an informed choice.
-    // Multiple sessions per directory is normal — Start Session proceeds either
+    // Multiple sessions per directory is normal; Start Session proceeds either
     // way (the old blocking "Start Anyway" confirm is gone). Tracks Change…
     // because the count reads live off the flow's @Published directory.
     @ViewBuilder
@@ -120,7 +120,7 @@ struct NewSessionSheetView: View {
     }
 
     // Remote control is the default (and what every CCorn session has shipped
-    // with). Unchecking it launches a local-only session — surfacing the
+    // with). Unchecking it launches a local-only session, surfacing the
     // consequence inline so it is an informed choice, not a surprise.
     private var remoteControlToggle: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -136,14 +136,14 @@ struct NewSessionSheetView: View {
 
     // MARK: Advanced
 
-    // A custom disclosure (the app's pattern — see the popover), not
+    // A custom disclosure (the app's pattern; see the popover), not
     // DisclosureGroup: DisclosureGroup animates its own content reveal on a
     // separate timeline from the sheet's auto-resize, so the two fight and the
     // expand looks janky.
     //
     // Do NOT wrap the toggle in withAnimation: animating the content height
     // *gradually* streams intermediate sizes to the auto-sizing sheet, which
-    // chases each one with its own resize animation — that is the janky
+    // chases each one with its own resize animation; that is the janky
     // desync. Snapping the state hands the sheet a single final size to animate
     // to once, so the rows are revealed/hidden cleanly by the growing/shrinking
     // sheet with the header pinned at the top. The chevron gets its own

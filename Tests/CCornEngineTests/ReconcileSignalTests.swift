@@ -8,7 +8,7 @@ import Testing
 
     let detector = StateDetector()
 
-    /// Every captured claude frame — live, idle, waiting, or exited — must count
+    /// Every captured claude frame (live, idle, waiting, or exited) must count
     /// as claude evidence, so a died session is kept as a Dead row.
     @Test(arguments: ["dead-exited.txt", "idle-finished.txt", "idle-finished-2170.txt",
                       "running-idle.txt", "waiting-permission.txt", "working-midtask.txt"])
@@ -16,8 +16,8 @@ import Testing
         #expect(detector.showsClaudeEvidence(pane: Fixtures.paneText(fixture)))
     }
 
-    /// A bare shell pane — the default window `tmux new-session` spawns, which
-    /// automatic-rename labels "zsh" — has no claude trace and must be excluded
+    /// A bare shell pane (the default window `tmux new-session` spawns, which
+    /// automatic-rename labels "zsh") has no claude trace and must be excluded
     /// from reconciliation. Mirrors the live pane captured from such a window.
     @Test func bareShellPaneShowsNoEvidence() {
         let pane = "dev@host ccorn %\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"

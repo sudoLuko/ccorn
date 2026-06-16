@@ -1,7 +1,7 @@
 import Foundation
 
 /// Reads Claude Code's per-process session registry: `~/.claude/sessions/<pid>.json`,
-/// written by each running `claude` process for itself (verified on 2.1.170 —
+/// written by each running `claude` process for itself (verified on 2.1.170,
 /// milestone-2 fix findings). It carries the session
 /// UUID and cwd for a live pid, which lets launch reconciliation bind an
 /// adopted window to its session exactly, instead of guessing from pane
@@ -16,8 +16,8 @@ enum ClaudeSessionRegistry {
         let cwd: String?
         /// The live remote-control bridge handle, when the claude process has
         /// one. Present (a `session_…` id) once the bridge has linked; `nil`
-        /// before it comes up. A version-independent positive RC signal — the
-        /// field has existed since long before the footer string changed — but
+        /// before it comes up. A version-independent positive RC signal (the
+        /// field has existed since long before the footer string changed) but
         /// only a positive: the file is written at session start and refreshed
         /// on some events, so a session that bridges *after* its last write can
         /// read `nil` here while remote control is in fact active (verified

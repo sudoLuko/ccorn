@@ -20,7 +20,7 @@ struct CCornApp: App {
 /// View ▸ Show/Hide Sidebar (⌘⌃S). The menu bar is present whenever the
 /// activation policy is .regular (any regular window open). The main window
 /// is an AppKit-hosted window, not a SwiftUI scene, so SwiftUI's built-in
-/// SidebarCommands (focused-scene based) can't reach it — this drives the
+/// SidebarCommands (focused-scene based) can't reach it; this drives the
 /// model directly, the same state the split view and titlebar toggle bind to.
 struct SidebarToggleCommands: Commands {
     let model: AppModel

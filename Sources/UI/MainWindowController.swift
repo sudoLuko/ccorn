@@ -58,7 +58,7 @@ final class MainWindowController {
             // its text so "CCorn" isn't duplicated. The title STRING must
             // stay set: DebugStage finds this window by title == "CCorn", and
             // the activation policy keys off .titled. titleVisibility comes
-            // AFTER the styleMask assignment — reassigning the mask rebuilds
+            // AFTER the styleMask assignment; reassigning the mask rebuilds
             // the titlebar and the hidden setting resurfaces on resign-key.
             window.title = "CCorn"
             window.titleVisibility = .hidden
@@ -174,7 +174,7 @@ final class MainWindowController {
 
     /// Titlebar sidebar toggle. Lives in window chrome, NEVER inside the
     /// collapsible column, so hiding the sidebar cannot hide its own restore
-    /// control — the stuck state this exists to prevent. Drives the same
+    /// control, the stuck state this exists to prevent. Drives the same
     /// model state as the View menu and ⌘⌃S.
     private struct SidebarToggleButton: View {
         @ObservedObject var model: AppModel
@@ -221,7 +221,7 @@ final class MainWindowController {
     /// `.regular` iff a regular window remains: titled, visible or minimized
     /// (a miniaturized window is open but not `isVisible`), at the normal level
     /// or the "keep in front" level (excludes the status-bar window and the
-    /// borderless popover window, which sit at higher levels — the main window
+    /// borderless popover window, which sit at higher levels; the main window
     /// raised to `.floating` by keep-in-front must still count, or the policy
     /// would drop to `.accessory` while it is on screen).
     /// Managed and stopped (record) rows can be renamed; unmanaged discovery

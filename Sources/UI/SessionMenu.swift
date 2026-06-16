@@ -33,7 +33,7 @@ final class ActionMenuItem: NSMenuItem {
 /// Builds the per-row context menu (docs/CCORN_SPEC.md section 5.7). Native
 /// NSMenu, no custom styling. Four variants: live, dead/stopped, archived,
 /// unmanaged. Every record-backed variant carries the Groups submenu (5.11);
-/// unmanaged rows do not — they have no record, and Import is the doorway.
+/// unmanaged rows do not; they have no record, and Import is the doorway.
 @MainActor
 enum SessionMenu {
     static func menu(for row: SessionRow, model: AppModel) -> NSMenu {
@@ -78,7 +78,7 @@ enum SessionMenu {
                 toolTip: row.remoteControlActive ? nil
                     : (row.remoteControlRequested
                         ? "Remote control is not active on this session"
-                        : "This is a local session — no browser access")) { [weak model] in
+                        : "This is a local session, so there is no browser access")) { [weak model] in
                 model?.openInBrowser(row)
             })
             menu.addItem(ActionMenuItem(title: "Open in Terminal") { [weak model] in
@@ -212,7 +212,7 @@ final class RowMenuHost: ObservableObject {
 
 /// Transparent overlay that catches ONLY right-clicks (and control-clicks) and
 /// shows the row's NSMenu; every other event falls through to the SwiftUI row
-/// underneath. The spec mandates native NSMenu — SwiftUI `.contextMenu` is not
+/// underneath. The spec mandates native NSMenu; SwiftUI `.contextMenu` is not
 /// used (docs/CCORN_SPEC.md section 5.7).
 struct RowRightClickCatcher: NSViewRepresentable {
     let host: RowMenuHost

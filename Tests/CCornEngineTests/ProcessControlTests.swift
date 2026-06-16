@@ -4,13 +4,13 @@ import Testing
 /// ProcessControl: the claude-match predicate (pure) and the KERN_PROCARGS2
 /// argv/exec-path parser. The parser is the most syscall-fragile engine code and
 /// previously had no coverage; these tests pin its contract by parsing the
-/// running test process — a guaranteed-live pid whose argv we can cross-check.
+/// running test process, a guaranteed-live pid whose argv we can cross-check.
 @Suite struct ProcessControlTests {
 
-    // MARK: looksLikeClaude — match by argv / exec-path basename, NEVER proc_name
+    // MARK: looksLikeClaude: match by argv / exec-path basename, NEVER proc_name
 
     /// Native install: the binary is version-named, so argv[0] and the exec path
-    /// basename are the version (e.g. `2.1.169`) — we must still match via the
+    /// basename are the version (e.g. `2.1.169`); we must still match via the
     /// `/claude/versions/` exec path and the `--rc` argument (runtime findings C3).
     @Test func matchesNativeVersionNamedBinary() {
         #expect(ProcessControl.looksLikeClaude(

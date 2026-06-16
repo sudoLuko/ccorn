@@ -6,7 +6,7 @@ import Foundation
 /// relaunch are persisted; PID, live state, window id, and pane hashes are
 /// re-derived on every launch (see docs/CCORN_SPEC.md "Session Record").
 struct SessionRecord: Codable, Identifiable, Equatable {
-    /// Claude session UUID — the stable identity key.
+    /// Claude session UUID, the stable identity key.
     let uuid: String
     /// Last-known resolved project path (from the transcript `cwd`).
     var path: String
@@ -20,7 +20,7 @@ struct SessionRecord: Codable, Identifiable, Equatable {
     /// the record.
     var groupIDs: [String]
     /// The flags CCorn launched this session with. Persisted because the CLI
-    /// does NOT keep them across `--resume` (verified on 2.1.173) — a restart
+    /// does NOT keep them across `--resume` (verified on 2.1.173); a restart
     /// must re-apply them or the session silently drops to its default posture.
     /// nil for sessions CCorn did not start (adopted/reconciled): there is no
     /// known config to re-apply, so they resume plainly.
@@ -56,10 +56,10 @@ struct SessionRecord: Codable, Identifiable, Equatable {
 ///
 /// Main-actor isolated and observable: this is the store SwiftUI reads from in
 /// milestone 2, and the poll timer / start / terminate / reconcile paths all
-/// mutate it — isolation to the main actor is what makes those writes and the
+/// mutate it; isolation to the main actor is what makes those writes and the
 /// UI reads race-free. (A bare `actor` was rejected deliberately: every SwiftUI
 /// read would have to await, which in practice forces mirroring onto a
-/// main-actor type anyway.) Detection I/O runs off-main on value snapshots —
+/// main-actor type anyway.) Detection I/O runs off-main on value snapshots;
 /// see `detectionInput()` / `apply(_:)`.
 @MainActor
 final class LiveSession: ObservableObject {
@@ -96,7 +96,7 @@ final class LiveSession: ObservableObject {
     var rcCache = BridgeSessionCache()
     /// CLI-authored auth/plan failure lines from the latest detection pass
     /// (section 8 alerts + row tooltips). Read only during rebuildRows, which
-    /// runs after every apply — no need to publish.
+    /// runs after every apply; no need to publish.
     var authNotice: String?
     var rcPlanNotice: String?
     /// The kind of the latest RC failure: `.definitive` names an account/plan
@@ -106,7 +106,7 @@ final class LiveSession: ObservableObject {
     var rcFailureKind: RCFailureKind?
     /// True when the session is running with permissions bypassed (detector pane
     /// signal). Read only during rebuildRows like the notices above, so not
-    /// published — the row it produces republishes on change.
+    /// published; the row it produces republishes on change.
     var bypassActive = false
     /// Remote-control bridge handle (`session_…`) for the per-session browser
     /// deep link, from the latest detection pass. Read only during rebuildRows

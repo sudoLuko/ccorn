@@ -5,7 +5,7 @@ import SwiftUI
 /// no-remote, crashed) render as individual rows at the top, worst first; the
 /// calm rest collapse behind a single quiet-count disclosure that doubles as
 /// the all-clear line when nothing needs attention. Fixed dark zinc
-/// regardless of system appearance — hardcoded hex is correct here and only
+/// regardless of system appearance; hardcoded hex is correct here and only
 /// here. 280px wide, 12px padding, branded header with the aggregate mark,
 /// footer actions. The split is popover-local: the shared rows sort and the
 /// main window's full recency list are untouched.
@@ -46,7 +46,7 @@ struct PopoverView: View {
         // must unroll and retract from the BOTTOM only. Without this the
         // hosting view (pinned to all four panel edges) hands the content the
         // window's animating height; mid-animation that differs from the
-        // content's natural height, so SwiftUI CENTERS it — the header drifts
+        // content's natural height, so SwiftUI CENTERS it; the header drifts
         // up while the footer falls down, and the gap below the fill briefly
         // exposes the desktop. Filling from a top alignment keeps the header
         // fixed and the fill always covering the panel.
@@ -98,7 +98,7 @@ struct PopoverView: View {
         model.managedRows.filter { !$0.presentation.needsAttention }
     }
 
-    /// Rows currently visible in the list region — drives the scroll cap.
+    /// Rows currently visible in the list region; drives the scroll cap.
     private var visibleRowCount: Int {
         attentionRows.count
             + (calmRows.isEmpty ? 0 : 1)
@@ -109,7 +109,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            // Brand mark only — the popover is summoned from the menu-bar corn,
+            // Brand mark only; the popover is summoned from the menu-bar corn,
             // so the wordmark is redundant here; the lone glyph reads cleaner.
             CornMark(size: 18)
             Spacer()
@@ -158,7 +158,7 @@ struct PopoverView: View {
 
     // MARK: Session list
 
-    /// Managed sessions only — the popover is the at-a-glance surface for
+    /// Managed sessions only; the popover is the at-a-glance surface for
     /// *your* sessions. Unmanaged discoveries are ambient context and live in
     /// the main window; here they collapse to a one-line count. Attention
     /// rows plus the collapsed disclosure fit the cap in the common case;
@@ -209,7 +209,7 @@ struct PopoverView: View {
         }
         // The DISPLAYED sequence, not the managed set (F1): a tier crossing
         // moves an id between the two sub-arrays, so the row's move between
-        // sections animates — while within-section state flips (running ->
+        // sections animates, while within-section state flips (running ->
         // working) change nothing and stay quiet. Severity reorders inside the
         // attention section animate too. The calm expand/collapse is
         // deliberately NOT in this value: its height change is animated by the
@@ -235,7 +235,7 @@ struct PopoverView: View {
         Button {
             // Snap the disclosure state. The panel-frame animation
             // (PopoverPanelController.applyPreferredSize) is the ONLY thing
-            // that animates the height — it unrolls/retracts the rows from the
+            // that animates the height; it unrolls/retracts the rows from the
             // bottom. Animating the rows here too put two 0.2s animations in
             // conflict on expand (rows fading/sliding in while the panel wiped
             // open); collapse hid it behind the shrinking fill, expand did not.
@@ -276,7 +276,7 @@ struct PopoverView: View {
         .help(calmExpanded ? "Hide quiet sessions" : "Show quiet sessions")
     }
 
-    /// Quiet pointer to the main window for unmanaged discoveries — the same
+    /// Quiet pointer to the main window for unmanaged discoveries, the same
     /// word as the main window's DISCOVERED section header; the "not managed"
     /// detail lives in the tooltip on both surfaces.
     private var discoveredHint: some View {
@@ -299,7 +299,7 @@ struct PopoverView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Sessions found on this Mac that CCorn doesn't manage yet — open CCorn to import them")
+        .help("Sessions found on this Mac that CCorn doesn't manage yet. Open CCorn to import them")
     }
 
     // MARK: Footer (36px)
@@ -341,7 +341,7 @@ struct PopoverView: View {
 
 /// One popover row: the same single status mark as the main window (dot or
 /// warning symbol, fixed slot), name, attention word, last-active. Click
-/// anywhere opens the session — in Terminal or the browser per the Settings
+/// anywhere opens the session, in Terminal or the browser per the Settings
 /// preference (5.5), via model.openSession; hover highlights #18181B.
 private struct PopoverRowView: View {
     let row: SessionRow

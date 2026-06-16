@@ -4,8 +4,8 @@ import SwiftUI
 
 /// UI-facing coordinator over the engine. Owns the 3s state poll, the
 /// FSEvents-driven discovery refresh, and the row models every screen renders.
-/// Milestone 3: also owns the full action surface — new session, stop,
-/// restart, archive, import, rename — plus onboarding completion, the
+/// Milestone 3: also owns the full action surface (new session, stop,
+/// restart, archive, import, rename) plus onboarding completion, the
 /// first-run import flow, state-transition notifications, and auto-restart.
 @MainActor
 final class AppModel: ObservableObject {
@@ -15,15 +15,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var rows: [SessionRow] = []
     /// Archived view rows, same sort.
     @Published private(set) var archivedRows: [SessionRow] = []
-    /// True once the first discovery pass has completed — gates the empty state
+    /// True once the first discovery pass has completed; gates the empty state
     /// ("watch directories have been scanned but no sessions found").
     @Published private(set) var hasScanned = false
     /// Main-window list selection (row id).
     @Published var selection: String?
-    /// Sidebar navigation (All Sessions / Archived) — model-owned so actions
+    /// Sidebar navigation (All Sessions / Archived), model-owned so actions
     /// (and verification) can switch views.
     @Published var sidebarNav: SidebarNav = .allSessions
-    /// Main-window sidebar visibility — model-owned so the titlebar toggle,
+    /// Main-window sidebar visibility, model-owned so the titlebar toggle,
     /// the View menu (⌘⌃S), and verification all drive the same state, and
     /// persisted so the choice survives relaunch. Recovery from a persisted
     /// hidden launch is the always-visible titlebar toggle, never amnesia.
@@ -39,12 +39,12 @@ final class AppModel: ObservableObject {
     /// A commit is in flight (the 3s pane error-watch); the field locks.
     @Published var renameInFlight = false
 
-    /// Session uuids with a restart in flight — dedupes rapid clicks on a
+    /// Session uuids with a restart in flight; dedupes rapid clicks on a
     /// stopped row (restartSession), which would otherwise spawn duplicate
     /// windows in the gap before the next refresh re-derives the live window.
     private var restartingUUIDs: Set<String> = []
 
-    /// Session uuids with an import (adopt) in flight — dedupes rapid clicks on
+    /// Session uuids with an import (adopt) in flight; dedupes rapid clicks on
     /// an unmanaged row (importSession), which would otherwise kill + resume the
     /// same session twice and leave a duplicate window. Held across the
     /// wait-for-idle poll, so a second click is ignored until the first settles.
@@ -64,7 +64,7 @@ final class AppModel: ObservableObject {
     /// settings so the sidebar re-renders on every mutation. Definitions
     /// live in settings; membership lives on the session records.
     @Published private(set) var groups: [SessionGroup] = []
-    /// Inline group-name editing in the sidebar — the session-rename
+    /// Inline group-name editing in the sidebar; the session-rename
     /// pattern. `editingGroupIsNew` marks a group just created by
     /// "+ New Group": escape (or an empty commit) then removes it instead of
     /// reverting the name.
@@ -83,7 +83,7 @@ final class AppModel: ObservableObject {
     /// show/close, the main window's occlusion changes). Both surfaces keep
     /// their SwiftUI trees alive while hidden, so the row marks gate their
     /// repeatForever motion on these via Theme's rowMotionEnabled environment
-    /// key — a hidden tree otherwise re-renders every frame, forever.
+    /// key; a hidden tree otherwise re-renders every frame, forever.
     @Published var popoverOnScreen = false
     @Published var mainWindowOnScreen = false
 
@@ -124,7 +124,7 @@ final class AppModel: ObservableObject {
     /// no newer pass started while it ran, so a slow early pass can never
     /// overwrite fresher results.
     private var discoveryGeneration = 0
-    /// Last seen state per session (keyed by uuid, else row id) — the edge
+    /// Last seen state per session (keyed by uuid, else row id), the edge
     /// detector behind Waiting/Dead notifications. First observation of a
     /// session records silently; only a real change can notify.
     private var stateMemory: [String: SessionState] = [:]
@@ -158,13 +158,13 @@ final class AppModel: ObservableObject {
         StatusPresentation.aggregate(rows.map(\.presentation))
     }
 
-    /// Sessions CCorn manages (live windows + stopped records) — the primary
+    /// Sessions CCorn manages (live windows + stopped records); the primary
     /// content everywhere. Sorted by last active, like `rows`.
     var managedRows: [SessionRow] {
         rows.filter { $0.kind != .unmanaged }
     }
 
-    /// Sessions discovered on the system but not managed — ambient, secondary.
+    /// Sessions discovered on the system but not managed; ambient, secondary.
     var unmanagedRows: [SessionRow] {
         rows.filter { $0.kind == .unmanaged }
     }
@@ -193,7 +193,7 @@ final class AppModel: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 // Pass the cached transcript index so the hot path never
-                // re-walks the projects root — see refreshAll(index:).
+                // re-walks the projects root; see refreshAll(index:).
                 await self.engine.refreshAll(index: self.transcriptIndex)
                 self.rebuildRows()
                 #if DEBUG
@@ -259,8 +259,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Retention (launch only): a record whose transcript is gone and which has
-    /// no live window cannot be resumed — `claude --resume` would have nothing
-    /// to resume — so it is dropped instead of lingering as a dead Stopped row.
+    /// no live window cannot be resumed (`claude --resume` would have nothing
+    /// to resume), so it is dropped instead of lingering as a dead Stopped row.
     private func pruneOrphanedRecords() async {
         let keep = Set(engine.liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty })
         let store = engine.store
@@ -268,12 +268,12 @@ final class AppModel: ObservableObject {
         await Task.detached {
             let index = discovery.transcriptIndex()
             // An empty index almost certainly means the projects root was
-            // unreadable, not that every transcript vanished — pruning on it
+            // unreadable, not that every transcript vanished; pruning on it
             // would wipe every record. Skip; next launch retries.
             guard !index.isEmpty else { return }
             store.pruneRecords(withoutTranscriptIn: Set(index.keys), keeping: keep)
             // Retention on what survives: archived records inactive past the
-            // age limit go, then the total is capped — the store must not
+            // age limit go, then the total is capped; the store must not
             // grow unbounded across months of sessions.
             store.applyRetention(transcriptMtimes: index.mapValues(\.modified), keeping: keep)
         }.value
@@ -338,7 +338,7 @@ final class AppModel: ObservableObject {
         let store = engine.store
         let watchDirs = engine.settings.watchDirectories
         let metaCache = self.metaCache
-        // Managed sessions' titles also come from their transcripts — snapshot
+        // Managed sessions' titles also come from their transcripts; snapshot
         // the uuids on the main actor before hopping off.
         let managedUUIDs = engine.liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty }
         let (projects, live, index, meta, loadedRecords) = await Task.detached {
@@ -460,7 +460,7 @@ final class AppModel: ObservableObject {
                 groupIDs: uuid.isEmpty ? [] : (groupsByUUID[uuid] ?? []),
                 // The runtime pane signal (covers mid-session escalation and
                 // adopted sessions), OR a launch posture that starts in active
-                // bypass. allowBypass alone does NOT count — it only arms bypass.
+                // bypass. allowBypass alone does NOT count; it only arms bypass.
                 isBypass: live.bypassActive
                     || live.record.launchConfig?.permissionMode == .bypass
             ))
@@ -478,8 +478,8 @@ final class AppModel: ObservableObject {
             recordUUIDs: recordUUIDs)
 
         // Persisted records with no live window: Stopped rows (or Archived). A
-        // record whose uuid is currently managed — or running externally right
-        // now — is the same session, surfaced elsewhere; skip it here.
+        // record whose uuid is currently managed (or running externally right
+        // now) is the same session, surfaced elsewhere; skip it here.
         for record in records
         where !managedUUIDs.contains(record.uuid)
             && !discovered.liveUUIDs.contains(record.uuid)
@@ -535,7 +535,7 @@ final class AppModel: ObservableObject {
         }
 
         // Fully-dormant directories: one summary row each (the most-recent
-        // session as representative). Stable — no live process is writing them.
+        // session as representative). Stable; no live process is writing them.
         let projectsByKey = Dictionary(unmanagedProjects.map { ($0.encodedKey, $0) },
                                        uniquingKeysWith: { first, _ in first })
         for key in discovered.dormantDirKeys {
@@ -583,11 +583,11 @@ final class AppModel: ObservableObject {
 
     /// Notification edges (5.10): fire only when a watched session
     /// *transitions into* Waiting, Dead, or Sign-in required. Keyed by row id
-    /// (the stable window id for managed rows — uuid binding mid-run must not
+    /// (the stable window id for managed rows; uuid binding mid-run must not
     /// break continuity). A session CCorn started this run gets a Running
     /// baseline, so a spawn that lands directly on a trust/permission/login
     /// prompt still notifies; an adopted (reconciled) or record row is first
-    /// recorded silently — whatever state it is first seen in is not a
+    /// recorded silently; whatever state it is first seen in is not a
     /// transition CCorn watched. Also hosts the section-8 one-shot alerts.
     private func emitStateTransitions(_ rows: [SessionRow], adoptedIds: Set<String>) {
         reconcileRCAccountCapability()
@@ -614,7 +614,7 @@ final class AppModel: ObservableObject {
         // Drop memory for rows that no longer exist (killed windows, pruned
         // records): window ids are monotonic, so without this the map grows
         // for the lifetime of the app. A vanished row that ever returns is
-        // re-observed silently first — exactly the adopted-row rule.
+        // re-observed silently first, exactly the adopted-row rule.
         if stateMemory.count > rows.count {
             let liveIds = Set(rows.map(\.id))
             stateMemory = stateMemory.filter { liveIds.contains($0.key) }
@@ -625,7 +625,7 @@ final class AppModel: ObservableObject {
     // MARK: - Section-8 auth alerts
 
     /// "User not authenticated" (section 8): a login prompt right after a
-    /// CCorn-initiated start gets a modal alert — direct feedback to the
+    /// CCorn-initiated start gets a modal alert: direct feedback to the
     /// user's own action, leading with the CLI's error text. A session that
     /// drifts into the login screen later (token expiry in a set-and-forget
     /// background session) must NOT steal focus: it gets the notification +
@@ -644,7 +644,7 @@ final class AppModel: ObservableObject {
 
     /// Section-8 copy: lead with the CLI's own error text when captured.
     static func authAlertContent(notice: String?) -> (title: String, message: String) {
-        var lines = ["Run claude in this project and use /login (or claude auth login), and make sure ANTHROPIC_API_KEY is unset."]
+        var lines = ["Run claude in this project and use /login; make sure ANTHROPIC_API_KEY is unset."]
         if let notice, !notice.isEmpty {
             lines.insert("Claude Code says: “\(notice)”", at: 0)
         }
@@ -722,7 +722,7 @@ final class AppModel: ObservableObject {
     /// Display-name chain: the title CCorn set explicitly (a real `--rc` title
     /// that syncs to claude.ai) > the transcript's ai-title (what
     /// `claude --resume` and claude.ai show for sessions CCorn didn't title) >
-    /// the directory basename. Never a tmux window name — those track the
+    /// the directory basename. Never a tmux window name; those track the
     /// foreground process.
     private static func displayTitle(explicit: String, aiTitle: String?, path: String) -> String {
         if !explicit.isEmpty { return explicit }
@@ -772,7 +772,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Open Terminal attached to the session's tmux window (flow 6.5). Targets
-    /// the stable `@N` window id — rename-proof, and verified to parse as an
+    /// the stable `@N` window id, rename-proof, and verified to parse as an
     /// attach target on tmux 3.6.
     func openInTerminal(_ row: SessionRow) {
         guard let windowId = row.windowId else { return }
@@ -800,15 +800,15 @@ final class AppModel: ObservableObject {
             // live tmux state, so a terminal the user has since closed leaves no
             // client and we fall through to opening a fresh one. A restart/import
             // attaches to a *new* window id with no view yet, so it also opens
-            // fresh — no special-casing needed.
+            // fresh; no special-casing needed.
             if let tty = tmux.viewClientTTY(forWindowId: windowId),
                AppModel.raiseTerminal(tty: tty, runner: runner) {
                 return
             }
             let attach = tmux.attachViewCommand(windowId: windowId, mouseMode: mouse)
             // Title the fresh tab with the session's chosen name. Without a custom
-            // title Terminal labels the window after the command it ran — the long
-            // grouped-attach string — so set the same name the rest of CCorn shows.
+            // title Terminal labels the window after the command it ran (the long
+            // grouped-attach string), so set the same name the rest of CCorn shows.
             // `do script` returns the new tab; its `custom title` overrides both
             // Terminal's command-line default and any later tmux title escape. Only
             // the fresh-open path needs it: the raise path above reuses a tab that
@@ -833,11 +833,11 @@ final class AppModel: ObservableObject {
     /// Raise + focus the Terminal window whose tab tty matches (the one already
     /// open for this session); returns whether it was found. The recipe is
     /// load-bearing and verified live: resolve the window id first and address
-    /// `window id <id>` — setting `frontmost`/`index` on the `repeat`-loop window
+    /// `window id <id>`: setting `frontmost`/`index` on the `repeat`-loop window
     /// reference silently no-ops when other Terminal windows are open, so it
     /// surfaces the wrong window. `set index … to 1` is what reorders it to the
     /// front (`set frontmost` alone does not). A false return (no Terminal tab
-    /// carries this tty — the user closed it after the tmux query) tells the
+    /// carries this tty; the user closed it after the tmux query) tells the
     /// caller to open a fresh window instead. `tty` is `/dev/ttysNN`, so it is
     /// safe to interpolate. `nonisolated static` so it runs on the detached task
     /// without hopping to the main actor (it touches no AppModel state).
@@ -877,14 +877,14 @@ final class AppModel: ObservableObject {
     func newSession() {
         closePopover?()
         // The popover is reachable before onboarding completes; the app is
-        // not usable until a watch directory exists (5.3) — route there.
+        // not usable until a watch directory exists (5.3); route there.
         guard !onboardingNeeded else {
             openMainWindow?()
             return
         }
         guard let directory = Alerts.pickFolder(prompt: "Choose Folder") else { return }
         let canonical = SessionDiscovery.canonicalize(directory)
-        // Multiple sessions per directory is a normal, expected workflow — no
+        // Multiple sessions per directory is a normal, expected workflow; no
         // blocking "already has an active session" confirm. The sheet surfaces a
         // passive count of any sessions already alive here (activeSessionCount);
         // Start Session proceeds directly.
@@ -901,7 +901,7 @@ final class AppModel: ObservableObject {
 
     /// Count of managed sessions already alive in `directory` (a canonical
     /// path). Drives the New Session sheet's passive heads-up line; it is
-    /// awareness only, never a gate — multiple sessions per directory is normal.
+    /// awareness only, never a gate; multiple sessions per directory is normal.
     func activeSessionCount(in directory: String) -> Int {
         rows.filter { $0.isManaged && $0.path == directory && $0.state.isAliveState }.count
     }
@@ -948,7 +948,7 @@ final class AppModel: ObservableObject {
     // MARK: - Stop (flow 6.6)
 
     /// Stop a managed session: confirm, then run the engine-side kill
-    /// (`engine.killSession` — SIGKILL the process and tmux window) and persist
+    /// (`engine.killSession`: SIGKILL the process and tmux window) and persist
     /// a Stopped record so the row survives as Stopped, restartable. The UI
     /// verb is "Stop" because the outcome is a parked, recoverable session, not
     /// a deleted one; the engine keeps the literal "kill" name for the
@@ -968,7 +968,7 @@ final class AppModel: ObservableObject {
     /// the row-click handoff (openSession) when the click action is Terminal:
     /// a stopped row has no window to attach to, so it is resumed first and the
     /// fresh window opened in Terminal. The context-menu "Restart Session"
-    /// leaves it false — restart only, no terminal.
+    /// leaves it false; restart only, no terminal.
     func restartSession(_ row: SessionRow, attachInTerminal: Bool = false) {
         let uuid = row.uuid
         // Dedupe rapid clicks: the row keeps showing no window until the next
@@ -1086,8 +1086,8 @@ final class AppModel: ObservableObject {
     // MARK: - Import single unmanaged session (flow 6.10)
 
     /// Adopt an unmanaged session: take it over (SIGTERM the external claude →
-    /// resume under CCorn). `attachInTerminal` — set by the row-click handoff
-    /// (openSession) and the unmanaged menu's "Open in Terminal" — opens the
+    /// resume under CCorn). `attachInTerminal`, set by the row-click handoff
+    /// (openSession) and the unmanaged menu's "Open in Terminal", opens the
     /// fresh managed window in Terminal once it exists. If Claude is mid-task we
     /// offer to wait it out first, so the takeover doesn't cut off active work
     /// (same guard as the first-run import sheet, flow 6.2).
@@ -1181,7 +1181,7 @@ final class AppModel: ObservableObject {
     // MARK: - Groups (docs/CCORN_SPEC.md 5.11)
 
     /// Rows for a group view: record-backed (never unmanaged), non-archived
-    /// rows whose record carries the group id — same derivation family as
+    /// rows whose record carries the group id, same derivation family as
     /// `managedRows`/`archivedRows`, same shared sort. Archived members keep
     /// their membership but surface only in the Archived view.
     func groupRows(id: String) -> [SessionRow] {
@@ -1244,7 +1244,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Delete a group: the definition goes, every record's membership is
-    /// cleared of the id — sessions themselves are NEVER deleted or archived.
+    /// cleared of the id; sessions themselves are NEVER deleted or archived.
     func deleteGroup(_ id: String) {
         guard let group = groups.first(where: { $0.id == id }) else { return }
         guard Alerts.confirm(
@@ -1255,7 +1255,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Confirmation-free core of deleteGroup (the debug channel calls this
-    /// directly — modals cannot be scripted, same split as kill).
+    /// directly: modals cannot be scripted, same split as kill).
     func performGroupDelete(_ id: String) {
         saveGroups(groups.filter { $0.id != id })
         if sidebarNav == .group(id) { sidebarNav = .allSessions }
@@ -1270,7 +1270,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Toggle a session's membership (the Groups submenu checkmark items —
+    /// Toggle a session's membership (the Groups submenu checkmark items:
     /// one control adds, removes, and shows membership inline).
     func toggleGroupMembership(_ row: SessionRow, groupId: String) {
         var ids = row.groupIDs
@@ -1300,7 +1300,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Membership writes merge into the record by uuid, exactly like the
-    /// archived flag (created if absent; nil fields untouched — the title is
+    /// archived flag (created if absent; nil fields untouched: the title is
     /// deliberately not passed, or a derived display title would be promoted
     /// to an explicit one). Gated on a bound uuid: a brand-new session has
     /// none until its transcript binds.
@@ -1322,7 +1322,7 @@ final class AppModel: ObservableObject {
     /// Sequentially restart every stopped/dead session: dead live windows
     /// first, then stopped records. Sessions whose directory or transcript is
     /// gone are skipped silently (they surface their alerts when restarted
-    /// manually instead — a launch must not open a stack of modals).
+    /// manually instead: a launch must not open a stack of modals).
     private func autoRestartStoppedAndDead() async {
         let discovery = engine.discovery
         let index = await Task.detached { discovery.transcriptIndex() }.value
@@ -1358,7 +1358,7 @@ final class AppModel: ObservableObject {
 
     /// Screenshot staging (DebugCommandChannel `seed`): stop the live poll and
     /// FSEvents watcher, then replace the published rows wholesale with a
-    /// curated set. Pure presentation — the engine, store, and tmux session
+    /// curated set. Pure presentation: the engine, store, and tmux session
     /// are never touched, and nothing restarts the poll afterwards. Seeded
     /// groups replace only the PUBLISHED list; settings are not written.
     func debugSeed(rows: [SessionRow], archived: [SessionRow],

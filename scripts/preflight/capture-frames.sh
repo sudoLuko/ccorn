@@ -3,7 +3,7 @@
 # (scripts/preflight/run.sh classifies and asserts them).
 #
 # Safety: everything runs on an ISOLATED tmux server (-L ccorn-preflight).
-# The user's default tmux server — and CCorn's `ccorn` session on it — are
+# The user's default tmux server, and CCorn's `ccorn` session on it, are
 # never touched. kill-server below applies only to this socket.
 #
 # Side effects on the machine (intentional, documented):
@@ -54,7 +54,7 @@ type_line() {
 }
 
 # Poll until the pane contains the fixed string (case-insensitive).
-# Returns 1 on timeout — callers decide whether that's fatal.
+# Returns 1 on timeout; callers decide whether that's fatal.
 wait_for() { # <string> <timeout-seconds>
     local needle=$1 deadline=$((SECONDS + ${2:-30}))
     while ((SECONDS < deadline)); do
@@ -166,7 +166,7 @@ ls -t ~/.claude/projects/"$ENCODED"/*.jsonl 2>/dev/null | head -1 \
 
 # --- scenario 5: invalid ANTHROPIC_API_KEY ------------------------------------
 # Verified on 2.1.172: with OAuth signed in, a custom env key does NOT error
-# at launch — after the trust prompt the CLI asks "Detected a custom API key
+# at launch; after the trust prompt the CLI asks "Detected a custom API key
 # in your environment … Do you want to use this API key?" with No as the
 # default. Selecting 1 (Yes) deliberately is what exposes the invalid-key
 # path; the hypothesis under test (task: validate auth phrases) is that it
@@ -191,7 +191,7 @@ fi
 wait_stable 3 40 || true
 snap invalid-api-key-1
 # Verified on 2.1.172: with the invalid key selected the session still starts
-# normally (only a "auth may not work as expected" warning line) — the failure
+# normally (only a "auth may not work as expected" warning line); the failure
 # is deferred to the first API call. Send one message to capture the actual
 # error render; this is the frame the authPhrases hypothesis lives or dies on.
 type_line "Reply with exactly: ok"

@@ -15,7 +15,7 @@ struct SessionGroup: Codable, Equatable, Hashable, Identifiable {
     }
 
     /// Assignment gate: membership keys on the session UUID, and a brand-new
-    /// session has none until its first transcript binds — no uuid, no
+    /// session has none until its first transcript binds: no uuid, no
     /// Groups control (the same family as Restart gating on a missing path).
     static func canAssign(uuid: String) -> Bool {
         !uuid.isEmpty
@@ -33,7 +33,7 @@ struct SessionGroup: Codable, Equatable, Hashable, Identifiable {
     }
 }
 
-/// What clicking a session row does — popover single-click and main-window
+/// What clicking a session row does: popover single-click and main-window
 /// double-click both route through it. Terminal is the default: it attaches to
 /// the session's own tmux window, so one click lands you *inside* that session.
 /// Browser opens claude.ai/code, which is only the session list (no per-session
@@ -60,7 +60,7 @@ struct CCornSettings: Codable, Equatable {
     /// the session records (`SessionRecord.groupIDs`), not here.
     var groups: [SessionGroup]
     /// What clicking a session row does (popover single-click, main-window
-    /// double-click). Defaults to Terminal — the click attaches to the
+    /// double-click). Defaults to Terminal; the click attaches to the
     /// session's tmux window rather than opening the claude.ai/code list.
     var clickAction: SessionClickAction
     /// The launch flags new sessions inherit (the New Session sheet seeds its

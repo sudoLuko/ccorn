@@ -13,14 +13,14 @@ scripts/preflight/release-gatecheck.sh    # debug surface compiled out + notariz
 
 The e2e scripts run a **hermetic debug app instance**: its own tmux server
 (`CCORN_DEBUG_TMUX_SOCKET`), session name, support dir, and debug channel
-(`CCORN_DEBUG_CHANNEL_DIR`) — they share nothing with the user's default
+(`CCORN_DEBUG_CHANNEL_DIR`). They share nothing with the user's default
 tmux server or a normally-running CCorn, which is the only reason the chaos
 suite may run `kill-server`. They need a Debug build at
 `build/Build/Products/Debug/CCorn.app`; gatecheck builds Release itself.
 
 ## Window-churn repro (e2e-churn.sh)
 
-Not part of the release gate — a focused diagnostic for the window-creation
+Not part of the release gate. A focused diagnostic for the window-creation
 failure that only appears after many new/kill cycles in an *existing* ccorn
 session ("could not create tmux window"; raw tmux: "index 0 in use"). It churns
 one persistent session and asserts every `new` returns `started(...)`; the first
@@ -85,20 +85,20 @@ Exit 0 = all hard assertions pass. Output lands in `/tmp/ccorn-preflight/`
 1. `pane-classify.swift` is compiled by `swiftc` together with the
    **production** `Sources/Engine/StateDetector.swift` and its dependency
    closure. No detection phrase or rule exists anywhere in `scripts/preflight`
-   — if the classifier and the app ever disagree, the harness is broken by
+   If the classifier and the app ever disagree, the harness is broken by
    construction, not the app.
 2. The classifier first re-classifies the committed pane fixtures
    (`Tests/CCornEngineTests/Fixtures/panes/`); any mismatch aborts before a
    live session is spent.
 3. `capture-frames.sh` drives the installed CLI through known states on an
-   **isolated tmux server** (`tmux -L ccorn-preflight` — the user's default
+   **isolated tmux server** (`tmux -L ccorn-preflight`, the user's default
    server and CCorn's `ccorn` session are never touched): trust prompt →
    idle → one real turn (burst-captured for Working frames) → `/login` screen
    (Esc backs out; the account is never signed out) → clean exit → an
    invalid-`ANTHROPIC_API_KEY` session driven to its real error render → a
    fresh `CLAUDE_CONFIG_DIR` first run (the genuine signed-out login screen).
 4. `run.sh` classifies every frame and asserts. **Hard** assertions are
-   contracts verified on a real CLI — a miss is a regression and fails the
+   contracts verified on a real CLI; a miss is a regression and fails the
    run. **Soft** ones (`FINDING`) are hypotheses about CLI behavior we have
    not pinned; a miss is information, not a
    failure.

@@ -3,13 +3,13 @@ import SwiftUI
 /// One 36px session row. Exactly one status mark leads in a fixed-width slot
 /// (dot for routine states, the warning symbol for the broken tier); the
 /// textual state word lives in the mark's tooltip, except for the states that
-/// need the user — Waiting, Sign in, No remote, Crashed — which get a short
+/// need the user (Waiting, Sign in, No remote, Crashed), which get a short
 /// colored label next to the name so they pop in a list of calm rows. Single
-/// click selects; double click opens the session — in Terminal or the browser
+/// click selects; double click opens the session, in Terminal or the browser
 /// per the Settings preference (5.5); right-click / `…` shows the NSMenu. Rename swaps the
 /// name for an inline TextField (5.8) with the error caption below. Archived
 /// rows render muted with the empty dot (5.9); unmanaged rows render
-/// de-emphasized — discovered context, not managed content.
+/// de-emphasized: discovered context, not managed content.
 struct SessionRowView: View {
     let row: SessionRow
     @ObservedObject var model: AppModel

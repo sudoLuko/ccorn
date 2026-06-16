@@ -2,15 +2,15 @@ import Foundation
 
 /// One window inside the `ccorn` tmux session.
 struct TmuxWindow: Sendable {
-    let windowId: String   // stable `@N` id — the only reliable target
+    let windowId: String   // stable `@N` id, the only reliable target
     let name: String       // display/attach label only, never a key
     let ccornId: String?   // our @ccorn_id tag (the Claude session UUID), if set
     let panePID: Int32?    // the pane's shell pid
-    /// The pane's working directory — the project path fallback for windows
+    /// The pane's working directory, the project path fallback for windows
     /// with no persisted record (a previous run's startNewSession windows).
     let panePath: String?
     /// True when the window carries the @ccorn_managed marker set at creation.
-    /// Durable "CCorn created this for a claude session" signal — unlike pane
+    /// Durable "CCorn created this for a claude session" signal; unlike pane
     /// content, it survives the claude text scrolling away or a `clear`, so
     /// reconcile never drops a dead session for lack of visible evidence.
     let managed: Bool
@@ -61,7 +61,7 @@ struct TmuxController: Sendable {
     /// session was created fresh: `new-session` always spawns one bare shell
     /// window alongside it, which would otherwise linger and surface as a
     /// never-ran-claude row (the "zsh" row). The caller kills it once a real
-    /// window exists — a session whose last window dies is destroyed by tmux,
+    /// window exists; a session whose last window dies is destroyed by tmux,
     /// so it cannot be killed any earlier.
     struct EnsureSessionResult: Sendable {
         let ok: Bool
@@ -71,7 +71,7 @@ struct TmuxController: Sendable {
     /// Create the `ccorn` session if it does not already exist. Never recreate.
     /// `mouseMode` is applied on every ensure (creation or confirmation) so a
     /// session set up before the preference changed still picks up the current
-    /// value — see `setMouseMode` for why it is scoped to this session.
+    /// value. See `setMouseMode` for why it is scoped to this session.
     @discardableResult
     func ensureSession(mouseMode: Bool) -> EnsureSessionResult {
         if hasSession() {
@@ -108,7 +108,7 @@ struct TmuxController: Sendable {
     /// `MouseDragEnd1Pane` → `copy-pipe-and-cancel` are fixed here:
     ///
     /// 1. `-and-cancel` exits copy-mode, which snaps the pane back to the live
-    ///    bottom position on every release — the "jump to the bottom" the moment
+    ///    bottom position on every release, the "jump to the bottom" the moment
     ///    you let go of a selection. `copy-pipe-no-clear` leaves copy-mode
     ///    untouched, so the scroll position holds; the user returns to the live
     ///    view with `q`/Escape on their own timing.
@@ -121,13 +121,13 @@ struct TmuxController: Sendable {
     /// Only reachable with `mouse` on (a drag is what enters copy-mode), so it
     /// pairs with `setMouseMode`.
     ///
-    /// Key tables are SERVER-GLOBAL — unlike the `mouse` session option there is
+    /// Key tables are SERVER-GLOBAL; unlike the `mouse` session option there is
     /// no per-session key table, and in Release CCorn shares the user's default
     /// tmux server. So the binding is guarded to fire only inside CCorn's own
     /// sessions: `#{m:ccorn*,#{session_name}}` matches `ccorn` and the
     /// `ccorn-view-*` view sessions and falls through to the stock
     /// `copy-pipe-and-cancel` everywhere else, leaving the user's other tmux work
-    /// on tmux's default copy behavior — the same restraint `setMouseMode` shows
+    /// on tmux's default copy behavior, the same restraint `setMouseMode` shows
     /// by never touching their `set -g mouse`. Both the emacs (`copy-mode`) and
     /// vi (`copy-mode-vi`) tables are rebound since `mode-keys` selects the live one.
     private func installCopyModeSelectBindings() {
@@ -142,7 +142,7 @@ struct TmuxController: Sendable {
     }
 
     /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
-    /// child session and skips ALL local session persistence — no pid
+    /// child session and skips ALL local session persistence: no pid
     /// registry, no conversation records, `--resume` refuses the session
     /// (runtime findings P8). That breaks identity binding, restart,
     /// and RC detection for every session CCorn spawns. The var can reach our
@@ -164,9 +164,9 @@ struct TmuxController: Sendable {
         let r = tmux([
             // Trailing ":" (empty window part) targets the SESSION, so tmux
             // creates at the next free index. A bare "-t ccorn" is a
-            // target-WINDOW: when a managed window is itself named "ccorn" — a
+            // target-WINDOW: when a managed window is itself named "ccorn" (a
             // project whose basename equals the session name, e.g. CCorn run on
-            // its own repo — tmux resolves the bare name to THAT window and
+            // its own repo) tmux resolves the bare name to THAT window and
             // tries to reuse its index, failing with "create window failed:
             // index N in use" and breaking every new session. The colon forces
             // the session interpretation.
@@ -185,7 +185,7 @@ struct TmuxController: Sendable {
     }
 
     /// Pin a window's name. Without this, tmux's automatic-rename tracks the
-    /// foreground process — a window whose claude exited reads as "zsh" — and
+    /// foreground process (a window whose claude exited reads as "zsh"), and
     /// allow-rename lets pane escape sequences rewrite it. Applied to every
     /// window CCorn creates and every existing window it adopts on reconcile.
     /// (Display names come from session titles; the live tmux window name is
@@ -196,7 +196,7 @@ struct TmuxController: Sendable {
     }
 
     /// Send a command to a window's pane. The key is sent as a *separate* `Enter`
-    /// argument — never an embedded `\n` in the command string (CLAUDE.md rule).
+    /// argument; never an embedded `\n` in the command string (CLAUDE.md rule).
     func sendCommand(windowId: String, _ command: String) {
         tmux(["send-keys", "-t", windowId, command, "Enter"])
     }
@@ -218,7 +218,7 @@ struct TmuxController: Sendable {
         tmux(["rename-window", "-t", windowId, name])
     }
 
-    /// The pane's shell pid — the parent under which the `claude` child lives.
+    /// The pane's shell pid, the parent under which the `claude` child lives.
     func panePID(windowId: String) -> Int32? {
         let r = tmux(["list-panes", "-t", windowId, "-F", "#{pane_pid}"])
         return r.stdout
@@ -290,7 +290,7 @@ struct TmuxController: Sendable {
 
     /// Quote a value as an AppleScript string literal for embedding in an
     /// `osascript` program. AppleScript treats backslash and double quote as the
-    /// in-string escapes, so both are backslash-escaped — backslash first, or the
+    /// in-string escapes, so both are backslash-escaped; backslash first, or the
     /// escapes added for the quotes would themselves be doubled. Returns the value
     /// wrapped in double quotes, ready to drop into a `tell application` block. Use
     /// for any user-controlled value (a session title) interpolated into a script.
@@ -304,7 +304,7 @@ struct TmuxController: Sendable {
     /// A sanitized name unique against the current window names; appends -2, -3
     /// on collision. The session name itself is reserved: a window named
     /// identically to the session is a tmux target hazard (see `newWindow`), so
-    /// the safe name is chosen up front — the window is born correct, with no
+    /// the safe name is chosen up front; the window is born correct, with no
     /// post-creation rename. The display title is separate and unaffected.
     func uniqueWindowName(from raw: String) -> String {
         let base = Self.sanitize(raw)
@@ -318,7 +318,7 @@ struct TmuxController: Sendable {
     // MARK: Per-client view sessions (Open in Terminal)
 
     /// Prefix for the throwaway grouped "view" sessions that "Open in Terminal"
-    /// creates — one per attached terminal. A view shares `ccorn`'s window list
+    /// creates, one per attached terminal. A view shares `ccorn`'s window list
     /// but keeps its OWN current window and active pane, so two terminals no
     /// longer mirror each other's window switching or share keystrokes the way
     /// every client attached to one plain session does (both are session-level).
@@ -353,19 +353,19 @@ struct TmuxController: Sendable {
     /// grouped view session. `new-session -t <ccorn>` groups onto the shared
     /// window list; `-s <view>` is this terminal's private view; `select-window`
     /// points it at the requested window by stable id (a grouped session does
-    /// NOT inherit the leader's current window — it lands on window 0, so the
+    /// NOT inherit the leader's current window; it lands on window 0, so the
     /// select is required). `destroy-unattached on` reaps the view the moment
     /// the terminal closes; it MUST be set with the client already attached
     /// (set on a *detached* session, tmux destroys it immediately), which is why
     /// it rides in this attaching command rather than being pre-set. Honors the
     /// debug socket+session overrides so a shakedown attach lands on the isolated
     /// server, not the user's real `ccorn`. tmux's command separator is a
-    /// single-quoted `';'` — the shell hands tmux a literal `;`, avoiding
+    /// single-quoted `';'`; the shell hands tmux a literal `;`, avoiding
     /// backslash escaping inside the osascript `do script` string.
     ///
     /// `mouseMode` is set on the VIEW session, not just `ccorn`: a grouped
     /// session shares the window list but carries its own session options, so
-    /// it does not inherit the base session's `mouse` value — the terminal the
+    /// it does not inherit the base session's `mouse` value; the terminal the
     /// user actually attaches to is the view, so the option must land here for
     /// the scroll wheel to behave as configured.
     func attachViewCommand(windowId: String, mouseMode: Bool) -> String {
@@ -377,7 +377,7 @@ struct TmuxController: Sendable {
             + " ';' select-window -t '\(view):\(windowId)'"
     }
 
-    /// Reap view sessions orphaned by a crashed terminal — the backstop to
+    /// Reap view sessions orphaned by a crashed terminal, the backstop to
     /// `destroy-unattached`, which already covers the normal close. Only
     /// unattached views are killed; one with a live client is in active use.
     /// Killing a view never harms the shared windows (they belong to the group,
@@ -399,7 +399,7 @@ struct TmuxController: Sendable {
     /// The tty of an already-open terminal attached to this window's view, or
     /// nil if none. The join (verified live): a view is named
     /// `ccorn-view-<windowId>` (uniqueViewSessionName), and tmux's `client_tty`
-    /// for that view is byte-for-byte Terminal's `tty of tab` — so a live client
+    /// for that view is byte-for-byte Terminal's `tty of tab`; so a live client
     /// on `ccorn-view-<id>` IS the Terminal tab opened for this session. Lets the
     /// attach path raise that terminal instead of stacking a second window on the
     /// session (one terminal per session). A terminal the user has since closed

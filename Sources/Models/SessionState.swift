@@ -7,7 +7,7 @@ enum SessionState: String, Codable {
     case running    // alive, remote control active, healthy idle
     case working    // Claude actively executing mid-task
     case waiting    // waiting for user input / approval
-    case needsAuth  // showing a login prompt — blocked until the user signs in
+    case needsAuth  // showing a login prompt, blocked until the user signs in
     case stale      // idle past the user-defined threshold
     case dead       // process died unexpectedly (tracked PID gone)
     case stopped    // manually killed by the user (set by CCorn, not detected)
@@ -25,21 +25,21 @@ extension SessionState {
     }
 }
 
-/// The one status mark a row shows — exactly one, always. Routine lifecycle
+/// The one status mark a row shows: exactly one, always. Routine lifecycle
 /// states render as a colored dot; broken states that need the user replace
 /// the dot with the single warning symbol (exclamationmark.triangle.fill).
 /// Shape says routine-vs-broken, the symbol's color says severity (amber
 /// recoverable, red terminal), and the short word after the title names the
 /// specific problem. Never a dot and a symbol together.
 enum StatusPresentation: String, Equatable {
-    // Routine tier — colored dot.
+    // Routine tier: colored dot.
     case running
     case working
     case waiting
     case stale
     case stopped
     case unmanaged
-    // Broken tier — the one exclamation symbol.
+    // Broken tier: the one exclamation symbol.
     case noRemote   // alive, but remote control never came up past the grace
     case needsAuth  // login screen: sign-in is the root cause
     case crashed    // process died unexpectedly
@@ -48,14 +48,14 @@ enum StatusPresentation: String, Equatable {
     /// to the mark the row shows. An otherwise-alive session whose remote
     /// control is not active past the 30s activation grace (exactly the old
     /// warning-overlay condition, docs/CCORN_SPEC.md §8) resolves to
-    /// `.noRemote` regardless of the underlying activity — the activity moves
+    /// `.noRemote` regardless of the underlying activity; the activity moves
     /// to the tooltip. Exclusions are unchanged: needsAuth wins (sign-in is
     /// the root cause, missing remote control just its consequence), and
     /// dead/stopped/unmanaged keep their own presentations.
     ///
     /// `remoteControlRequested` is the session's intent: a session the user
     /// launched as local (`--rc` omitted) never has remote control and never
-    /// should — so the no-remote mark is suppressed for it entirely, leaving the
+    /// should, so the no-remote mark is suppressed for it entirely, leaving the
     /// routine presentation. Defaults true: every session not started as local
     /// is expected to be remote, the historical behavior.
     static func resolve(state: SessionState,
@@ -77,7 +77,7 @@ enum StatusPresentation: String, Equatable {
         return (!remoteControlActive && rcGraceExpired) ? .noRemote : routine
     }
 
-    /// True for the broken tier — the states that render the symbol.
+    /// True for the broken tier: the states that render the symbol.
     var isBroken: Bool {
         switch self {
         case .noRemote, .needsAuth, .crashed: return true
@@ -85,7 +85,7 @@ enum StatusPresentation: String, Equatable {
         }
     }
 
-    /// The popover's triage tier: true when the session needs the user — the
+    /// The popover's triage tier: true when the session needs the user, the
     /// broken trio plus waiting (blocked on input). The calm states (running,
     /// working, stale, stopped) collapse behind the popover's quiet
     /// disclosure; unmanaged is ambient and belongs to neither tier.
@@ -97,8 +97,8 @@ enum StatusPresentation: String, Equatable {
     }
 
     /// Severity rank for the menu-bar aggregate mark (higher = worse). The
-    /// broken tier tops the ladder — crashed (terminal) > sign-in > no-remote
-    /// (degraded, slotted next to sign-in) — so a broken-tier worst shows the
+    /// broken tier tops the ladder (crashed (terminal) > sign-in > no-remote,
+    /// degraded, slotted next to sign-in) so a broken-tier worst shows the
     /// symbol in the header, not a dot. Below it the routine order is
     /// unchanged: waiting outranks stale because a waiting session is blocked
     /// on the user. `stopped` and `unmanaged` carry no active color and rank
@@ -118,7 +118,7 @@ enum StatusPresentation: String, Equatable {
 
     /// The worst (highest-severity) presentation across sessions, or `nil`
     /// when nothing has an active color (all stopped/unmanaged or the list is
-    /// empty) — the caller then shows the empty/outline dot.
+    /// empty); the caller then shows the empty/outline dot.
     static func aggregate(_ presentations: [StatusPresentation]) -> StatusPresentation? {
         presentations
             .filter { $0.aggregateSeverity != nil }
@@ -140,7 +140,7 @@ enum StatusPresentation: String, Equatable {
         }
     }
 
-    /// Short word after the title — a text label, not a glyph — for the
+    /// Short word after the title (a text label, not a glyph) for the
     /// states that need the user. The routine states stay mark-only; their
     /// word lives in the tooltip.
     var attentionLabel: String? {

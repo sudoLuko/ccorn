@@ -6,7 +6,7 @@ import AppKit
 @MainActor
 enum Alerts {
     /// The app is `.accessory` (no Dock icon) and often inactive when an alert
-    /// fires — most critically the launch dependency gates, which run before
+    /// fires; most critically the launch dependency gates, which run before
     /// any window exists. An inactive accessory app's modal sits invisible
     /// behind other apps, so every alert activates first.
     private static func activate() {
@@ -15,14 +15,14 @@ enum Alerts {
 
     /// The in-dialog brand mark: the trimmed, transparent OpenMoji corn glyph
     /// (`CornGlyph`), the same artwork every other in-app surface uses. Without
-    /// this, NSAlert falls back to `NSApp.applicationIconImage` — the Dock/
-    /// Finder app icon, which is the corn baked onto its rounded-square tile —
+    /// this, NSAlert falls back to `NSApp.applicationIconImage` (the Dock/
+    /// Finder app icon, which is the corn baked onto its rounded-square tile),
     /// so the glyph reads as boxed. Set on every alert below; the Dock/Finder
     /// icon (the appiconset) is deliberately left with its tile.
     private static var cornIcon: NSImage? { NSImage(named: "CornGlyph") }
 
     /// Stop confirmation (flow 6.6): Stop is the default action so Return
-    /// confirms — mirrors Start Session's default button. Stopping is
+    /// confirms; mirrors Start Session's default button. Stopping is
     /// recoverable (the session survives as Stopped and can be restarted), so
     /// this is a plain default button, not the old destructive-red treatment.
     static func confirmStop(name: String) -> Bool {
@@ -30,11 +30,11 @@ enum Alerts {
         let alert = NSAlert()
         alert.icon = cornIcon
         alert.messageText = "Stop \(name)?"
-        alert.informativeText = "The session will stop but stay in your list. You can restart it anytime."
+        alert.informativeText = "It stays in your list and can be restarted anytime."
         alert.alertStyle = .warning
         // First button is the default (Return); a button titled "Cancel" gets
         // Escape automatically. Stop is not destructive, so it needs neither
-        // `hasDestructiveAction` (which would block Return) nor a red bezel —
+        // `hasDestructiveAction` (which would block Return) nor a red bezel;
         // a plain default button confirms on Return. Escape and Cancel stay the
         // safety valve against an accidental stop of a live session.
         alert.addButton(withTitle: "Stop")
@@ -59,13 +59,13 @@ enum Alerts {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// Destructive confirmation with Cancel as the default — the deliberate
+    /// Destructive confirmation with Cancel as the default, the deliberate
     /// mirror of `confirmStop`. Here the confirming action is irreversible from
     /// the user's side (the unmanaged-session takeover, flow 6.10, SIGTERMs the
     /// external claude and breaks their terminal), so a reflexive Return must
     /// NOT trigger it. Cancel is added first, which makes it NSAlert's default
     /// button (Return) and gives it Escape; the action is the second button,
-    /// `hasDestructiveAction` (red bezel, and excluded from Return) — confirming
+    /// `hasDestructiveAction` (red bezel, and excluded from Return); confirming
     /// takes an intentional click. Returns true only when the action is chosen.
     static func confirmDestructive(title: String, message: String, action: String) -> Bool {
         activate()
@@ -84,7 +84,7 @@ enum Alerts {
     /// is visible (non-blocking, lands on what the user is looking at) and
     /// falls back to the app-modal alert otherwise (menu-bar-only state).
     /// Used by the detection-driven section-8 alerts, which fire from the poll
-    /// loop — an app-modal `runModal` there would stall the 3s tick.
+    /// loop; an app-modal `runModal` there would stall the 3s tick.
     static func sheetOrModal(title: String, message: String) {
         let alert = NSAlert()
         alert.icon = cornIcon
@@ -92,7 +92,7 @@ enum Alerts {
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
-        // Prefer the main window — these alerts are about a session in its
+        // Prefer the main window. These alerts are about a session in its
         // list; never sheet onto whatever titled window happens to sort first.
         let candidates = NSApp.windows.filter {
             $0.isVisible && $0.styleMask.contains(.titled)
@@ -134,7 +134,7 @@ enum Alerts {
 
     /// Single-line text prompt with an accessory field (focused for immediate
     /// typing). Returns nil on Cancel; otherwise the trimmed entry, which MAY be
-    /// empty — callers decide what an empty confirmed entry means.
+    /// empty; callers decide what an empty confirmed entry means.
     static func prompt(title: String, message: String = "",
                        placeholder: String = "", action: String = "OK") -> String? {
         activate()
@@ -153,7 +153,7 @@ enum Alerts {
         return field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Folder picker (NSOpenPanel — the only sanctioned picker). nil on cancel.
+    /// Folder picker (NSOpenPanel, the only sanctioned picker). nil on cancel.
     static func pickFolder(prompt: String) -> String? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false

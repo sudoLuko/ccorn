@@ -1,6 +1,6 @@
 import Foundation
 
-/// Locates the external (non-CCorn) `claude` process running in a directory —
+/// Locates the external (non-CCorn) `claude` process running in a directory,
 /// the kill step of the import flows (6.2 / 6.10). This is the one sanctioned
 /// exception to "only search children of our own pane shells": an unmanaged
 /// session by definition has no CCorn shell above it.
@@ -8,7 +8,7 @@ import Foundation
 /// Registry-first: every running claude writes `~/.claude/sessions/<pid>.json`
 /// with its pid, sessionId, and cwd (runtime findings F3). Files for dead pids
 /// linger, so a hit counts only if the pid is alive AND still claude-shaped by
-/// argv/exec-path (`ProcessControl.looksLikeClaude`) — never by process name.
+/// argv/exec-path (`ProcessControl.looksLikeClaude`); never by process name.
 /// Fallback when the registry has no match: walk the process table for
 /// claude-shaped argvs and resolve each candidate's cwd with
 /// `lsof -a -p <pid> -d cwd` (`ps` cannot report a process's cwd).
@@ -26,7 +26,7 @@ enum UnmanagedClaudeFinder {
     }
 
     /// The live claude process for a session: matched by session UUID when the
-    /// registry knows it (exact — survives two sessions in one directory), else
+    /// registry knows it (exact: survives two sessions in one directory), else
     /// by working directory. nil when nothing is running there, in which case
     /// import simply skips the kill step.
     static func find(inDirectory directory: String,
@@ -38,7 +38,7 @@ enum UnmanagedClaudeFinder {
             return exact
         }
         // Directory fallback: never a candidate the registry PROVES belongs to
-        // a different session — two sessions can share one directory, and
+        // a different session; two sessions can share one directory, and
         // killing the other one's process would be destructive.
         if let byDir = registry.first(where: { $0.cwd == target
             && (sessionId == nil || $0.sessionId == nil || $0.sessionId == sessionId) }) {

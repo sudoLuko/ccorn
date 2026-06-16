@@ -4,13 +4,13 @@
 #   1. Always: build Release and assert the debug surface is compiled out (no
 #      CCORN_DEBUG strings in the binary), then launch-smoke the freshly built
 #      app in a throwaway world. The smoke runs the RELEASE binary (which has
-#      no debug isolation seams, by design) — so it gets a throwaway HOME and
+#      no debug isolation seams, by design); so it gets a throwaway HOME and
 #      TMUX_TMPDIR: discovery, the session store, and the default tmux server
 #      all resolve inside the staging dir, never the real ones.
 #
 #   2. With a notarized artifact (pass the stapled .app as $1, or run
 #      scripts/release.sh which leaves dist/CCorn.app and invokes this): prove
-#      what a downloader faces — codesign --verify --strict passes, spctl
+#      what a downloader faces: codesign --verify --strict passes, spctl
 #      accepts the app even carrying a browser-style quarantine stamp, and the
 #      notarization ticket is stapled (stapler validate, so the verdict holds
 #      offline too). Deliberately never `open`s the app via LaunchServices:
@@ -71,7 +71,7 @@ TMUX_TMPDIR="$STAGE/tmux" tmux kill-server 2>/dev/null || true
 # --- notarized-artifact validation ----------------------------------------------
 NVERDICT="(no artifact)"
 if [[ -z "$ARTIFACT" ]]; then
-    skip "no notarized artifact to validate — run scripts/release.sh first, or pass the stapled .app as \$1"
+    skip "no notarized artifact to validate; run scripts/release.sh first, or pass the stapled .app as \$1"
 else
     log "validating notarized artifact: $ARTIFACT"
     # Work on a copy stamped the way a real browser download arrives.
@@ -98,7 +98,7 @@ else
     if xcrun stapler validate "$DLAPP" > /dev/null 2>&1; then
         pass "notarization ticket is stapled (valid offline)"
     else
-        fail "stapler validate failed — ticket missing or not stapled"
+        fail "stapler validate failed: ticket missing or not stapled"
     fi
 fi
 
@@ -115,7 +115,7 @@ fi
     echo
     echo "The artifact is signed with a Developer ID and notarized: Gatekeeper"
     echo "accepts it straight from a browser download. No overrides, no xattr"
-    echo "workarounds — the only first-open prompt is the standard"
+    echo "workarounds; the only first-open prompt is the standard"
     echo "\"downloaded from the Internet\" confirmation."
 } > "$REPORT"
 

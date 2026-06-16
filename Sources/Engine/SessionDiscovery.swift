@@ -5,7 +5,7 @@ import Foundation
 /// Rules (docs/CCORN_SPEC.md "Session Discovery" / "Encoded Path Format",
 /// runtime findings C4/C5):
 /// - Enumerate every subdirectory of `~/.claude/projects/`. Each is a project.
-/// - The directory name is an opaque, lossy key — NEVER decode it.
+/// - The directory name is an opaque, lossy key; NEVER decode it.
 /// - Resolve the real path from the first transcript line that carries `cwd`
 ///   (line 1 is a `{leafUuid, sessionId, type}` metadata record without `cwd`).
 /// - Transcripts are flat `*.jsonl` directly in the dir; ignore the `memory/`
@@ -48,7 +48,7 @@ struct SessionDiscovery: Sendable {
     }
 
     /// The transcripts directly inside one project dir, newest first. Flat
-    /// `*.jsonl` only — this excludes the sibling `memory/` directory. Reads
+    /// `*.jsonl` only; this excludes the sibling `memory/` directory. Reads
     /// directory metadata only, never file contents.
     private func sessions(inProjectDir dir: URL) -> [DiscoveredSession] {
         guard let files = try? fileManager.contentsOfDirectory(
@@ -70,7 +70,7 @@ struct SessionDiscovery: Sendable {
 
     /// Enumerate all projects (unfiltered). `resolvedPath` is nil where no
     /// transcript has surfaced a `cwd` yet. Reads transcript heads to resolve
-    /// each project's real path — use `transcriptIndex()` on the refresh hot
+    /// each project's real path; use `transcriptIndex()` on the refresh hot
     /// path instead, which never opens a transcript.
     func discoverAll() -> [DiscoveredProject] {
         projectDirs().map { dir in
@@ -95,7 +95,7 @@ struct SessionDiscovery: Sendable {
     }
 
     /// Single-enumeration index for the refresh hot path: session UUID ->
-    /// transcript (path + mtime). Lists directories only — no transcript is
+    /// transcript (path + mtime). Lists directories only; no transcript is
     /// opened, so a 3s poll cycle costs one readdir per project dir and nothing
     /// more. On a UUID collision across project dirs (should not happen; UUIDs
     /// are unique) the most recently modified transcript wins.
@@ -115,7 +115,7 @@ struct SessionDiscovery: Sendable {
     /// Projects whose resolved path is inside one of the watch directories.
     /// Watch dirs are symlink-resolved before comparison. Non-existent watch
     /// dirs are skipped silently. Deduplicated by resolved path: on a collision
-    /// (the same project under two encoded dirs) the winner is deterministic —
+    /// (the same project under two encoded dirs) the winner is deterministic:
     /// the project with the most recently modified transcript.
     func discover(watchDirectories: [String]) -> [DiscoveredProject] {
         let watch = watchDirectories
@@ -152,7 +152,7 @@ struct SessionDiscovery: Sendable {
         let head = handle.readData(ofLength: 256 * 1024)
         // Only drop a partial trailing line when the head was actually truncated
         // at the 256 KB boundary. A small transcript that fit entirely in the head
-        // keeps its complete final line — otherwise a freshly-created,
+        // keeps its complete final line; otherwise a freshly-created,
         // newline-less transcript whose only cwd is on the last written line would
         // be missed here, and the fallback read below returns empty (the whole
         // file was already consumed), yielding a spurious nil.
@@ -184,7 +184,7 @@ struct SessionDiscovery: Sendable {
     }
 
     /// Title + cwd for a transcript. Cache through `TranscriptMetaCache` on any
-    /// repeated path — this opens the file twice (head for cwd, head+tail for
+    /// repeated path; this opens the file twice (head for cwd, head+tail for
     /// the title).
     static func meta(inTranscript path: String) -> TranscriptMeta {
         TranscriptMeta(title: lastAITitle(inTranscript: path),
@@ -196,13 +196,13 @@ struct SessionDiscovery: Sendable {
     /// final occurrence sat within ~32 KB of EOF in every sampled transcript,
     /// while early copies go stale), so the last one is current and a bounded
     /// head + tail read finds it without scanning multi-MB transcripts. Some
-    /// transcripts carry no ai-title at all — callers fall back to the
+    /// transcripts carry no ai-title at all; callers fall back to the
     /// directory basename.
     static func lastAITitle(inTranscript path: String) -> String? {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
         defer { try? handle.close() }
         let window = 256 * 1024
-        // Throwing read API, not the legacy readData(ofLength:) — that one
+        // Throwing read API, not the legacy readData(ofLength:); that one
         // raises an uncatchable ObjC exception on an I/O error, and this runs
         // for every changed transcript on the discovery path. Degrade to "no
         // title" instead.
@@ -227,7 +227,7 @@ struct SessionDiscovery: Sendable {
         var lines = text.split(separator: "\n", omittingEmptySubsequences: true)
         if dropLeadingPartialLine, !lines.isEmpty { lines.removeFirst() }
         // A partial trailing line (truncated head window) simply fails the JSON
-        // parse and is skipped — no separate handling needed.
+        // parse and is skipped; no separate handling needed.
         for line in lines.reversed() {
             guard line.contains("\"ai-title\"") else { continue }
             guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
@@ -240,7 +240,7 @@ struct SessionDiscovery: Sendable {
     }
 
     /// True if the transcript contains a `bridge-session` record (remote-control
-    /// linkage, version-independent signal — see runtime findings C1/C2).
+    /// linkage, version-independent signal; see runtime findings C1/C2).
     static func transcriptHasBridgeSession(path: String) -> Bool {
         guard let data = FileManager.default.contents(atPath: path) else { return false }
         let text = String(decoding: data, as: UTF8.self)
@@ -257,7 +257,7 @@ struct SessionDiscovery: Sendable {
     /// the encoded form, which is built from the resolved path).
     ///
     /// Foundation normalizes toward the shorter `/tmp` form, but ONLY when the
-    /// leaf exists on disk (runtime findings T3) — so without the manual strip
+    /// leaf exists on disk (runtime findings T3); so without the manual strip
     /// below, `/private/tmp/<deleted>` and `/tmp/<deleted>` would canonicalize
     /// differently and a deleted-or-symlinked project dir would silently stop
     /// matching its watch directory. The strip makes the mapping unconditional:

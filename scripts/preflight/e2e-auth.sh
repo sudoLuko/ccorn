@@ -8,7 +8,7 @@
 #
 # Hermetic by construction: the app instance runs on its own tmux SERVER
 # (CCORN_DEBUG_TMUX_SOCKET), its own session name, its own support dir, and
-# its own debug-channel paths — it shares nothing with the user's default
+# its own debug-channel paths; it shares nothing with the user's default
 # tmux server, a normally-running CCorn, or another debug instance.
 #
 # Prereq: a Debug build at build/Build/Products/Debug/CCorn.app

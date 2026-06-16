@@ -1,8 +1,8 @@
 #!/bin/bash
-# spawn-in-terminal.sh — watch CCorn spawn real Claude Code sessions into
+# spawn-in-terminal.sh, watch CCorn spawn real Claude Code sessions into
 # VISIBLE Terminal.app windows via the actual product path: startNewSession ->
 # openInTerminal -> osascript `tmux attach`. Unlike e2e-churn.sh (headless
-# channel ops), this opens real Terminal windows you can watch and type into —
+# channel ops), this opens real Terminal windows you can watch and type into,
 # including answering each "trust this folder" prompt the way you normally would.
 #
 # Hermetic like the other e2e scripts: own tmux server (CCORN_DEBUG_TMUX_SOCKET),
@@ -31,7 +31,7 @@ source scripts/preflight/e2e-lib.sh
 
 mkdir -p "$E2E"
 if [[ ! -x "$APP_BIN" ]]; then
-    log "no debug build at $APP_BIN — building Debug…"
+    log "no debug build at $APP_BIN, building Debug…"
     [[ -d CCorn.xcodeproj ]] || xcodegen generate
     if ! xcodebuild -project CCorn.xcodeproj -scheme CCorn -configuration Debug \
         -derivedDataPath build build > "$E2E/build.log" 2>&1; then
@@ -93,7 +93,7 @@ base_attached=$(TMUX display-message -t "$SESSION" -p '#{session_attached}' 2>/d
 if [[ "$base_attached" == "0" ]]; then
     pass "isolation: shared '$SESSION' session has no attached client (no mirroring)"
 else
-    fail "isolation: '$SESSION' has $base_attached client(s) — terminals would mirror"
+    fail "isolation: '$SESSION' has $base_attached client(s); terminals would mirror"
 fi
 
 distinct=$(printf '%s\n' "$views" | awk '{print $1}' | while read -r v; do

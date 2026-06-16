@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/ccorn-icon.png" width="88" alt="CCorn — OpenMoji ear-of-corn app icon" />
+<img src="docs/images/ccorn-icon.png" width="88" alt="CCorn, OpenMoji ear-of-corn app icon" />
 
 # CCorn
 
@@ -31,7 +31,7 @@ It is a process manager, not a chat interface. You keep talking to Claude in you
 - **Aggregate status in the menu bar.** The corn glyph reflects the most urgent session state across everything it manages.
 - **Triage popover.** Sessions that need attention float to the top; calm sessions stay behind a quiet disclosure.
 - **Full session manager.** A main window with every session: rename, group, archive, stop, restart, import.
-- **One-click handoff.** Open any session in Terminal (it is just a tmux window) or in the browser — a per-session deep link when remote control is active.
+- **One-click handoff.** Open any session in Terminal (it is just a tmux window) or in the browser, with a per-session deep link when remote control is active.
 - **Discovery.** Finds existing Claude Code sessions on your machine and offers to import and resume them.
 - **Notifications.** Get pinged when a session needs your input or dies.
 
@@ -110,6 +110,6 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 
 ## License
 
-[MIT](LICENSE) — CCorn's source code.
+[MIT](LICENSE) covers CCorn's source code.
 
 The app icon is the ear-of-corn glyph from [OpenMoji](https://openmoji.org), licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Per ShareAlike, the icon artwork (this adaptation) is itself CC BY-SA 4.0; this applies to the image only and does not affect the MIT-licensed code. Details in [design-assets/app-icon/ICON_CREDITS.md](design-assets/app-icon/ICON_CREDITS.md).

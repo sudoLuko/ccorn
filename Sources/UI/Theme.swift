@@ -29,7 +29,7 @@ extension Color {
 /// Color(lightHex:darkHex:) adapt to appearance (each says why at its
 /// declaration); the rest are identical in light and dark.
 enum StatusPalette {
-    /// Running green — adaptive: green-600 on light; green-500 on dark (and
+    /// Running green, adaptive: green-600 on light; green-500 on dark (and
     /// therefore the fixed-dark popover) so the healthy dot keeps its weight
     /// next to the bright dark-face amber instead of receding. Same hue,
     /// lifted one step. Green-500 is dark-face ONLY: it sits near 2.3:1 on
@@ -39,7 +39,7 @@ enum StatusPalette {
     static let running = Color(lightHex: runningLightHex,
                                darkHex: runningDarkHex)
 
-    /// Working blue — adaptive: blue-600 on light; blue-500 on dark (and
+    /// Working blue, adaptive: blue-600 on light; blue-500 on dark (and
     /// therefore the fixed-dark popover) so working reads active and
     /// separates from the muted stale slate. Same hue, lifted one step.
     static let workingLightHex: UInt32 = 0x2563EB
@@ -50,27 +50,27 @@ enum StatusPalette {
     /// The ONE attention amber: the waiting dot and its halo, the recoverable
     /// warning triangles (sign in / no remote), and every amber attention
     /// word. Appearance-adaptive because the word is body-size TEXT: on light
-    /// it must clear WCAG AA 4.5:1 against the window background — amber-500
-    /// (#F59E0B) and the old waiting #D97706 both sit near 3:1 and fail — so
+    /// it must clear WCAG AA 4.5:1 against the window background. Amber-500
+    /// (#F59E0B) and the old waiting #D97706 both sit near 3:1 and fail, so
     /// it darkens to between amber-700 and -800; on dark and the fixed-dark
     /// popover the brighter amber reads well (~9:1 on #09090B).
     static let attentionLightHex: UInt32 = 0xA34A0B
     static let attentionDarkHex: UInt32 = 0xF59E0B
     static let attention = Color(lightHex: attentionLightHex,
                                  darkHex: attentionDarkHex)
-    /// Stale is muted and recessive on purpose — a desaturated slate, not the
+    /// Stale is muted and recessive on purpose: a desaturated slate, not the
     /// spec's #EA580C, which reads like Crashed at 7px.
     static let stale = Color(hex: 0x64748B)
     static let dead = Color(hex: 0xDC2626)
-    /// Unmanaged outline — fixed per spec section 4, same in both appearances.
+    /// Unmanaged outline, fixed per spec section 4, same in both appearances.
     static let unmanagedOutline = Color(hex: 0x71717A)
     /// Hollow grey for a stopped session's empty dot, one home for every
-    /// surface. Light: fixed #8A8A8F — a 1px ring is a UI component and needs
+    /// surface. Light: fixed #8A8A8F; a 1px ring is a UI component and needs
     /// 3:1 (this is ~3.4:1 on white; the previous tertiaryLabelColor resolved
     /// near #BDBDBD, ~1.6:1, and the ring all but vanished), while staying
     /// lighter than the unmanaged #71717A so stopped remains the quieter of
     /// the two hollow dots. Dark, and therefore the fixed-dark popover:
-    /// zinc-400 — visibly present, recessive, and a step lighter than the
+    /// zinc-400, visibly present, recessive, and a step lighter than the
     /// unmanaged outline so the hierarchy holds there too.
     static let stoppedOutlineLightHex: UInt32 = 0x8A8A8F
     static let stoppedOutlineDarkHex: UInt32 = 0xA1A1AA
@@ -81,7 +81,7 @@ enum StatusPalette {
     static let importPending = Color.secondary.opacity(0.5)
 }
 
-/// Menu-bar popover palette — the popover is fixed dark regardless of system
+/// Menu-bar popover palette: the popover is fixed dark regardless of system
 /// appearance, so hardcoded hex is correct here (and only here).
 enum PopoverPalette {
     static let background = Color(hex: 0x09090B)
@@ -142,7 +142,7 @@ enum WorkingBreath {
 }
 
 /// Shared motion token for the hover wash: the one 0.18s curve every
-/// hover-driven background uses — main-window rows, popover rows, the calm
+/// hover-driven background uses: main-window rows, popover rows, the calm
 /// disclosure. The layout (0.2s) and presentation (0.25s) standards stay
 /// inline at their few deliberate sites (F8: two standards, both sanctioned).
 enum Motion {
@@ -152,8 +152,8 @@ enum Motion {
 /// The single status mark every row shows, in a shared fixed-width slot so
 /// titles line up across rows and surfaces: a 7px dot for routine states
 /// (filled when active, hairline outline for stopped/unmanaged), or the one
-/// warning symbol — exclamationmark.triangle.fill, a little larger than the
-/// dot — for the broken tier. Never a dot and a symbol together, never any
+/// warning symbol (exclamationmark.triangle.fill, a little larger than the
+/// dot) for the broken tier. Never a dot and a symbol together, never any
 /// other glyph.
 struct StatusMark: View {
     let presentation: StatusPresentation
@@ -191,7 +191,7 @@ struct StatusMark: View {
 /// Whether the window hosting a row is actually on screen. Both surfaces keep
 /// their SwiftUI trees alive while hidden (the popover panel orders out, the
 /// main window closes with isReleasedWhenClosed = false), and a repeatForever
-/// mark animation in a hidden tree keeps the render loop ticking every frame —
+/// mark animation in a hidden tree keeps the render loop ticking every frame:
 /// several percent CPU per hidden surface, forever. The window controllers publish
 /// visibility through the model into this key; RowStatusIndicator stops its
 /// loops when it goes false. Defaults to true so one-off hosts (debug
@@ -354,8 +354,8 @@ private struct BreathBrightness: ViewModifier, Animatable {
 
 // MARK: - Attention word
 
-/// The short colored word after the title for the states that need the user —
-/// Needs input, Sign in, No remote, Crashed — and nothing for the silent
+/// The short colored word after the title for the states that need the user
+/// (Needs input, Sign in, No remote, Crashed), and nothing for the silent
 /// states (their word lives in the mark's tooltip). One view shared by the
 /// main-window row and the popover row, so the word reads, colors, and fades
 /// identically on both surfaces; the fade animates under the row's
@@ -379,7 +379,7 @@ struct AttentionWord: View {
 
 /// The quiet "Local" caption after the title for sessions launched WITHOUT
 /// remote control (`--rc`): no browser/phone access, no per-session URL. It is
-/// metadata, not status — it carries no status color (secondary grey only), so
+/// metadata, not status; it carries no status color (secondary grey only), so
 /// the one-mark-per-row and status-is-the-only-color rules hold. Shown only on
 /// local rows; remote rows (the default) carry nothing. The color is injected
 /// so one view reads correctly on the light main window (`.secondary`) and the
@@ -396,7 +396,7 @@ struct LocalTag: View {
                 .foregroundColor(color)
                 .lineLimit(1)
                 .fixedSize()
-                .help("Local session — no browser or phone access and no per-session URL")
+                .help("Local session, no browser or phone access and no per-session URL")
         }
     }
 }
@@ -430,13 +430,13 @@ struct AdoptTag: View {
 
 // MARK: - Corn mark
 
-/// CCorn's shared brand glyph: the OpenMoji ear-of-corn (`CornGlyph` asset —
+/// CCorn's shared brand glyph: the OpenMoji ear-of-corn (`CornGlyph` asset,
 /// the same artwork as the app icon, trimmed glyph-only; see
 /// design-assets/app-icon/). One bundled vector replaces the system corn emoji
 /// everywhere it appears in-app (main-window title bar, popover header,
 /// onboarding, empty state) so the in-app mark matches the Dock/app icon
 /// exactly. Color art, never a template
-/// (that is the menu-bar glyph's job); CC BY-SA 4.0 — see Settings ▸ About.
+/// (that is the menu-bar glyph's job); CC BY-SA 4.0; see Settings ▸ About.
 struct CornMark: View {
     var size: CGFloat
 
@@ -453,7 +453,7 @@ struct CornMark: View {
 
 /// Primary-action filled button shared by onboarding, the import sheet, the
 /// empty state, and the no-managed hint. Enabled it is the spec's §3 primary
-/// action — solid #09090B fill / #FAFAFA text in light, inverted in dark —
+/// action (solid #09090B fill / #FAFAFA text in light, inverted in dark)
 /// as an exact pair because a Color.primary fill (85%-alpha labelColor)
 /// renders as a dead grey slab. Disabled is a quiet zinc wash with secondary
 /// text: visibly disabled, still legible.
@@ -464,7 +464,7 @@ struct FilledButton: View {
     var height: CGFloat = 28
     /// Bind this button to the window's default action (Return). The shortcut is
     /// attached to the real `Button` below so the key equivalent fires its
-    /// action — and, as the window's default, Return is routed here instead of
+    /// action, and, as the window's default, Return is routed here instead of
     /// to a focused single-line field editor (which would otherwise just
     /// reselect its text on commit). Opt-in: most FilledButtons are not default.
     var isDefault = false
@@ -497,8 +497,8 @@ struct FilledButton: View {
 extension View {
     /// Standard macOS "click-away ends the edit" behaviour for inline
     /// `TextField`s. A `.plain` field (the rename / group editors) or a sheet
-    /// field lives inside a custom SwiftUI surface — a `ScrollView`/`LazyVStack`
-    /// of tap-gesture rows, a sidebar `List`, a sheet — with no focusable
+    /// field lives inside a custom SwiftUI surface (a `ScrollView`/`LazyVStack`
+    /// of tap-gesture rows, a sidebar `List`, a sheet) with no focusable
     /// container to steal first responder, so clicking another row or empty
     /// space leaves the field editor first responder and the edit can only be
     /// ended with Return. Apply this to the hosting window's root: while any
@@ -532,7 +532,7 @@ private struct OutsideClickResigner: NSViewRepresentable {
         private func start() {
             guard monitor == nil else { return }
             // Returning the event keeps the click's normal action (selecting the
-            // clicked row, pressing a button) — so the edit ends AND the click
+            // clicked row, pressing a button), so the edit ends AND the click
             // acts, exactly the platform default.
             monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
                 guard let window = self?.window, event.window === window,

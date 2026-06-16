@@ -26,7 +26,7 @@ targets:
     # No App Sandbox capability on purpose: the app must spawn
     # tmux/claude/ps/lsof, watch arbitrary directories with FSEvents, and send
     # AppleEvents to Terminal. The entitlements file exists only for the
-    # hardened runtime's AppleEvents permission — it does NOT enable the sandbox.
+    # hardened runtime's AppleEvents permission; it does NOT enable the sandbox.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: studio.ccorn.app

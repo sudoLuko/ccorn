@@ -35,8 +35,8 @@ struct SettingsView: View {
     }
 
     /// A hand-edited or pre-picker value (e.g. the old 600s default) would
-    /// display as the nearest option while the engine kept the raw value —
-    /// misleading. Persist the snap once so display and behavior agree.
+    /// display as the nearest option while the engine kept the raw value,
+    /// which is misleading. Persist the snap once so display and behavior agree.
     private func snapLegacyThreshold() {
         let snapped = Self.nearestThreshold(engine.settings.staleThresholdSeconds)
         guard snapped != engine.settings.staleThresholdSeconds else { return }
@@ -45,7 +45,7 @@ struct SettingsView: View {
         model.applySettings(settings)
     }
 
-    // MARK: Section 1 — Watch Directories
+    // MARK: Section 1: Watch Directories
 
     private var watchDirectoriesSection: some View {
         Section("Watch Directories") {
@@ -89,7 +89,7 @@ struct SettingsView: View {
 
     /// Remove with the warning alert (5.5). Watch directories scope discovery
     /// only, so the rows that actually hide are the *unmanaged* ones under the
-    /// directory — sessions CCorn manages (or has records for) stay listed.
+    /// directory; sessions CCorn manages (or has records for) stay listed.
     private func removeDirectory(_ dir: String) {
         let canonical = SessionDiscovery.canonicalize(SessionDiscovery.expandTilde(dir))
         let hidden = model.rows.filter {
@@ -99,7 +99,7 @@ struct SettingsView: View {
         let display = (dir as NSString).abbreviatingWithTildeInPath
         guard Alerts.confirm(
             title: "Remove \(display)?",
-            message: "This will hide \(hidden) session\(hidden == 1 ? "" : "s") from the list. Sessions will continue running in the background.",
+            message: "Hides \(hidden) session\(hidden == 1 ? "" : "s") from the list; they keep running in the background.",
             action: "Remove",
             destructive: true) else { return }
         var settings = engine.settings
@@ -116,7 +116,7 @@ struct SettingsView: View {
         model.applySettings(settings)
     }
 
-    // MARK: Section 2 — Behavior
+    // MARK: Section 2: Behavior
 
     private var behaviorSection: some View {
         Section("Behavior") {
@@ -155,7 +155,7 @@ struct SettingsView: View {
             ))
 
             // Drives `tmux set-option -t ccorn mouse` on CCorn's session (and
-            // its Open-in-Terminal view sessions) only — never the tmux global,
+            // its Open-in-Terminal view sessions) only, never the tmux global,
             // so the user's own `set -g mouse` for other tmux work is untouched.
             // The second Text renders as the toggle's secondary caption in a
             // grouped Form, the place to spell out the tradeoff.
@@ -206,13 +206,13 @@ struct SettingsView: View {
         thresholdOptions.min { abs($0 - value) < abs($1 - value) } ?? 3600
     }
 
-    // MARK: Section — New Session Defaults
+    // MARK: Section: New Session Defaults
 
     /// Global defaults new sessions inherit (the New Session sheet seeds its
-    /// per-session override from these). Discrete controls only — the Picker
-    /// idiom of the Behavior section — so a keystroke never churns settings +
-    /// rediscovery. Per-session free text (custom model, add-dirs, extra args)
-    /// lives in the sheet, not here.
+    /// per-session override from these). Discrete controls only (the Picker
+    /// idiom of the Behavior section), so a keystroke never churns settings +
+    /// rediscovery. Per-session free text (add-dirs, extra args) lives in the
+    /// sheet, not here.
     private var launchDefaultsSection: some View {
         Section("New Session Defaults") {
             Picker("Permission mode", selection: Binding(
@@ -282,7 +282,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Section 3 — About
+    // MARK: Section 3: About
 
     private var aboutSection: some View {
         Section("About") {
@@ -295,7 +295,7 @@ struct SettingsView: View {
                  destination: URL(string: "https://github.com/sudoLuko/ccorn")!)
                 .font(.caption)
                 .foregroundColor(.accentColor)
-            // OpenMoji is CC BY-SA 4.0 — attribution must appear somewhere
+            // OpenMoji is CC BY-SA 4.0; attribution must appear somewhere
             // user-facing (see design-assets/app-icon/ICON_CREDITS.md). The
             // markdown links render tappable in a Text/LocalizedStringKey.
             Text("App icon: ear-of-corn glyph from [OpenMoji](https://openmoji.org), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)")
@@ -307,7 +307,7 @@ struct SettingsView: View {
 
 /// The Settings scene's window is created by SwiftUI, so there is no
 /// controller to configure chrome on: this reaches the hosting window and
-/// hides the title-bar TEXT — the same treatment as the main and onboarding
+/// hides the title-bar TEXT, the same treatment as the main and onboarding
 /// windows, whose identity lives in their content, not the titlebar. The
 /// title STRING stays whatever the scene set (it contains "Settings"), so
 /// DebugStage's window lookup keeps working.

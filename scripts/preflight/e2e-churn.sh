@@ -1,5 +1,5 @@
 #!/bin/bash
-# e2e-churn.sh — focused reproduction of the window-creation failure that only
+# e2e-churn.sh, focused reproduction of the window-creation failure that only
 # appears after many new/kill cycles in an *existing* ccorn session
 # ("could not create tmux window"; raw tmux: "index 0 in use"). A freshly
 # created session never shows it, so the repro must churn ONE persistent
@@ -8,13 +8,13 @@
 # Black-box: it drives the real engine through the debug channel exactly as the
 # UI does (startNewSession -> killSession) and asserts every `new` comes back
 # `started(...)`. The first `new` that returns `failed(...)` or
-# `windowCreatedNoProcess` is the bug — the script stops, writes the tmux window
+# `windowCreatedNoProcess` is the bug; the script stops, writes the tmux window
 # table as a minimal repro, and exits non-zero (via finish/FAILS). All N cycles
 # clean -> exit 0, so this doubles as a regression guard once the bug is fixed.
 #
 # Real signed-in account, like the other e2e scripts: an idle new/kill sends no
 # prompt and costs nothing. Its own tmux server (CCORN_DEBUG_TMUX_SOCKET),
-# support dir, and channel — shares nothing with your running CCorn.
+# support dir, and channel; shares nothing with your running CCorn.
 #
 # Usage:
 #   scripts/preflight/e2e-churn.sh [cycles]              # default 50
@@ -36,7 +36,7 @@ source scripts/preflight/e2e-lib.sh
 # A Debug build is required (e2e_setup hard-fails without one); build if absent.
 mkdir -p "$E2E"
 if [[ ! -x "$APP_BIN" ]]; then
-    log "no debug build at $APP_BIN — building Debug…"
+    log "no debug build at $APP_BIN, building Debug…"
     [[ -d CCorn.xcodeproj ]] || xcodegen generate
     if ! xcodebuild -project CCorn.xcodeproj -scheme CCorn -configuration Debug \
         -derivedDataPath build build > "$E2E/build.log" 2>&1; then
@@ -57,7 +57,7 @@ launch_app
 cmd onboard "$PROJ" > /dev/null
 
 # results.jsonl: one JSON object per line, every field escaped by jq. No
-# hand-built JSON — a stray quote or newline in an engine reply cannot corrupt
+# hand-built JSON; a stray quote or newline in an engine reply cannot corrupt
 # the file (the failure mode of the deleted harness).
 record() { # <op> <status> <cycle> <reply>
     jq -cn \

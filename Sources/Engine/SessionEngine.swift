@@ -50,7 +50,7 @@ final class SessionEngine: ObservableObject {
     /// Push the current mouse-mode preference onto the live `ccorn` session so a
     /// Settings toggle takes effect immediately for already-running sessions
     /// (ensureSession only re-applies it on the next start/resume). Scoped to
-    /// the session, never the tmux global — see `TmuxController.setMouseMode`.
+    /// the session, never the tmux global; see `TmuxController.setMouseMode`.
     /// No-op when the session does not exist yet; the first start/resume creates
     /// it with the current value.
     func applyMouseMode() {
@@ -90,7 +90,7 @@ final class SessionEngine: ObservableObject {
     // MARK: - Start / resume
 
     /// Start a brand-new session in `directory`. The title defaults to the
-    /// project folder name — the convention for CCorn-started sessions: it is
+    /// project folder name, the convention for CCorn-started sessions: it is
     /// passed as a REAL session title via `--rc "<title>"`, so it syncs to
     /// claude.ai/mobile and disambiguates two sessions in the same folder
     /// (M3's new-session UI may override it). The session UUID is bound right
@@ -141,7 +141,7 @@ final class SessionEngine: ObservableObject {
             // per-session deep link isn't available (the registry bridge id can
             // lag a live bridge), so set it at launch. `tmux send-keys` TYPES
             // this string into the pane's interactive shell, which then
-            // evaluates it — so the title must be POSIX
+            // evaluates it; so the title must be POSIX
             // single-quoted. Double-quote escaping is insufficient: inside double
             // quotes zsh still performs `$(...)`, backtick, and `$VAR` expansion, so a
             // title like `$(rm -rf ~)` would execute. Single quotes make it inert.
@@ -169,7 +169,7 @@ final class SessionEngine: ObservableObject {
                 store.upsert(SessionRecord(uuid: uuid, path: directory, title: storedTitle,
                                            launchConfig: cfg))
             }
-            // No uuid (registry never appeared): fall back to the old behavior —
+            // No uuid (registry never appeared): fall back to the old behavior:
             // reconcile binds it on the next launch, though the title is then
             // only as durable as this process.
             return Launch(result: outcome, uuid: uuid)
@@ -191,7 +191,7 @@ final class SessionEngine: ObservableObject {
 
     /// Resume an existing session by UUID in its project directory. When no
     /// explicit title is given the record keeps an empty title (or its persisted
-    /// one) — `claude --resume` retains the session's existing title, so the row
+    /// one); `claude --resume` retains the session's existing title, so the row
     /// falls back to the transcript's ai-title rather than a fabricated name.
     func resumeSession(uuid: String, directory: String, title: String? = nil,
                        config: SessionLaunchConfig? = nil) async -> StartResult {
@@ -203,7 +203,7 @@ final class SessionEngine: ObservableObject {
         // --resume): restart passes the session's stored config; adopt/import
         // pass nil for a plain resume. Preserve a persisted title/archived flag
         // unless explicitly retitled, and carry over groupIDs + the stored
-        // config — `upsert` replaces the whole record, so anything not re-set
+        // config; `upsert` replaces the whole record, so anything not re-set
         // here would be dropped.
         let record = await Task.detached { () -> SessionRecord in
             let existing = store.loadRecords().first { $0.uuid == uuid }
@@ -253,8 +253,8 @@ final class SessionEngine: ObservableObject {
     }
 
     /// The base `claude` invocation (before the config's flag tokens) for a new
-    /// or resumed session. `--rc` — and, for a new session, the title it carries
-    /// as the remote handle — appears ONLY when `remoteControl` is true; a local
+    /// or resumed session. `--rc` (and, for a new session, the title it carries
+    /// as the remote handle) appears ONLY when `remoteControl` is true; a local
     /// session omits it entirely, so no bridge ever comes up. `resumeUUID` set =
     /// restart (`--resume <uuid>`); otherwise a new session with `newTitle`. The
     /// uuid/title are single-quoted because the whole string is typed into and
@@ -345,11 +345,11 @@ final class SessionEngine: ObservableObject {
     }
 
     /// Kill a managed session (flow 6.6): learn its identity if still unknown
-    /// (last chance — the registry file goes stale once the process dies), and
+    /// (last chance: the registry file goes stale once the process dies), and
     /// persist the record so the row survives as Stopped, then run the
     /// canonical kill-window → SIGTERM → SIGKILL routine. Returns the session
     /// UUID ("" when it never became known; nothing persists, the row simply
-    /// disappears — there is nothing to resume).
+    /// disappears: there is nothing to resume).
     ///
     /// `archived` folds the archived flag into that same identity-persisting
     /// merge (default false: Stop leaves the flag untouched). Setting it here,
@@ -385,9 +385,9 @@ final class SessionEngine: ObservableObject {
     }
 
     /// Restart a dead or stopped session (flow 6.7): tear down any window still
-    /// holding the session first — a crashed claude leaves its window and shell
+    /// holding the session first; a crashed claude leaves its window and shell
     /// behind, and resuming next to it would orphan a dead window plus create a
-    /// `-2` duplicate — then `claude --resume <uuid> --rc` in a fresh window.
+    /// `-2` duplicate. Then `claude --resume <uuid> --rc` in a fresh window.
     func restartSession(uuid: String, directory: String,
                         replacingWindowId: String? = nil) async -> StartResult {
         var doomed = Set<String>()
@@ -399,7 +399,7 @@ final class SessionEngine: ObservableObject {
         let tmux = self.tmux
         let store = self.store
         // The session's stored launch flags, to re-apply on the fresh process
-        // (they don't survive --resume). nil for sessions CCorn didn't start —
+        // (they don't survive --resume). nil for sessions CCorn didn't start;
         // those resume plainly, not under the global default.
         let storedConfig = await Task.detached { () -> SessionLaunchConfig? in
             store.loadRecords().first { $0.uuid == uuid }?.launchConfig
@@ -416,7 +416,7 @@ final class SessionEngine: ObservableObject {
     }
 
     /// Import an unmanaged session (flows 6.2 / 6.10): SIGTERM → 5s → SIGKILL
-    /// the external claude process running the session (if any — matched by
+    /// the external claude process running the session (if any: matched by
     /// session UUID via the pid registry, else by working directory), then
     /// resume it under CCorn with remote control on.
     func importSession(uuid: String, directory: String) async -> StartResult {
@@ -453,17 +453,17 @@ final class SessionEngine: ObservableObject {
     }
 
     /// Rename (flow 6.8). A live session gets Claude's native `/rename`, typed
-    /// into the TUI — NOT shell-quoted: the pane's foreground process is the
+    /// into the TUI, NOT shell-quoted: the pane's foreground process is the
     /// claude TUI, not a shell, so quotes would become part of the name. The
     /// pane is then watched ~3s for an error render (e.g. a duplicate name);
     /// only new text that wasn't visible before the rename counts. On success
     /// the tmux window name follows and the title is persisted as the display
-    /// title. Dead/stopped sessions have no claude to tell — the title is
+    /// title. Dead/stopped sessions have no claude to tell; the title is
     /// persisted locally only (it becomes the `--rc`-style explicit title).
     func renameSession(windowId: String?, uuid: String, to newName: String) async -> RenameResult {
         let live = windowId.flatMap { liveSessions[$0] }
         // needsAuth is deliberately NOT in this list: its pane shows the login
-        // screen, so typed `/rename` would go nowhere — persist locally only.
+        // screen, so typed `/rename` would go nowhere; persist locally only.
         let isLive = live.map { [.running, .working, .waiting, .stale].contains($0.state) } ?? false
         let tmux = self.tmux
 
@@ -496,7 +496,7 @@ final class SessionEngine: ObservableObject {
     }
 
     /// Error text newly rendered since the rename was sent, if any. Matches
-    /// only rename-shaped failures — generic words like "error" would
+    /// only rename-shaped failures; generic words like "error" would
     /// false-positive on session content that happens to stream in the window.
     nonisolated static func renameError(before: String, after: String) -> String? {
         let markers = ["already taken", "already exists", "unknown command", "rename failed"]
@@ -592,14 +592,14 @@ final class SessionEngine: ObservableObject {
 
     // MARK: - State refresh
 
-    /// One refresh cycle over every live session — the hot poll path. Each
+    /// One refresh cycle over every live session, the hot poll path. Each
     /// session resolves its transcript with an O(1) lookup into `index`, and the
     /// bridge-session check inside `detect` is mtime-cached per session. All of
     /// it runs off-main; results are applied back on the main actor.
     ///
     /// `index` is the caller's already-built uuid -> transcript index (the UI
     /// keeps one, refreshed by FSEvents-driven discovery). Passing it keeps the
-    /// hot path off the filesystem entirely — a fast adaptive poll must not
+    /// hot path off the filesystem entirely; a fast adaptive poll must not
     /// re-enumerate the projects root on every tick. When nil, the index is
     /// enumerated here (the one-off / launch callers that hold no cache).
     func refreshAll(index: [String: DiscoveredSession]? = nil, now: Date = Date()) async {
@@ -609,7 +609,7 @@ final class SessionEngine: ObservableObject {
 
     /// Bind live sessions whose UUID is still unknown. startNewSession binds at
     /// spawn when it can, but a trust prompt in a new directory delays claude's
-    /// registry write past that window (verified live) — so this retries on
+    /// registry write past that window (verified live); so this retries on
     /// every refresh tick until the file appears, then tags the window and
     /// persists the record exactly once. Costs one small JSON read per still-
     /// unbound session and nothing when all sessions are bound.
@@ -654,7 +654,7 @@ final class SessionEngine: ObservableObject {
                 : live.record.path
             // Carry the in-memory record's launch config (set by startNewSession
             // even when the uuid bound too late to persist at spawn) and any
-            // groupIDs — upsert replaces the whole record, so they'd be lost.
+            // groupIDs; upsert replaces the whole record, so they'd be lost.
             let record = SessionRecord(uuid: info.sessionId, path: path,
                                        title: live.record.title,
                                        archived: live.record.archived,
@@ -725,8 +725,8 @@ final class SessionEngine: ObservableObject {
     /// Identity binding: when a window has no @ccorn_id tag but a live claude
     /// child, the child's registry file (`~/.claude/sessions/<pid>.json`)
     /// supplies the session UUID + cwd; the binding is written back to the
-    /// window tag and persisted, so a later relaunch — when the process may be
-    /// gone — still knows the session and its last directory. Windows that show
+    /// window tag and persisted, so a later relaunch, when the process may be
+    /// gone, still knows the session and its last directory. Windows that show
     /// no trace of ever running claude (e.g. the bare default window
     /// `tmux new-session` spawns) are not sessions and are skipped.
     @discardableResult
@@ -768,7 +768,7 @@ final class SessionEngine: ObservableObject {
 
                 // No claude identity, no claude process, no @ccorn_managed
                 // marker, no claude trace in the pane: this window never ran
-                // claude — not a session. (The marker is what keeps a dead
+                // claude, not a session. (The marker is what keeps a dead
                 // CCorn-created session adopted even after its claude text
                 // scrolled out of the visible frame or the user ran `clear`.)
                 if uuid.isEmpty, claudePID == nil, !window.managed,
@@ -779,12 +779,12 @@ final class SessionEngine: ObservableObject {
                 // Adopted windows get the same name-pinning as windows we
                 // create: without it automatic-rename tracks the foreground
                 // process and a dead claude pane reads as "zsh". Only for
-                // windows we actually adopt — a rejected bystander window
+                // windows we actually adopt; a rejected bystander window
                 // keeps its tmux options untouched.
                 tmux.disableRenaming(windowId: window.windowId)
 
                 let known = persisted.first { !uuid.isEmpty && $0.uuid == uuid }
-                // Title stays empty for unknown records — NEVER the live tmux
+                // Title stays empty for unknown records, NEVER the live tmux
                 // window name; the row falls back to ai-title/basename.
                 let record = known ?? SessionRecord(
                     uuid: uuid,

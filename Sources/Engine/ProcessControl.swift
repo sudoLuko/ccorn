@@ -9,7 +9,7 @@ import Darwin
 /// `proc_name()` / `ps -o ucomm` all return `2.1.169`, NOT `claude`. We must
 /// therefore match by **argv** (argv[0] basename == `claude`, or args contain
 /// `--rc`) or by **exec-path basename**, never by process name. We also only
-/// ever search among the children of the shell CCorn itself spawned — never a
+/// ever search among the children of the shell CCorn itself spawned; never a
 /// global `pgrep claude` (the probe machine had ~15 unrelated claude processes).
 enum ProcessControl {
 
@@ -33,7 +33,7 @@ enum ProcessControl {
 
         // After the exec_path string the kernel inserts a run of NUL padding for
         // alignment, so skip the whole run there. Within argv, elements are
-        // separated by a single NUL — skipping a run would swallow an empty
+        // separated by a single NUL; skipping a run would swallow an empty
         // argument (e.g. `claude --rc ""`) and shift later reads into the env
         // block, so advance past exactly one terminator.
         func readCString(skipPadding: Bool) -> String {
@@ -136,7 +136,7 @@ enum ProcessControl {
     /// Canonical termination: SIGTERM, wait up to 5s, SIGKILL if still alive.
     /// Caller is responsible for killing the tmux window first (see SessionEngine).
     /// Suspends between liveness checks, so it is safe to await from anywhere.
-    // TODO(M3): PID-reuse race — between an isAlive() check and the kill() the
+    // TODO(M3): PID-reuse race: between an isAlive() check and the kill() the
     // pid could in principle be recycled by an unrelated process (low-probability
     // TOCTOU). Revisit with a start-time identity check when polishing.
     static func terminate(pid: Int32) async {

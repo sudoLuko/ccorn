@@ -16,7 +16,7 @@ import Testing
     }
 
     /// runtime findings T3 fix: Foundation strips `/private` only when the leaf
-    /// exists, which made canonicalization existence-dependent — a deleted (or
+    /// exists, which made canonicalization existence-dependent; a deleted (or
     /// never-created) project dir under one spelling silently stopped matching
     /// the other. Both spellings must converge for missing paths too.
     @Test func canonicalizeIsExistenceIndependent() {
@@ -74,7 +74,7 @@ import Testing
     @Test func shellQuoteNeutralizesShellExpansion() {
         // The quoted result is what the pane's interactive shell receives. Single
         // quotes make command substitution, backticks, and parameter expansion
-        // inert — so a crafted title/uuid cannot execute commands at session start.
+        // inert, so a crafted title/uuid cannot execute commands at session start.
         #expect(TmuxController.shellQuote("plain") == "'plain'")
         #expect(TmuxController.shellQuote("My Project") == "'My Project'")
         #expect(TmuxController.shellQuote("$(rm -rf ~)") == "'$(rm -rf ~)'")
@@ -97,7 +97,7 @@ import Testing
         // as the Terminal tab's custom title.
         #expect(TmuxController.appleScriptQuote("auth refactor") == "\"auth refactor\"")
         // The title is a custom title, never `do script`, and AppleScript does no
-        // shell expansion — so injection-shaped names are inert and pass through.
+        // shell expansion, so injection-shaped names are inert and pass through.
         #expect(TmuxController.appleScriptQuote("$(rm -rf ~)") == "\"$(rm -rf ~)\"")
     }
 

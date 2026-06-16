@@ -4,12 +4,12 @@ import Foundation
 /// discovery pass re-reads a transcript only when it actually changed. Title
 /// extraction is a head + tail read (see `SessionDiscovery.lastAITitle`), so an
 /// unchanged transcript costs nothing and an active one is re-read at most once
-/// per FSEvents-debounced discovery pass — never on the 3s poll, which only
+/// per FSEvents-debounced discovery pass; never on the 3s poll, which only
 /// consumes the cached results.
 ///
 /// @unchecked Sendable: all access to `entries` is serialized through `queue`.
 /// The file read itself happens outside the lock, so two concurrent passes may
-/// redundantly read the same transcript — harmless, last write wins.
+/// redundantly read the same transcript; harmless, last write wins.
 final class TranscriptMetaCache: @unchecked Sendable {
     private struct Entry {
         let mtime: Date

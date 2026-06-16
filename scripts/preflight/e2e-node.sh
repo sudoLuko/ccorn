@@ -9,7 +9,7 @@
 #
 # The hermetic app instance spawns windows whose shell is controlled via a
 # throwaway ZDOTDIR (injected through tmux session env): PATH contains the
-# npm shim and node, NOT ~/.local/bin — so `claude` can only resolve to the
+# npm shim and node, NOT ~/.local/bin; so `claude` can only resolve to the
 # node-wrapped install. The user's shell config and native install are never
 # touched.
 set -euo pipefail
@@ -70,7 +70,7 @@ assert_row_state "$PROJ" running 60 "node-wrapped session reaches Running"
 sleep 11
 assert_row_state "$PROJ" running 10 "still Running past the spawn grace (matcher held)"
 
-# Record the actual process shape we matched — the evidence the
+# Record the actual process shape we matched, the evidence the
 # node-wrapped caveat needs.
 CLAUDE_PID=$(cmd pids | tr ' ' '\n' | awk -F= -v w="$WIN" '$1 == w {print $2}')
 if [[ -n "$CLAUDE_PID" && "$CLAUDE_PID" != "-" ]]; then

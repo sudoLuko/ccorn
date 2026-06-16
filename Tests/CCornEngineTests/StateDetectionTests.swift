@@ -26,7 +26,7 @@ struct StubPanes: PaneSource {
                               staleThreshold: 600, now: now ?? t0).state
     }
 
-    // MARK: Working — live activity only
+    // MARK: Working: live activity only
 
     /// True mid-task frame: live spinner/status line plus the `esc to interrupt`
     /// hint -> Working. (2.1.169/2.1.170 render `·✢✳✶✻✽` status glyphs, not the
@@ -42,7 +42,7 @@ struct StubPanes: PaneSource {
     /// THE 3a regression: finished-but-idle frames keep `Bash(` tool markers and
     /// `✻ <verb>ed for Ns` glyph lines on screen after the turn ends, so a
     /// marker-based classifier would read them as Working forever. They must be
-    /// Running — both on first observation and once the hash has settled.
+    /// Running, both on first observation and once the hash has settled.
     @Test(arguments: ["idle-finished.txt", "idle-finished-2170.txt"])
     func finishedButIdleIsNotWorking(fixture: String) {
         let pane = Fixtures.paneText(fixture)
@@ -76,7 +76,7 @@ struct StubPanes: PaneSource {
 
     /// THE settle-cycle removal: when the previous poll showed live activity and
     /// this one doesn't, the turn just finished and the pane change is only the
-    /// final render settling — so it flips to Running on THIS poll, not one
+    /// final render settling, so it flips to Running on THIS poll, not one
     /// later. Same captured idle frame, same pane change; only the
     /// previous-marker flag differs.
     @Test func markerFallingEdgeFlipsToRunningImmediately() {
@@ -151,7 +151,7 @@ struct StubPanes: PaneSource {
     }
 
     /// A confirmation prompt that just rendered (pane changed) is Waiting
-    /// immediately — the prompt outranks the pane-changed Working signal.
+    /// immediately; the prompt outranks the pane-changed Working signal.
     @Test func freshlyRenderedPromptIsWaitingNotWorking() {
         let pane = Fixtures.paneText("waiting-permission.txt")
         let state = detector.classifyPane(pane: pane,
@@ -168,7 +168,7 @@ struct StubPanes: PaneSource {
     /// "Approve this tool call?" that lingers in an idle scrollback frame must NOT
     /// flag needs-input; the same question carrying the real prompt chrome still must.
     @Test func waitingRequiresStructuralPrompt() {
-        // Prose only — the kind of assistant text that stays on screen when idle.
+        // Prose only, the kind of assistant text that stays on screen when idle.
         #expect(!detector.isWaiting(pane: "⏺ Do you want to rename a session to \"hello world\"?"))
         #expect(!detector.isWaiting(pane: "Do you want to proceed?"))
         #expect(!detector.isWaiting(pane: "Would you like me to continue?"))
@@ -200,7 +200,7 @@ struct StubPanes: PaneSource {
         #expect(classifyFresh(pane) == .running)
     }
 
-    // MARK: Waiting — the structural-marker contract
+    // MARK: Waiting: the structural-marker contract
 
     /// Every KEPT marker independently means Waiting, both as a raw signal and
     /// end to end through the classifier (embedded in an otherwise-idle frame so
@@ -212,7 +212,7 @@ struct StubPanes: PaneSource {
         #expect(classifyFresh(pane) == .waiting)
     }
 
-    /// Every DROPPED natural-language phrasing must NOT flag Waiting on its own —
+    /// Every DROPPED natural-language phrasing must NOT flag Waiting on its own;
     /// this is the regression that produced the false positive. Each is the exact
     /// prose the old `waitingPhrases`/`approve` rules matched.
     @Test(arguments: [
@@ -258,11 +258,11 @@ struct StubPanes: PaneSource {
         #expect(result.remoteControlActive)
     }
 
-    // MARK: Waiting — region scoping (Layer 2)
+    // MARK: Waiting: region scoping (Layer 2)
 
     /// REAL 2.1.173 tool-permission dialog captured live: `⏺ Bash(…)` / `⎿
     /// Waiting…` scrollback, then a rule, then `❯ 1. Yes / 2. … / 3. No` and
-    /// `Esc to cancel · Tab to amend` (note: NOT "Enter to confirm" — that is
+    /// `Esc to cancel · Tab to amend` (note: NOT "Enter to confirm", which is
     /// trust/login-only). It must classify Waiting via the picker chrome.
     @Test func toolPermissionDialog2173IsWaiting() {
         let pane = Fixtures.paneText("waiting-tool-permission-2173.txt")
@@ -271,7 +271,7 @@ struct StubPanes: PaneSource {
         #expect(classifyFresh(pane) == .waiting)
     }
 
-    /// REAL 2.1.173 plan-mode (ExitPlanMode) approval, captured live — a prompt
+    /// REAL 2.1.173 plan-mode (ExitPlanMode) approval, captured live: a prompt
     /// whose structure differs from the others and is the key false-negative
     /// guard. The plan BODY sits in a DASHED-rule (`╌`) box that `isRuleLine`
     /// ignores, and the `❯ 1. Yes…` picker sits below the last SOLID rule, so
@@ -290,7 +290,7 @@ struct StubPanes: PaneSource {
 
     /// REAL 2.1.173 Write-tool permission, captured live. The file-content diff
     /// sits in a dashed-rule box and the `❯ 1. Yes` picker is below the last solid
-    /// rule; both fall in the live region, which is correct — the prompt IS
+    /// rule; both fall in the live region, which is correct: the prompt IS
     /// blocking, and the verdict is Waiting because the picker is real (even with
     /// marker-like text inside the diff).
     @Test func writeFilePermission2173IsWaiting() {
@@ -302,7 +302,7 @@ struct StubPanes: PaneSource {
 
     /// A `/model` selection menu (captured live) is intentionally NOT needs-input:
     /// its cursor sits on the current model (`❯ 5. Opus`), not `❯ 1.`, and it
-    /// offers "Enter to set as default", not a confirm/Yes affordance — so no
+    /// offers "Enter to set as default", not a confirm/Yes affordance, so no
     /// waiting marker matches and it reads Running. Scope decision: CCorn flags
     /// Claude-blocked approval prompts (trust/permission/plan), not a user-opened
     /// settings menu. Pins that a bare numbered list does not mean Waiting.
@@ -319,7 +319,7 @@ struct StubPanes: PaneSource {
     /// is, because that chrome is in the scrollback, not the live region.
     @Test func markerInScrollbackAboveInputBoxIsNotWaiting() {
         let pane = Fixtures.paneText("idle-marker-in-scrollback-2173.txt")
-        // The chrome really is present in the frame — just not in the live region.
+        // The chrome really is present in the frame, just not in the live region.
         #expect(pane.contains("1. Yes"))
         #expect(pane.contains("(y/n)"))
         #expect(!detector.isWaiting(pane: pane))
@@ -327,7 +327,7 @@ struct StubPanes: PaneSource {
     }
 
     /// `livePromptRegion` keeps the bottom rule-delimited block and drops the
-    /// scrollback above it — the mechanism the cases above rely on.
+    /// scrollback above it, the mechanism the cases above rely on.
     @Test func livePromptRegionIsTheBottomRuleBlock() {
         let scrollbackChrome = Fixtures.paneText("idle-marker-in-scrollback-2173.txt")
         let region = StateDetector.livePromptRegion(scrollbackChrome)
@@ -339,7 +339,7 @@ struct StubPanes: PaneSource {
     }
 
     /// Fallback: with no rule line (a bare pane that a live TUI never produces)
-    /// there is no region to scope to, so detection scans the whole string —
+    /// there is no region to scope to, so detection scans the whole string;
     /// better a rare false positive than a missed prompt.
     @Test func noRuleStructureFallsBackToFullFrame() {
         let bare = "⏺ Ready.\n ❯ 1. Yes\n   2. No\n"
@@ -362,7 +362,7 @@ struct StubPanes: PaneSource {
     /// REAL 2.1.173 idle frame: the `Remote Control active` footer was removed
     /// at 2.1.172 and replaced with a `/rc active` chip (the old literal has
     /// zero occurrences in the 2.1.173 binary). The frame still classifies
-    /// Running, and remote-control-active now reads from the chip — the bug that
+    /// Running, and remote-control-active now reads from the chip, the bug that
     /// made every fresh 2.1.173 session false-alarm "No remote".
     @Test func idleRcActiveChip2173FixtureIsRunning() {
         let pane = Fixtures.paneText("running-rc-active-2173.txt")
@@ -375,7 +375,7 @@ struct StubPanes: PaneSource {
     /// The footer RC vocabulary, version-spanning: the pre-2.1.172 literal and
     /// the 2.1.172+ `active`/`connecting`/`reconnecting` chips all read as
     /// engaged (connecting/reconnecting are the bring-up/recovery handshake, not
-    /// failure); `/rc failed` and an absent chip read as not engaged — that is
+    /// failure); `/rc failed` and an absent chip read as not engaged, which is
     /// the no-remote case, decided from a positive failure signal, not a miss.
     @Test func remoteControlEngagedSpansVersionsAndTransients() {
         #expect(detector.showsRemoteControlEngaged(pane: "idle · Remote Control active"))
@@ -424,7 +424,7 @@ struct StubPanes: PaneSource {
     }
 
     /// The exited-window frame STILL contains stale `Bash(` / `Remote Control
-    /// active` markers. The classifier no longer mistakes it for Working — but
+    /// active` markers. The classifier no longer mistakes it for Working, but
     /// pane content alone still reads as a healthy Running session, which is
     /// exactly why Dead must be decided from PID liveness, never from the pane
     /// (runtime findings T2).
@@ -496,7 +496,7 @@ struct StubPanes: PaneSource {
         let shell = Process()
         shell.executableURL = URL(fileURLWithPath: "/bin/zsh")
         // The subshell execs sleep with argv[0] "claude", giving the parent zsh
-        // exactly one claude-looking child — the shape findClaude matches on.
+        // exactly one claude-looking child, the shape findClaude matches on.
         shell.arguments = ["-c", "(exec -a claude /bin/sleep 30) & wait"]
         try shell.run()
         defer { shell.terminate() }
@@ -556,7 +556,7 @@ struct StubPanes: PaneSource {
         #expect(!beforeBridge)
 
         // Append the bridge record but present the OLD mtime: the cached negative
-        // must come back untouched — the file is not re-read.
+        // must come back untouched; the file is not re-read.
         let bridged = #"{"type":"mode","sessionId":"x"}"# + "\n"
             + #"{"type":"bridge-session","sessionId":"x","bridgeSessionId":"b"}"#
         try bridged.write(toFile: path, atomically: true, encoding: .utf8)
@@ -567,7 +567,7 @@ struct StubPanes: PaneSource {
         let freshMtime = cache.hasBridgeSession(path: path, mtime: t2)
         #expect(freshMtime)
 
-        // Positive answers are sticky — even if the file disappears.
+        // Positive answers are sticky, even if the file disappears.
         try FileManager.default.removeItem(atPath: path)
         let afterDelete = cache.hasBridgeSession(path: path, mtime: t2)
         #expect(afterDelete)
@@ -575,7 +575,7 @@ struct StubPanes: PaneSource {
 
     /// The version-independent positive: with no RC footer and no transcript
     /// bridge record, a live bridge handle in the process's session registry
-    /// still resolves remote-control-active — and its absence (all three signals
+    /// still resolves remote-control-active, and its absence (all three signals
     /// missing) leaves RC inactive, never asserted from a single miss. The
     /// registry read is injected so the test never touches `~/.claude`.
     @Test func detectUsesRegistryBridgeWhenFooterAndTranscriptAbsent() {

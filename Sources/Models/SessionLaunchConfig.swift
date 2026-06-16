@@ -7,20 +7,20 @@ import Foundation
 ///  - `standard`/`plan`/`acceptEdits`/`auto` → `--permission-mode <raw>`
 ///  - `allowBypass` → `--allow-dangerously-skip-permissions` (arms bypass as an
 ///    in-session option the user can cycle into via Shift+Tab; does NOT start in
-///    it — the start-safe path that also sidesteps the root refusal below)
+///    it; the start-safe path that also sidesteps the root refusal below)
 ///  - `bypass` → `--dangerously-skip-permissions` (active from launch; refuses
 ///    to run as root/sudo)
 ///
 /// `auto` is the safe-but-autonomous default: a classifier auto-approves routine
 /// work (edits, reads, safe commands) but blocks dangerous escalations (mass
 /// deletes, force-push, prod deploys). It is launch-only and, like every flag
-/// here, does NOT persist across `--resume` — a restart must re-apply it.
+/// here, does NOT persist across `--resume`; a restart must re-apply it.
 ///
 /// rawValue strings are the persistence keys (stable across builds); the
 /// non-bypass cases' rawValues double as the CLI `--permission-mode` argument,
 /// so they must match the CLI's spelling exactly.
 enum CCPermissionMode: String, Codable, CaseIterable {
-    case standard      // claude's implicit default — no flag emitted
+    case standard      // claude's implicit default, no flag emitted
     case plan
     case acceptEdits
     case auto
@@ -51,7 +51,7 @@ enum CCPermissionMode: String, Codable, CaseIterable {
         }
     }
 
-    /// The two cases that arm or activate bypass — the ones the root guard and
+    /// The two cases that arm or activate bypass: the ones the root guard and
     /// the bypass marker care about.
     var involvesBypass: Bool {
         self == .allowBypass || self == .bypass
@@ -60,7 +60,7 @@ enum CCPermissionMode: String, Codable, CaseIterable {
     /// Modes the UI should offer. Under root/sudo the bypass modes are dropped:
     /// `--dangerously-skip-permissions` refuses to run as root, and an armed
     /// bypass (`allowBypass`) cannot escalate there either, so neither can reach
-    /// active bypass — offering them would only produce a launch that fails.
+    /// active bypass; offering them would only produce a launch that fails.
     static func selectable(isRoot: Bool) -> [CCPermissionMode] {
         isRoot ? allCases.filter { !$0.involvesBypass } : allCases
     }
@@ -68,7 +68,7 @@ enum CCPermissionMode: String, Codable, CaseIterable {
 
 /// Process-environment facts the launch UI needs.
 enum LaunchEnvironment {
-    /// True when CCorn itself is running as root (uid 0) — almost never the case
+    /// True when CCorn itself is running as root (uid 0), almost never the case
     /// for a GUI app, but if it is, bypass cannot work (the CLI refuses it).
     static var isRoot: Bool { getuid() == 0 }
 }
@@ -93,7 +93,7 @@ struct SessionLaunchConfig: Codable, Equatable {
     var extraArgs: [String]
     /// Launch with remote control (`--rc`): the session syncs to claude.ai and
     /// the phone, gets a per-session browser URL, and shows `Remote Control
-    /// active`. `false` launches a **local** session — no `--rc`, no remote or
+    /// active`. `false` launches a **local** session: no `--rc`, no remote or
     /// phone access, no per-session URL. Unlike `--rc`, this choice is NOT
     /// emitted by `claudeFlagTokens()`: `--rc` is positional (it carries the
     /// title on a new session and sits after `--resume` on a restart), so the
@@ -116,7 +116,7 @@ struct SessionLaunchConfig: Codable, Equatable {
     static let safeDefault = SessionLaunchConfig(permissionMode: .auto)
 
     /// Field-by-field defaults (the CCornSettings/SessionRecord rule): a config
-    /// written by an older build — or one missing a field — decodes cleanly
+    /// written by an older build (or one missing a field) decodes cleanly
     /// instead of failing the whole parent record/settings decode.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -129,12 +129,12 @@ struct SessionLaunchConfig: Codable, Equatable {
     }
 
     /// The ordered argv tokens this config contributes after `claude` (and after
-    /// `--rc`/`--resume`). RAW tokens — the engine shell-quotes each one before
+    /// `--rc`/`--resume`). RAW tokens; the engine shell-quotes each one before
     /// typing it into the pane shell.
     ///
     /// The two hard CLI rules are enforced *by construction* here:
     ///  1. `--dangerously-skip-permissions` is emitted ONLY by the `.bypass`
-    ///     arm, which emits no `--permission-mode` — they can never co-occur (the
+    ///     arm, which emits no `--permission-mode`; they can never co-occur (the
     ///     dangerous flag overrides the mode, and mixing is invalid).
     ///  2. `.standard` emits nothing (claude's implicit default), so a "default"
     ///     session carries no permission flag at all.

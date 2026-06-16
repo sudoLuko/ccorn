@@ -1,20 +1,20 @@
 #!/bin/bash
-# e2e-name-collision.sh — regression guard for the new-session failure that hits
+# e2e-name-collision.sh, regression guard for the new-session failure that hits
 # when a managed window is named the same as the tmux session (a project whose
 # basename == the session name, e.g. CCorn run on its own "ccorn" repo).
 #
 # Two defenses, both pinned here:
-#   1. Naming — uniqueWindowName never names a window identically to the session,
+#   1. Naming: uniqueWindowName never names a window identically to the session,
 #      so the hazard is avoided at creation. Checked by opening a project whose
 #      basename == the session and asserting its window was renamed (e.g.
 #      "ccollide-2"), with the displayed session unaffected.
-#   2. Targeting — windows are created with `tmux new-window -t <session>:`
+#   2. Targeting: windows are created with `tmux new-window -t <session>:`
 #      (not bare `-t <session>`), so even a window named exactly like the session
 #      cannot capture the target. Checked by FORCING that hazard (rename a window
 #      to the session name) and asserting a further new session still starts;
 #      bare targeting would fail "create window failed: index N in use".
 #
-# Hermetic, real signed-in account — same isolation as the other e2e scripts.
+# Hermetic, real signed-in account, same isolation as the other e2e scripts.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -30,7 +30,7 @@ source scripts/preflight/e2e-lib.sh
 
 mkdir -p "$E2E"
 if [[ ! -x "$APP_BIN" ]]; then
-    log "no debug build at $APP_BIN — building Debug…"
+    log "no debug build at $APP_BIN, building Debug…"
     [[ -d CCorn.xcodeproj ]] || xcodegen generate
     if ! xcodebuild -project CCorn.xcodeproj -scheme CCorn -configuration Debug \
         -derivedDataPath build build > "$E2E/build.log" 2>&1; then
@@ -56,7 +56,7 @@ n1=$(TMUX display-message -p -t "$w1" '#{window_name}' 2>/dev/null || echo '?')
 if [[ -n "$w1" && "$n1" != "$SESSION" ]]; then
     pass "window born as '$n1', not the session name '$SESSION' (naming guard)"
 else
-    fail "window named identically to the session ('$n1') — uniqueWindowName guard missing"
+    fail "window named identically to the session ('$n1'); uniqueWindowName guard missing"
 fi
 
 # --- Defense 2 (targeting): force the hazard, then a new session must still start
