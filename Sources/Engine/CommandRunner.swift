@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Result of running an external command.
 struct CommandResult {
@@ -37,6 +38,20 @@ final class CommandRunner: @unchecked Sendable {
         "\(NSHomeDirectory())/.local/bin",
         "/usr/bin", "/bin", "/usr/sbin", "/sbin",
     ]
+
+    /// Shared concurrent queue for the per-call pipe drains: one queue for the
+    /// whole app instead of allocating a fresh concurrent queue on every `run`.
+    /// Each drain writes only to its own call-local buffer, so concurrent calls
+    /// never cross-talk.
+    private static let ioQueue = DispatchQueue(label: "studio.ccorn.commandrunner.io",
+                                               attributes: .concurrent)
+
+    /// Safety bound for the event-driven wait in `run`. Every real caller (tmux,
+    /// ps, lsof, pgrep, osascript, `which`, the login-shell PATH probe) returns
+    /// in well under a second; this only fires on a child that never exits, so
+    /// the wait cannot block the caller forever the way the old `waitUntilExit()`
+    /// could. Override per call (tests pass a short value to exercise the bound).
+    static let defaultTimeout: TimeInterval = 30
 
     /// The resolved PATH used for all spawned commands. Computed once and cached.
     var resolvedPath: String {
@@ -77,8 +92,17 @@ final class CommandRunner: @unchecked Sendable {
 
     /// Run `binary args...` with the resolved PATH. Arguments are passed as an
     /// array, never interpolated into a shell string.
+    ///
+    /// The wait is event-driven: a `terminationHandler` (the kernel signals the
+    /// exit, no polling) and the two EOF-blocking pipe drains all `leave` one
+    /// `DispatchGroup`, so the call returns the instant the process has exited
+    /// AND both pipes are fully drained, with no fixed poll latency. The old
+    /// `proc.waitUntilExit()` added ~60ms per call regardless of how fast the
+    /// command ran (it polls); this brings a trivial command down to a few ms.
+    /// The public result (stdout, stderr, exit status) is unchanged.
     @discardableResult
-    func run(_ binary: String, _ args: [String] = [], cwd: String? = nil) -> CommandResult {
+    func run(_ binary: String, _ args: [String] = [], cwd: String? = nil,
+             timeout: TimeInterval = CommandRunner.defaultTimeout) -> CommandResult {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         proc.arguments = [binary] + args
@@ -92,32 +116,54 @@ final class CommandRunner: @unchecked Sendable {
         proc.standardOutput = outPipe
         proc.standardError = errPipe
 
-        // Drain pipes on background queues so a command producing more output
-        // than the pipe buffer can hold never deadlocks against waitUntilExit().
+        // One group gates the return on three independent completions: the
+        // process exit (terminationHandler) plus both pipe drains reaching EOF.
+        // The drains run on a background queue concurrently with the process, so
+        // a child writing more than the ~64KB pipe buffer never blocks against
+        // the wait, and we never return before its output has been read in full.
         var outData = Data()
         var errData = Data()
         let group = DispatchGroup()
-        let ioQueue = DispatchQueue(label: "studio.ccorn.commandrunner.io", attributes: .concurrent)
+
+        // terminationHandler must be armed before run(): a process that exits
+        // immediately could otherwise fire before the handler is registered and
+        // the group would never balance. It is event-driven, so no poll latency.
+        group.enter()
+        proc.terminationHandler = { _ in group.leave() }
 
         do {
             try proc.run()
         } catch {
+            // The process never started, so the handler will not fire and the
+            // pipes will never EOF: balance the termination enter, leave the
+            // drains undispatched, and return the launch failure (still 127).
+            group.leave()
             return CommandResult(stdout: "", stderr: "failed to launch \(binary): \(error)", exitCode: 127)
         }
 
         group.enter()
-        ioQueue.async {
+        Self.ioQueue.async {
             outData = outPipe.fileHandleForReading.readDataToEndOfFile()
             group.leave()
         }
         group.enter()
-        ioQueue.async {
+        Self.ioQueue.async {
             errData = errPipe.fileHandleForReading.readDataToEndOfFile()
             group.leave()
         }
 
-        proc.waitUntilExit()
-        group.wait()
+        // Bound the wait so a child that never exits (and so never EOFs its
+        // pipes) cannot hang the caller forever, as `waitUntilExit()` could.
+        // SIGTERM first, then SIGKILL if it is ignored; either closes the write
+        // ends, which EOFs the drains and fires the handler, so the group always
+        // balances afterwards and we still return whatever output was captured.
+        if group.wait(timeout: .now() + timeout) == .timedOut {
+            kill(proc.processIdentifier, SIGTERM)
+            if group.wait(timeout: .now() + 2) == .timedOut {
+                kill(proc.processIdentifier, SIGKILL)
+                group.wait()
+            }
+        }
 
         return CommandResult(
             stdout: String(decoding: outData, as: UTF8.self),
