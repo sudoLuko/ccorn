@@ -83,8 +83,8 @@ import Testing
     }
 
     @Test func darkAttentionWordClearsAAOnDarkBackgrounds() {
-        // Dark-appearance popover background (#09090B).
-        #expect(contrast(StatusPalette.attentionDarkHex, 0x09090B) >= 4.5)
+        // Dark-appearance popover background (#1E1E1E, matching the window).
+        #expect(contrast(StatusPalette.attentionDarkHex, 0x1E1E1E) >= 4.5)
         if let bg = resolvedHex(of: .windowBackgroundColor, appearance: .darkAqua) {
             #expect(contrast(StatusPalette.attentionDarkHex, bg) >= 4.5)
         }
@@ -94,7 +94,7 @@ import Testing
     /// (both faces clear it with room once AA passes, but pin it explicitly).
     @Test func attentionMarkClearsUIComponentContrast() {
         #expect(contrast(StatusPalette.attentionLightHex, 0xFAFAFA) >= 3.0)
-        #expect(contrast(StatusPalette.attentionDarkHex, 0x09090B) >= 3.0)
+        #expect(contrast(StatusPalette.attentionDarkHex, 0x1E1E1E) >= 3.0)
     }
 
     // MARK: Running green (adaptive faces, per-ground contrast)
@@ -118,7 +118,6 @@ import Testing
         #expect(contrast(StatusPalette.runningLightHex, 0xFFFFFF) >= 3.0)
         #expect(contrast(StatusPalette.runningLightHex, 0xFAFAFA) >= 3.0)
         #expect(contrast(StatusPalette.runningDarkHex, 0x1E1E1E) >= 3.0)
-        #expect(contrast(StatusPalette.runningDarkHex, 0x09090B) >= 3.0)
         if let bg = resolvedHex(of: .windowBackgroundColor, appearance: .darkAqua) {
             #expect(contrast(StatusPalette.runningDarkHex, bg) >= 3.0)
         }
@@ -168,9 +167,45 @@ import Testing
         #expect(contrast(StatusPalette.workingLightHex, 0xFFFFFF) >= 3.0)
         #expect(contrast(StatusPalette.workingLightHex, 0xFAFAFA) >= 3.0)
         #expect(contrast(StatusPalette.workingDarkHex, 0x1E1E1E) >= 3.0)
-        #expect(contrast(StatusPalette.workingDarkHex, 0x09090B) >= 3.0)
         if let bg = resolvedHex(of: .windowBackgroundColor, appearance: .darkAqua) {
             #expect(contrast(StatusPalette.workingDarkHex, bg) >= 3.0)
         }
+    }
+
+    // MARK: Popover dark ground and its lifted tokens
+
+    /// The popover dark background now matches the dashboard window
+    /// (`windowBackgroundColor`, #1E1E1E) so the two read as one surface. The
+    /// light face is unchanged (#FAFAFA). Pin both faces.
+    @Test func popoverBackgroundMatchesWindowOnDark() {
+        let bg = NSColor(PopoverPalette.background)
+        #expect(resolvedHex(of: bg, appearance: .darkAqua) == 0x1E1E1E)
+        #expect(resolvedHex(of: bg, appearance: .aqua) == 0xFAFAFA)
+        // It really is the window's ground on dark, not a near-black slab.
+        if let win = resolvedHex(of: .windowBackgroundColor, appearance: .darkAqua) {
+            #expect(resolvedHex(of: bg, appearance: .darkAqua) == win)
+        }
+    }
+
+    /// The two tokens re-derived against the lifted #1E1E1E ground must keep the
+    /// old relationship: hover is a subtle LIFT above the ground (never darker,
+    /// which would invert it into a recess), and the divider stays a quiet but
+    /// visible separator, lighter still than the hover and never collapsing into
+    /// the ground. This is the exact failure mode of a naive value keep, so pin
+    /// the ordering and a low contrast floor.
+    @Test func popoverHoverAndDividerStayLiftedOnDarkGround() {
+        guard
+            let bg = resolvedHex(of: NSColor(PopoverPalette.background), appearance: .darkAqua),
+            let hover = resolvedHex(of: NSColor(PopoverPalette.rowHover), appearance: .darkAqua),
+            let divider = resolvedHex(of: NSColor(PopoverPalette.divider), appearance: .darkAqua)
+        else { Issue.record("dark faces did not resolve"); return }
+
+        // Hover lifts above the ground (a gentle, even step, never a recess).
+        #expect(luminance(hover) > luminance(bg))
+        #expect(luminance(hover) - luminance(bg) >= 0.005)
+        // Divider is lighter still than the hover, and clears a low visibility
+        // floor against the ground so the 0.5px line never vanishes.
+        #expect(luminance(divider) > luminance(hover))
+        #expect(contrast(divider, bg) >= 1.3)
     }
 }

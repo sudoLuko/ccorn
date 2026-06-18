@@ -165,7 +165,7 @@ Native macOS utility. Invisible when done right. The app gets out of the way. St
 
 ### Color Palette: B1 Zinc Neutral
 
-System-following (light/dark adapts automatically) except the menu bar popover which is fixed dark.
+System-following (light/dark adapts automatically); the menu bar popover follows the app appearance too, and its dark face matches the dashboard window so the two read as one surface.
 
 **Light mode:**
 
@@ -191,12 +191,14 @@ Primary text:   #FAFAFA
 Primary action: #FAFAFA bg / #09090B text
 ```
 
-**Menu bar popover, fixed dark regardless of system:**
+**Menu bar popover, follows the app appearance (dark face below); its dark
+background matches the dashboard window's `windowBackgroundColor` so the two read
+as one surface:**
 
 ```
-Background:     #09090B
-Row hover:      #18181B
-Dividers:       #27272A
+Background:     #1E1E1E
+Row hover:      #2D2D2D
+Dividers:       #3C3C3C
 Primary text:   #FAFAFA
 Secondary text: #71717A
 ```
@@ -211,7 +213,7 @@ components, so each face must clear 3:1 on the backgrounds it renders over:
 ```
 Green:           #16A34A light / #22C55E dark   : running, healthy, remote control active;
                                                   same hue lifted a step on dark (and the
-                                                  fixed-dark popover) so the dot doesn't
+                                                  dark-appearance popover) so the dot doesn't
                                                   recede next to the bright dark-face amber;
                                                   green-500 is dark-face only (~2.3:1 on
                                                   white fails the 3:1 component floor)
@@ -246,7 +248,7 @@ Unmanaged:       #71717a                        : hollow dot ring, same in both 
 
 SF Pro Text throughout. SF Mono for directory paths only. Two weights only: regular (400) and medium (500). Never bold (700).
 
-Use SwiftUI semantic text styles, which respect Dynamic Type automatically. The point sizes annotated in the table below are nominal: on macOS the rendered sizes differ from iOS (e.g. `.subheadline` is ~11pt, `.caption`/`.caption2` ~10pt). Use the named style, not a hardcoded `.system(size:)`, so Dynamic Type still applies, and pick the style whose macOS size matches the intended hierarchy rather than forcing the listed pt. Use semantic SwiftUI colors wherever possible so dark mode is handled automatically. Never hardcode hex values for text colors in the main window; only use hardcoded hex in the menu bar popover which is fixed dark.
+Use SwiftUI semantic text styles, which respect Dynamic Type automatically. The point sizes annotated in the table below are nominal: on macOS the rendered sizes differ from iOS (e.g. `.subheadline` is ~11pt, `.caption`/`.caption2` ~10pt). Use the named style, not a hardcoded `.system(size:)`, so Dynamic Type still applies, and pick the style whose macOS size matches the intended hierarchy rather than forcing the listed pt. Use semantic SwiftUI colors wherever possible so dark mode is handled automatically. Never hardcode hex values for text colors in the main window; only use hardcoded hex in the menu bar popover, which carries its own appearance-paired palette.
 
 ```
 Column headers:     .caption2   11pt  regular   Color.secondary  uppercase via .textCase(.uppercase)
@@ -446,13 +448,13 @@ Sorted by last active, most recent first.
 
 ### 5.2 Menu Bar Popover
 
-Triggered by clicking the CCorn icon in the macOS menu bar. Fixed dark zinc regardless of system appearance.
+Triggered by clicking the CCorn icon in the macOS menu bar. Follows the app appearance; its dark face matches the dashboard window so the two read as one surface.
 
 **Container:**
 
 - Width: 280px
 - `NSPopover` anchored below menu bar icon
-- Background: `#09090B`
+- Background (dark face): `#1E1E1E`, matching the dashboard window
 - 12px padding all sides
 - Dismisses on click outside
 
@@ -460,7 +462,7 @@ Triggered by clicking the CCorn icon in the macOS menu bar. Fixed dark zinc rega
 
 - Corn glyph (`CornMark`, 18pt) far left, no wordmark; the popover is summoned from the menu-bar corn, so “CCorn” text would be redundant
 - Aggregate status mark far right: reflects the worst presentation across all sessions, severity order crashed > sign-in > no-remote > waiting > stale > working > running (waiting outranks stale because a waiting session is blocked on the user). A broken-tier worst renders the exclamation symbol colored by severity (amber recoverable, red terminal); otherwise the worst state's dot. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
-- 0.5px divider below, `#27272A`
+- 0.5px divider below, `#3C3C3C` (dark face)
 
 **Session list, triage layout:**
 
@@ -483,15 +485,15 @@ popover-local; the main window keeps its full recency-ordered list.
   the fixed slot left, 8px gap, session name `.subheadline` medium `#FAFAFA`,
   attention word after the name, last active `.caption` `#71717A` far right
 - Click anywhere on a session row → opens the session using the **click action** chosen in Settings (5.5): Terminal (default) attaches to its tmux window; a stopped session is restarted first and the fresh window opened in Terminal; browser opens claude.ai/code. Same handoff as the main-window double-click (flow 6.4).
-- Hover: `#18181B` background (rows and the disclosure row)
+- Hover: `#2D2D2D` background (dark face; rows and the disclosure row)
 - Size budget: width stays 280; the list region caps at 8 rows × 32px before
   scrolling. Attention rows + the collapsed disclosure fit unscrolled in the
   common case; expanding the calm list is what scrolls.
-- 0.5px dividers `#27272A`
+- 0.5px dividers `#3C3C3C` (dark face)
 
 **Footer (36px):**
 
-- 0.5px divider above, `#27272A`
+- 0.5px divider above, `#3C3C3C` (dark face)
 - `+ New Session`, left, `.caption` medium `#A1A1AA`
 - `Open CCorn`, right, `.caption` medium `#A1A1AA`
 
@@ -1094,7 +1096,7 @@ Process manager only; no chat interface.
 - 0.5px borders only; never 1px
 - No shadows, no gradients, no decorative elements
 - Status dots are the only color in the app
-- Menu bar popover is fixed dark (#09090B) regardless of system appearance
+- Menu bar popover follows the app appearance; its dark face (#1E1E1E) matches the dashboard window
 - Main window follows system appearance automatically via semantic colors
 
 ## Activation policy

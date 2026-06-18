@@ -83,16 +83,20 @@ enum StatusPalette {
 }
 
 /// Menu-bar popover palette. The popover follows the app appearance (Settings ▸
-/// Appearance / the system), so these are appearance-paired hex. The DARK face is
-/// byte-identical to the old fixed-dark popover (so system-dark / forced-dark is
-/// unchanged); the LIGHT face mirrors each token across the same zinc scale, so
-/// the popover reads as a clean light menu when the app is light. Light surfaces
-/// land on #FAFAFA, the ground `ThemeTokenTests` already pins the status faces
-/// against; `secondaryText` is zinc-500, legible on both, so it needs no pair.
+/// Appearance / the system), so these are appearance-paired hex. The DARK face
+/// now matches `windowBackgroundColor` (#1E1E1E) so the popover and the dashboard
+/// window read as one surface; the LIGHT face mirrors each token across the same
+/// zinc scale, so the popover reads as a clean light menu when the app is light.
+/// Light surfaces land on #FAFAFA, the ground `ThemeTokenTests` already pins the
+/// status faces against; `secondaryText` is zinc-500, legible on both, so it
+/// needs no pair. The dark `rowHover` (+15/channel above the ground) and
+/// `divider` (+30/channel) were re-derived against the lifted #1E1E1E ground to
+/// keep the old subtle-hover-lift / quiet-divider relationships (a naive keep of
+/// the old near-black values would invert the hover and vanish the divider).
 enum PopoverPalette {
-    static let background = Color(lightHex: 0xFAFAFA, darkHex: 0x09090B)
-    static let rowHover = Color(lightHex: 0xF4F4F5, darkHex: 0x18181B)
-    static let divider = Color(lightHex: 0xE4E4E7, darkHex: 0x27272A)
+    static let background = Color(lightHex: 0xFAFAFA, darkHex: 0x1E1E1E)
+    static let rowHover = Color(lightHex: 0xF4F4F5, darkHex: 0x2D2D2D)
+    static let divider = Color(lightHex: 0xE4E4E7, darkHex: 0x3C3C3C)
     static let primaryText = Color(lightHex: 0x18181B, darkHex: 0xFAFAFA)
     static let secondaryText = Color(hex: 0x71717A)
     static let footerText = Color(lightHex: 0x52525B, darkHex: 0xA1A1AA)
