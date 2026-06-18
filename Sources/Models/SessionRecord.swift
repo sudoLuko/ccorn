@@ -113,6 +113,12 @@ final class LiveSession: ObservableObject {
     /// like the notices above, so not published. nil until RC links (or the
     /// registry file lags). See `DetectionResult.bridgeSessionId`.
     var bridgeSessionId: String?
+    /// The last value written to this window's `@ccorn_status` tmux option (the
+    /// terminal status-bar content). Held so the sync can diff and skip windows
+    /// whose bar text is unchanged, keeping the per-tick tmux writes to only the
+    /// sessions that actually changed. Runtime-only, never published or
+    /// persisted. See `SessionEngine.syncStatusBars` / `StatusBarFormat`.
+    var lastPushedStatusBar: String?
 
     #if DEBUG
     /// Shakedown identity, captured at init (deinit is nonisolated, so it must

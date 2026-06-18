@@ -448,6 +448,10 @@ final class AppModel: ObservableObject {
         let now = Date()
 
         var adoptedIds = Set<String>()
+        // windowId -> the terminal status-bar content for each live session,
+        // built from the same resolved row fields the screens render, then
+        // handed to the engine to push (diffed) into each window's tmux option.
+        var statusBars: [String: String] = [:]
         for (windowId, live) in engine.liveSessions {
             let uuid = live.sessionUUID
             if !uuid.isEmpty { managedUUIDs.insert(uuid) }
@@ -464,7 +468,7 @@ final class AppModel: ObservableObject {
             // Prefer the transcript mtime (real Claude activity) over the pane
             // hash-change time; fall back for sessions with no transcript yet.
             let lastActive = transcriptIndex[uuid]?.modified ?? live.lastHashChange
-            built.append(SessionRow(
+            let row = SessionRow(
                 id: windowId,
                 kind: .managed(windowId: windowId),
                 title: Self.displayTitle(explicit: live.record.title,
@@ -488,8 +492,21 @@ final class AppModel: ObservableObject {
                 // bypass. allowBypass alone does NOT count; it only arms bypass.
                 isBypass: live.bypassActive
                     || live.record.launchConfig?.permissionMode == .bypass
-            ))
+            )
+            built.append(row)
+            // Terminal status bar for this session's tmux window, from the same
+            // resolved row fields so it can never disagree with the GUI.
+            statusBars[windowId] = StatusBarFormat.windowStatus(
+                title: row.title,
+                state: row.state,
+                permissionMode: live.record.launchConfig?.permissionMode,
+                isBypass: row.isBypass,
+                remoteControlRequested: row.remoteControlRequested,
+                remoteControlActive: row.remoteControlActive,
+                rcGraceExpired: row.rcGraceExpired,
+                idleSeconds: lastActive.map { now.timeIntervalSince($0) })
         }
+        engine.syncStatusBars(statusBars)
 
         // Discovered (unmanaged) surface, resolved session-granular: live
         // external sessions become individual UUID-keyed rows; fully-dormant

@@ -715,6 +715,27 @@ final class SessionEngine: ObservableObject {
         }
     }
 
+    /// Push the per-session terminal status bars. `desired` is windowId ->
+    /// rendered `@ccorn_status` content (built by the UI coordinator from the
+    /// same row data the screens use, so the bar and the GUI never drift). Only
+    /// windows whose content changed since the last push are written, diffed
+    /// against each `LiveSession.lastPushedStatusBar`; the changed set is sent
+    /// off-main in one batched tmux invocation. A no-op when nothing changed,
+    /// which is the common case on an idle tick.
+    func syncStatusBars(_ desired: [String: String]) {
+        var changes: [(windowId: String, value: String)] = []
+        for (windowId, value) in desired {
+            guard let live = liveSessions[windowId] else { continue }
+            if live.lastPushedStatusBar != value {
+                live.lastPushedStatusBar = value
+                changes.append((windowId, value))
+            }
+        }
+        guard !changes.isEmpty else { return }
+        let tmux = self.tmux
+        Task.detached { tmux.setWindowStatusBars(changes) }
+    }
+
     // MARK: - Launch reconciliation
 
     /// Rebuild live state from existing `ccorn` windows. Previous-run PIDs are
@@ -782,10 +803,13 @@ final class SessionEngine: ObservableObject {
 
                 // Adopted windows get the same name-pinning as windows we
                 // create: without it automatic-rename tracks the foreground
-                // process and a dead claude pane reads as "zsh". Only for
+                // process and a dead claude pane reads as "zsh". The sibling
+                // roster is hidden on adopted windows too, so a reconciled
+                // fleet shows the per-session bar, not the window list. Only for
                 // windows we actually adopt; a rejected bystander window
                 // keeps its tmux options untouched.
                 tmux.disableRenaming(windowId: window.windowId)
+                tmux.hideSiblingRoster(windowId: window.windowId)
 
                 let known = persisted.first { !uuid.isEmpty && $0.uuid == uuid }
                 // Title stays empty for unknown records, NEVER the live tmux

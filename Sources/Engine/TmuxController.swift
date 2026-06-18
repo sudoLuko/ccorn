@@ -103,6 +103,7 @@ struct TmuxController: Sendable {
         installCopyModeSelectBindings()
         installCopyModeExitBindings()
         installCopyModeBanner()
+        installStatusLine()
     }
 
     /// Rebind mouse-release in copy-mode so dragging to select text COPIES to the
@@ -224,6 +225,40 @@ struct TmuxController: Sendable {
         tmux(["set-hook", "-t", Self.sessionName, "pane-mode-changed", "refresh-client -S"])
     }
 
+    /// The `status-left` format every CCorn session uses: it expands each
+    /// window's `@ccorn_status` user option (set per window by
+    /// `setWindowStatusBars`). `#{@ccorn_status}` inserts the value verbatim and
+    /// the status drawer then interprets the `#[...]` styles inside it, so the
+    /// per-window content carries its own color. Plain `#{@ccorn_status}` (not
+    /// `#{T:…}`): the value must NOT be re-expanded as a format, or a `#` in a
+    /// session title would be read as a format introducer; titles are instead
+    /// escaped for the drawer in `StatusBarFormat`.
+    static let statusLeftFormat = "#{@ccorn_status}"
+
+    /// Install CCorn's per-session status line on the `ccorn` SESSION (and, via
+    /// `attachViewCommand`, on each view). These are session options, scoped to
+    /// CCorn's sessions and never touching the user's other tmux work, exactly
+    /// like `mouse` and the copy-mode `status-right`.
+    ///
+    /// The current session's own state takes the left, read from each window's
+    /// `@ccorn_status` option (`statusLeftFormat`). `status-left-length` is
+    /// raised because the default (10) would clip the content to nothing; the
+    /// terminal width still bounds what is drawn. `status-interval` is shortened
+    /// to 5s so every attached client (CCorn runs one per session) repaints its
+    /// bar within a few seconds even when it is not the client a
+    /// `refresh-client -S` targets; a status repaint is a local terminal redraw,
+    /// not a process spawn, so the shorter tick is cheap.
+    ///
+    /// The sibling roster is hidden separately, per window (`hideSiblingRoster`):
+    /// `window-status-current-format` is resolved from the window, not the
+    /// session, so a session-level blank is ignored for the current window.
+    private func installStatusLine() {
+        let s = Self.sessionName
+        tmux(["set-option", "-t", s, "status-left", Self.statusLeftFormat])
+        tmux(["set-option", "-t", s, "status-left-length", "200"])
+        tmux(["set-option", "-t", s, "status-interval", "5"])
+    }
+
     /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
     /// child session and skips ALL local session persistence: no pid
     /// registry, no conversation records, `--resume` refuses the session
@@ -261,6 +296,7 @@ struct TmuxController: Sendable {
         let id = r.trimmedOut
         guard !id.isEmpty else { return nil }
         disableRenaming(windowId: id)
+        hideSiblingRoster(windowId: id)
         // Durable marker: this window exists for a claude session, even if the
         // claude text later scrolls out of the visible pane frame.
         tmux(["set-option", "-w", "-t", id, "@ccorn_managed", "1"])
@@ -276,6 +312,21 @@ struct TmuxController: Sendable {
     func disableRenaming(windowId: String) {
         tmux(["set-option", "-w", "-t", windowId, "automatic-rename", "off"])
         tmux(["set-option", "-w", "-t", windowId, "allow-rename", "off"])
+    }
+
+    /// Blank this window's entry in the status-line window list, so a terminal
+    /// attached to one session does not see a roster of every sibling session
+    /// (the per-session bar lives in `status-left`; the list is just noise
+    /// here). Set as WINDOW options, not session options: tmux resolves
+    /// `window-status-current-format` from the window for the current window, so
+    /// a session-level blank is silently ignored and the default `0:name`
+    /// reappears (verified on tmux 3.6). Because window options are shared by
+    /// every session that lists the window, this one set also covers the grouped
+    /// `ccorn-view-*` sessions "Open in Terminal" attaches to. Applied to every
+    /// window CCorn creates and adopts, alongside `disableRenaming`.
+    func hideSiblingRoster(windowId: String) {
+        tmux(["set-option", "-w", "-t", windowId, "window-status-format", ""])
+        tmux(["set-option", "-w", "-t", windowId, "window-status-current-format", ""])
     }
 
     /// Send a command to a window's pane. The key is sent as a *separate* `Enter`
@@ -339,6 +390,30 @@ struct TmuxController: Sendable {
     /// option to the window.
     func setCcornId(windowId: String, uuid: String) {
         tmux(["set-option", "-w", "-t", windowId, "@ccorn_id", uuid])
+    }
+
+    // MARK: @ccorn_status (per-session bar content)
+
+    /// Write the per-window status-bar content into each changed window's
+    /// `@ccorn_status` option (read back by `statusLeftFormat`), then force one
+    /// status repaint so the change shows immediately on the focused client
+    /// rather than waiting for the next `status-interval` tick. The caller
+    /// passes only windows whose content changed (it diffs against
+    /// `LiveSession.lastPushedStatusBar`), so a steady fleet writes nothing.
+    ///
+    /// The whole batch is one tmux invocation: commands are separated by a
+    /// literal `;` argument, which works because `CommandRunner` execs tmux with
+    /// an argv array (no shell), so the `;` reaches tmux as a command separator
+    /// rather than being eaten by a shell.
+    func setWindowStatusBars(_ changes: [(windowId: String, value: String)]) {
+        guard !changes.isEmpty else { return }
+        var args: [String] = []
+        for (windowId, value) in changes {
+            if !args.isEmpty { args.append(";") }
+            args += ["set-option", "-w", "-t", windowId, StatusBarFormat.windowOption, value]
+        }
+        args += [";", "refresh-client", "-S"]
+        tmux(args)
     }
 
     // MARK: Enumeration / reconciliation
@@ -490,6 +565,16 @@ struct TmuxController: Sendable {
             + " ';' set-option -t \(view) mouse \(mouseMode ? "on" : "off")"
             + " ';' set-option -t \(view) status-right '\(Self.copyModeStatusRight)'"
             + " ';' set-hook -t \(view) pane-mode-changed 'refresh-client -S'"
+            // CCorn's per-session bar (installStatusLine): set on the view for
+            // the same reason as status-right above, since a view carries its
+            // own session options and the user attaches to the view. status-left
+            // resolves the window's @ccorn_status; single-quoted because it holds
+            // `#{}` the shell must not touch. The sibling roster is blanked by
+            // per-window options (hideSiblingRoster) the view inherits through
+            // the shared windows, so nothing window-list-related is set here.
+            + " ';' set-option -t \(view) status-left '\(Self.statusLeftFormat)'"
+            + " ';' set-option -t \(view) status-left-length 200"
+            + " ';' set-option -t \(view) status-interval 5"
             + " ';' select-window -t '\(view):\(windowId)'"
     }
 

@@ -84,6 +84,9 @@ targets:
       - path: Sources/Models/Discovery.swift
       - path: Sources/Models/CCornSettings.swift
       - path: Sources/Models/SessionLaunchConfig.swift
+      # The pure terminal status-bar formatter, pinned by StatusBarFormatTests;
+      # needs only SessionState + SessionLaunchConfig (CCPermissionMode), above.
+      - path: Sources/Models/StatusBarFormat.swift
       # The row model rides along for SessionRow.openAction (the row-click
       # routing decision); it needs only SessionState + Theme + CCornSettings,
       # all above. The rest of the UI layer stays out of the test target.
