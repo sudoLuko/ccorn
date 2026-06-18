@@ -290,7 +290,7 @@ final class SessionEngine: ObservableObject {
         for _ in 0..<25 {
             try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
             guard let shellPID = tmux.panePID(windowId: windowId) else { continue }
-            if let claudePID = ProcessControl.findClaude(belowShell: shellPID) {
+            if case .found(let claudePID) = ProcessControl.findClaude(belowShell: shellPID) {
                 return .started(windowId: windowId, pid: claudePID)
             }
         }
@@ -756,8 +756,12 @@ final class SessionEngine: ObservableObject {
                 var uuid = window.ccornId ?? ""
                 var claudePID: Int32?
                 var registryCwd: String?
-                if let shellPID = window.panePID {
-                    claudePID = ProcessControl.findClaude(belowShell: shellPID)
+                // Seed the pid only on a determined .found; .absent/.unknown
+                // leave it nil and let detect() re-derive (where the
+                // determined-absent-vs-unknown distinction decides Dead vs hold).
+                if let shellPID = window.panePID,
+                   case .found(let pid) = ProcessControl.findClaude(belowShell: shellPID) {
+                    claudePID = pid
                 }
                 if uuid.isEmpty, let pid = claudePID,
                    let info = ClaudeSessionRegistry.info(forPid: pid) {

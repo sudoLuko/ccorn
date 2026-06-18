@@ -218,13 +218,35 @@ struct TmuxController: Sendable {
         tmux(["rename-window", "-t", windowId, name])
     }
 
-    /// The pane's shell pid, the parent under which the `claude` child lives.
-    func panePID(windowId: String) -> Int32? {
-        let r = tmux(["list-panes", "-t", windowId, "-F", "#{pane_pid}"])
-        return r.stdout
+    /// The pane's shell pid (the parent under which the `claude` child lives),
+    /// distinguishing a determined answer from a tmux that could not answer.
+    /// `list-panes` exits 0 with `#{pane_pid}` when the window exists; ANY
+    /// non-zero exit (no server running, a killed window, a 127 launch failure,
+    /// or a `CommandRunner` timeout kill) means tmux could not tell us, so the
+    /// result is `.unknown` rather than a false "no shell". `StateDetector` must
+    /// never read `.unknown` as a crashed session. Pure classifier split out so
+    /// the exit-code contract is unit-tested without a tmux server.
+    static func panePIDProbe(from r: CommandResult) -> PanePIDProbe {
+        guard r.ok else { return .unknown }
+        if let pid = r.stdout
             .split(whereSeparator: { $0 == "\n" })
             .first
-            .flatMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+            .flatMap({ Int32($0.trimmingCharacters(in: .whitespaces)) }) {
+            return .pid(pid)
+        }
+        return .unknown                          // succeeded but no pid: treat as undetermined
+    }
+
+    func panePIDProbe(windowId: String) -> PanePIDProbe {
+        Self.panePIDProbe(from: tmux(["list-panes", "-t", windowId, "-F", "#{pane_pid}"]))
+    }
+
+    /// The pane's shell pid, or nil when it can't be read. Convenience over
+    /// `panePIDProbe` for callers that retry on nil regardless of why (the spawn
+    /// watch); detection uses `panePIDProbe` to tell a tool failure from absence.
+    func panePID(windowId: String) -> Int32? {
+        if case .pid(let pid) = panePIDProbe(windowId: windowId) { return pid }
+        return nil
     }
 
     // MARK: @ccorn_id tag

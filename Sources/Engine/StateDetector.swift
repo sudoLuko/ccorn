@@ -1,12 +1,23 @@
 import Foundation
 import CryptoKit
 
+/// A pane-pid lookup either ANSWERS with the shell pid or FAILS TO ANSWER (the
+/// tmux query could not run: no server, a killed window, a 127 launch failure,
+/// or a timeout kill). The latter is `.unknown`: detection must not read it as
+/// "no shell" and flip the session to crashed; it holds non-dead and lets the
+/// next poll retry. (A genuine claude crash leaves the pane SHELL alive, so it
+/// surfaces as `.pid` + a determined-empty `pgrep`, never as a tmux `.unknown`.)
+enum PanePIDProbe: Sendable, Equatable {
+    case pid(Int32)
+    case unknown
+}
+
 /// The two tmux reads a detection pass needs. `TmuxController` is the live
 /// implementation; tests substitute a stub so the classifier and the
 /// dead/grace/re-derive logic run against captured fixtures without a tmux server.
 protocol PaneSource: Sendable {
     func capturePane(windowId: String) -> String
-    func panePID(windowId: String) -> Int32?
+    func panePIDProbe(windowId: String) -> PanePIDProbe
 }
 
 extension TmuxController: PaneSource {}
@@ -421,13 +432,32 @@ struct StateDetector: Sendable {
     /// re-derived from the pane's shell (claude may have just spawned, or been
     /// restarted manually in the window); only if no claude child exists, and the
     /// pane shell is older than the spawn grace window, is the session Dead.
+    ///
+    /// Crucially, Dead requires a DETERMINED absence: the tools (tmux for the
+    /// pane shell, `pgrep` for its children) actually answered "no process".
+    /// When a tool fails to answer (`PanePIDProbe.unknown` /
+    /// `ProcessControl.ClaudeScan.unknown` from a server hiccup, a fork/resource
+    /// exhaustion launch failure, or a timeout kill) liveness is UNDETERMINED,
+    /// and the pass holds the session non-dead (Running) and lets the next poll
+    /// re-derive, rather than concluding crashed. This is what stops a transient
+    /// global tool failure at launch reconcile from false-flipping every live
+    /// session to crashed (and auto-restart from then tearing them down). The
+    /// trade-off is bounded and self-correcting: a truly-dead session still
+    /// flips to Dead on the next poll once the tools answer.
+    ///
+    /// `claudeBelowShell` is an injection seam (default: the real
+    /// `ProcessControl.findClaude`), mirroring `bridgeForPid`, so the
+    /// determined-absent-vs-unknown branches are unit-tested without forcing a
+    /// real `pgrep` to fail.
     func detect(input: DetectionInput,
                 panes: PaneSource,
                 transcript: DiscoveredSession?,
                 staleThreshold: TimeInterval,
                 spawnGrace: TimeInterval = StateDetector.spawnGraceSeconds,
                 now: Date = Date(),
-                bridgeForPid: @Sendable (Int32) -> String? = StateDetector.registryBridge)
+                bridgeForPid: @Sendable (Int32) -> String? = StateDetector.registryBridge,
+                claudeBelowShell: @Sendable (Int32) -> ProcessControl.ClaudeScan
+                    = { ProcessControl.findClaude(belowShell: $0) })
                 -> DetectionResult {
 
         var result = DetectionResult(state: .stopped,
@@ -450,20 +480,37 @@ struct StateDetector: Sendable {
         if livePID == nil {
             // Re-derive: find the claude child of the pane's shell (argv/exec-path
             // match among the shell's descendants only, never a global scan).
-            if let shellPID = panes.panePID(windowId: windowId) {
-                livePID = ProcessControl.findClaude(belowShell: shellPID)
-                if livePID == nil,
-                   let shellStart = ProcessControl.startTime(pid: shellPID),
+            // Only a DETERMINED absence (the tools answered) may become Dead; a
+            // tool that could not answer holds the session non-dead for this poll.
+            guard case .pid(let shellPID) = panes.panePIDProbe(windowId: windowId) else {
+                // tmux could not give us the pane shell (no server, killed
+                // window, launch failure, timeout kill): UNDETERMINED, not Dead.
+                // Hold Running and let the next poll re-derive. (Previously this
+                // branch fell straight through to Dead, the launch-reconcile
+                // false-crash edge.)
+                result.state = .running
+                result.pid = nil
+                return result
+            }
+            switch claudeBelowShell(shellPID) {
+            case .found(let pid):
+                livePID = pid
+            case .unknown:
+                // pgrep could not enumerate the shell's descendants: liveness is
+                // UNDETERMINED, not Dead. Hold Running; the next poll retries.
+                result.state = .running
+                result.pid = nil
+                return result
+            case .absent:
+                // Determined: the shell is alive but has no claude child. Dead,
+                // unless the shell is younger than the spawn grace window (claude
+                // may still be spawning; node installs can take several seconds).
+                if let shellStart = ProcessControl.startTime(pid: shellPID),
                    now.timeIntervalSince(shellStart) < spawnGrace {
-                    // The window's shell only just started: claude is still
-                    // spawning, not dead. Report Running and let the next tick
-                    // (or grace expiry) settle it.
                     result.state = .running
                     result.pid = nil
                     return result
                 }
-            }
-            if livePID == nil {
                 result.state = .dead
                 result.pid = nil
                 return result

@@ -6,9 +6,22 @@ import Testing
 /// developer's own sessions).
 struct StubPanes: PaneSource {
     var pane: String = ""
-    var shellPID: Int32? = nil
+    /// What the tmux pane-pid lookup reports. `.pid(x)` models "tmux answered
+    /// with shell pid x"; `.unknown` models "tmux could not answer" (the
+    /// transient tool-failure case detection must NOT read as crashed).
+    var shellProbe: PanePIDProbe = .unknown
     func capturePane(windowId: String) -> String { pane }
-    func panePID(windowId: String) -> Int32? { shellPID }
+    func panePIDProbe(windowId: String) -> PanePIDProbe { shellProbe }
+}
+
+extension StubPanes {
+    /// Convenience mirroring the old initializer: a concrete shell pid models a
+    /// tmux that answered (`.pid`); `nil` now models a tmux that could NOT answer
+    /// (`.unknown`), which detection holds non-dead rather than flipping crashed.
+    init(pane: String = "", shellPID: Int32?) {
+        self.pane = pane
+        self.shellProbe = shellPID.map(PanePIDProbe.pid) ?? .unknown
+    }
 }
 
 /// State detection driven by REAL captured `tmux capture-pane` frames from live
@@ -435,12 +448,15 @@ struct StubPanes: PaneSource {
         #expect(classifyFresh(pane) == .running) // plausible-but-wrong without the PID check
     }
 
-    /// A tracked-but-dead pid, no claude child re-derivable, and no young pane
-    /// shell -> Dead, without reading the (misleading) pane. Remote control is
-    /// forced off.
+    /// A tracked-but-dead pid, with the pane shell present (tmux answered) but no
+    /// claude child re-derivable and no young pane shell -> Dead, without reading
+    /// the (misleading) pane. Remote control is forced off. The shell pid is a
+    /// reaped one so `pgrep` returns a DETERMINED empty (exit 1) and `startTime`
+    /// is nil (no grace): a genuine "the process is gone" answer.
     @Test func deadPidOverridesMisleadingPane() {
         let input = DetectionInput(windowId: "@1", pid: reapedPID())
-        let panes = StubPanes(pane: Fixtures.paneText("dead-exited.txt"), shellPID: nil)
+        let panes = StubPanes(pane: Fixtures.paneText("dead-exited.txt"),
+                              shellPID: reapedPID())
         let result = detector.detect(input: input, panes: panes, transcript: nil,
                                      staleThreshold: 600, now: t0)
         #expect(result.state == .dead)
@@ -505,8 +521,10 @@ struct StubPanes: PaneSource {
         var derived: Int32?
         for _ in 0..<20 {
             usleep(100_000)
-            derived = ProcessControl.findClaude(belowShell: shell.processIdentifier)
-            if derived != nil { break }
+            if case .found(let pid) = ProcessControl.findClaude(belowShell: shell.processIdentifier) {
+                derived = pid
+                break
+            }
         }
         let childPID = try #require(derived)
         defer { kill(childPID, SIGKILL) }

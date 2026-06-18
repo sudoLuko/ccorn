@@ -71,38 +71,93 @@ enum ProcessControl {
         return false
     }
 
-    /// Direct children of a pid (via `pgrep -P`).
-    static func childPIDs(of pid: Int32) -> [Int32] {
-        let r = CommandRunner.shared.run("/usr/bin/pgrep", ["-P", "\(pid)"])
-        return r.stdout
-            .split(whereSeparator: { $0 == "\n" })
+    /// A child-process scan either ANSWERS (the tool ran and reported its
+    /// result, even if that result is "no children") or FAILS TO ANSWER (the
+    /// tool could not be run or errored). Detection must treat `.unknown` as "we
+    /// could not tell", never as "no process": reading a transient `pgrep`
+    /// failure as a determined absence is what would false-flag a live session
+    /// crashed during launch reconcile.
+    enum ChildScan: Sendable, Equatable {
+        /// `pgrep` answered; the list may be empty (a determined "no children").
+        case children([Int32])
+        /// `pgrep` could not run / errored; child liveness is undetermined.
+        case unknown
+    }
+
+    /// Result of searching a shell's descendants for the `claude` process:
+    /// `.found` the pid, `.absent` (the tree was fully walked and there is
+    /// genuinely no claude), or `.unknown` (a `pgrep` call along the way failed
+    /// to answer, so absence cannot be concluded). The `.absent`/`.unknown`
+    /// split is what lets `StateDetector` flip to Dead only on a real "the
+    /// process is gone", never on a tool that didn't answer.
+    enum ClaudeScan: Sendable, Equatable {
+        case found(Int32)
+        case absent
+        case unknown
+    }
+
+    /// Map a `pgrep -P` result to a child scan, distinguishing a determined
+    /// answer from a tool failure. Exit 0 = matches; exit 1 = ran but found none
+    /// (a real, determined absence); ANY other code (127 launch failure from
+    /// `CommandRunner`, or a signal status when its timeout kills a hung pgrep)
+    /// means it could not answer -> `.unknown`. Pure, so the exit-code contract
+    /// is unit-tested without spawning pgrep.
+    static func childScan(from r: CommandResult) -> ChildScan {
+        switch r.exitCode {
+        case 0:  return .children(parsePIDs(r.stdout))
+        case 1:  return .children([])            // pgrep ran, no matches: determined
+        default: return .unknown                 // 127 / signal: could not answer
+        }
+    }
+
+    private static func parsePIDs(_ s: String) -> [Int32] {
+        s.split(whereSeparator: { $0 == "\n" })
             .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    /// Direct children of a pid (via `pgrep -P`), as a determined list or
+    /// `.unknown` when the tool could not answer (see `childScan`).
+    static func childPIDs(of pid: Int32) -> ChildScan {
+        childScan(from: CommandRunner.shared.run("/usr/bin/pgrep", ["-P", "\(pid)"]))
     }
 
     /// Find the `claude` process descending from a known shell pid (the tmux
     /// pane's shell). Searches direct children first, then recurses one level at
     /// a time, so an intermediate subshell doesn't hide it. Bounded by tree depth.
-    static func findClaude(belowShell shellPID: Int32, maxDepth: Int = 4) -> Int32? {
+    ///
+    /// Three-way so a transient tool failure is never read as a dead session: if
+    /// any `pgrep` call in the walk returns `.unknown`, an unfound claude is
+    /// reported `.unknown` (we could not enumerate part of the tree), NOT
+    /// `.absent`. A child that vanished between `pgrep` and the `processInfo`
+    /// read is a genuine exit, so it is simply skipped (still a determined
+    /// absence if nothing else matches) rather than poisoning the scan to unknown.
+    static func findClaude(belowShell shellPID: Int32, maxDepth: Int = 4) -> ClaudeScan {
         var frontier = [shellPID]
         var depth = 0
         var visited = Set<Int32>()
+        var sawUnknown = false
         while !frontier.isEmpty && depth <= maxDepth {
             var next: [Int32] = []
             for parent in frontier {
-                for child in childPIDs(of: parent) {
-                    if visited.contains(child) { continue }
-                    visited.insert(child)
-                    if let info = processInfo(pid: child),
-                       looksLikeClaude(execPath: info.execPath, argv: info.argv) {
-                        return child
+                switch childPIDs(of: parent) {
+                case .unknown:
+                    sawUnknown = true            // could not enumerate this subtree
+                case .children(let kids):
+                    for child in kids {
+                        if visited.contains(child) { continue }
+                        visited.insert(child)
+                        if let info = processInfo(pid: child),
+                           looksLikeClaude(execPath: info.execPath, argv: info.argv) {
+                            return .found(child)
+                        }
+                        next.append(child)
                     }
-                    next.append(child)
                 }
             }
             frontier = next
             depth += 1
         }
-        return nil
+        return sawUnknown ? .unknown : .absent
     }
 
     /// Liveness via `kill(pid, 0)`. EPERM means it exists but we lack permission
