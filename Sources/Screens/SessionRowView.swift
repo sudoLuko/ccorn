@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// One 36px session row. Exactly one status mark leads in a fixed-width slot
@@ -19,7 +20,7 @@ struct SessionRowView: View {
     @FocusState private var renameFocused: Bool
     @StateObject private var menuHost = RowMenuHost()
 
-    private var isSelected: Bool { model.selection == row.id }
+    private var isSelected: Bool { model.selectedIDs.contains(row.listID) }
     private var isRenaming: Bool { model.renamingRowId == row.id }
     /// Unmanaged and archived rows are secondary content: quieter title,
     /// regular weight, tertiary metadata.
@@ -49,13 +50,17 @@ struct SessionRowView: View {
             model.openSession(row)
         })
         .simultaneousGesture(TapGesture(count: 1).onEnded {
-            model.selection = row.id
+            // ⌘/⇧ are read live off NSEvent (TapGesture carries no modifiers):
+            // ⌘ toggles, ⇧ ranges, plain replaces. See AppModel.selectOnTap.
+            model.selectOnTap(row, modifiers: NSEvent.modifierFlags)
         })
         .overlay(
             RowRightClickCatcher(host: menuHost) {
                 SessionMenu.menu(for: row, model: model)
             } onRightClick: {
-                model.selection = row.id
+                // Right-clicking inside a multi-selection keeps it (so the menu
+                // acts on all); right-clicking elsewhere selects just this row.
+                if !model.selectedIDs.contains(row.listID) { model.selectOnly(row.listID) }
             }
             .allowsHitTesting(!isRenaming)
         )
@@ -179,7 +184,9 @@ struct SessionRowView: View {
 
     private var ellipsisButton: some View {
         Button {
-            model.selection = row.id
+            // Keep a multi-selection if this row is part of it (bulk menu);
+            // otherwise select just this row before its per-row menu.
+            if !model.selectedIDs.contains(row.listID) { model.selectOnly(row.listID) }
             menuHost.popMenu(SessionMenu.menu(for: row, model: model))
         } label: {
             Image(systemName: "ellipsis")

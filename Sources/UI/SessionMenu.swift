@@ -37,6 +37,12 @@ final class ActionMenuItem: NSMenuItem {
 @MainActor
 enum SessionMenu {
     static func menu(for row: SessionRow, model: AppModel) -> NSMenu {
+        // When more than one row is selected and this row is part of it, the menu
+        // acts on the whole selection, not just this row (5.7 multi-select).
+        if model.selectedIDs.count > 1, model.selectedIDs.contains(row.listID) {
+            return bulkMenu(model: model)
+        }
+
         let menu = NSMenu()
         menu.autoenablesItems = false
 
@@ -144,6 +150,45 @@ enum SessionMenu {
             menu.addItem(removeItem(for: row, model: model))
             menu.addItem(copyItem)
         }
+        return menu
+    }
+
+    /// Menu shown when more than one row is selected (5.7 multi-select): the
+    /// actions operate on the whole selection. Counts reflect the applicable
+    /// subset — Stop is live-only, Archive is live-or-stopped, Unarchive is
+    /// archived-only — while Remove always applies. Items whose subset is empty
+    /// are omitted.
+    private static func bulkMenu(model: AppModel) -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let selected = model.selectedRows()
+        let total = selected.count
+        let liveCount = selected.filter { $0.state.isAliveState }.count
+        let archivableCount = selected.filter { $0.kind != .unmanaged && !$0.archived }.count
+        let archivedCount = selected.filter { $0.archived }.count
+        func plural(_ n: Int) -> String { n == 1 ? "" : "s" }
+
+        if liveCount > 0 {
+            menu.addItem(ActionMenuItem(title: "Stop \(liveCount) Session\(plural(liveCount))") { [weak model] in
+                model?.stopSelected()
+            })
+        }
+        if archivableCount > 0 {
+            menu.addItem(ActionMenuItem(title: "Archive \(archivableCount) Session\(plural(archivableCount))") { [weak model] in
+                model?.archiveSelected()
+            })
+        }
+        if archivedCount > 0 {
+            menu.addItem(ActionMenuItem(title: "Unarchive \(archivedCount) Session\(plural(archivedCount))") { [weak model] in
+                model?.unarchiveSelected()
+            })
+        }
+        if menu.numberOfItems > 0 { menu.addItem(.separator()) }
+        menu.addItem(ActionMenuItem(
+            title: "Remove \(total) Session\(plural(total)) from CCorn",
+            destructive: true) { [weak model] in
+            model?.removeSelected()
+        })
         return menu
     }
 

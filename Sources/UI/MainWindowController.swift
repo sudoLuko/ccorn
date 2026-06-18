@@ -148,17 +148,43 @@ final class MainWindowController {
             // editor itself) so typing is never hijacked. Key events arrive on
             // the main thread, so touching the main-actor model here is safe.
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                // Skip while a text field is first responder (rename editor, ⌘F
+                // field) or mid-rename, so typing and field shortcuts are never
+                // hijacked. Key events arrive on the main thread, so touching the
+                // main-actor model here is safe.
                 guard let self, let window = self.window, let model = self.model,
                       event.window === window,
-                      event.keyCode == 36 || event.keyCode == 76,   // Return / numpad Enter
                       !(window.firstResponder is NSText),
-                      model.renamingRowId == nil,
-                      let id = model.selection,
-                      let row = (model.rows + model.archivedRows).first(where: { $0.id == id }),
-                      Self.isRenameable(row)
+                      model.renamingRowId == nil
                 else { return event }
-                model.beginRename(row)
-                return nil
+
+                // ⌘A: select every row in the current view.
+                if event.modifierFlags.contains(.command), event.keyCode == 0 {
+                    model.selectAllVisible()
+                    return nil
+                }
+                // Delete / Backspace: remove the selection from CCorn (the
+                // action runs its own confirm, with the count).
+                if event.keyCode == 51 || event.keyCode == 117, !model.selectedIDs.isEmpty {
+                    model.removeSelected()
+                    return nil
+                }
+                // Escape: clear a multi-selection. Single-selection / search keep
+                // Escape's normal meaning (this only fires for count > 1).
+                if event.keyCode == 53, model.selectedIDs.count > 1 {
+                    model.clearSelection()
+                    return nil
+                }
+                // Return / numpad Enter: rename the sole selected, renameable row.
+                if event.keyCode == 36 || event.keyCode == 76 {
+                    guard let id = model.soleSelection,
+                          let row = (model.rows + model.archivedRows).first(where: { $0.listID == id }),
+                          Self.isRenameable(row)
+                    else { return event }
+                    model.beginRename(row)
+                    return nil
+                }
+                return event
             }
         }
         // A freshly shown window opens un-searched: clear any stale ⌘F state

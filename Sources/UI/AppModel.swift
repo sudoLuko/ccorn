@@ -46,11 +46,28 @@ final class AppModel: ObservableObject {
     /// True once the first discovery pass has completed; gates the empty state
     /// ("watch directories have been scanned but no sessions found").
     @Published private(set) var hasScanned = false
-    /// Main-window list selection (row id).
-    @Published var selection: String?
+    /// Main-window list selection, keyed by row `listID` (the uuid-stable id,
+    /// not `id`) so a selected row survives its live->stopped transition. A set
+    /// for multi-select: ⌘-click toggles, ⇧-click ranges, ⌘A selects all; empty
+    /// when nothing is selected.
+    @Published var selectedIDs: Set<String> = []
+    /// Anchor for ⇧-click range selection: the last row clicked plain or with ⌘.
+    private var selectionAnchor: String?
+    /// Whether the user is actively building a multi-selection (⌘/⇧/⌘A). The
+    /// FIRST ⌘-click starts fresh — it treats the clicked row as member one
+    /// rather than absorbing a lingering single (plain-click) selection — and
+    /// only later ⌘-clicks toggle/add. False after a plain click or a clear.
+    private var isMultiSelecting = false
+    /// The sole selected row's listID, or nil when zero or many are selected;
+    /// the single-selection consumers (Return-to-rename) use this.
+    var soleSelection: String? { selectedIDs.count == 1 ? selectedIDs.first : nil }
     /// Sidebar navigation (All Sessions / Archived), model-owned so actions
-    /// (and verification) can switch views.
-    @Published var sidebarNav: SidebarNav = .allSessions
+    /// (and verification) can switch views. Switching view clears the selection:
+    /// the row set changes wholesale, and a carried-over selection would act on
+    /// rows the user can no longer see.
+    @Published var sidebarNav: SidebarNav = .allSessions {
+        didSet { if sidebarNav != oldValue { clearSelection() } }
+    }
     /// Main-window sidebar visibility, model-owned so the titlebar toggle,
     /// the View menu (⌘⌃S), and verification all drive the same state, and
     /// persisted so the choice survives relaunch. Recovery from a persisted
@@ -262,6 +279,98 @@ final class AppModel: ObservableObject {
     /// Sessions discovered on the system but not managed; ambient, secondary.
     var unmanagedRows: [SessionRow] {
         rows.filter { $0.kind == .unmanaged }
+    }
+
+    // MARK: - Selection (multi-select)
+
+    /// Rows shown in the current sidebar view, in display order, narrowed by the
+    /// ⌘F filter — the same set and order SessionListView renders. Drives range
+    /// (⇧-click) and select-all (⌘A) so they match exactly what is on screen.
+    func visibleRows() -> [SessionRow] {
+        let base: [SessionRow]
+        switch sidebarNav {
+        case .allSessions: base = managedRows + unmanagedRows
+        case .archived: base = archivedRows
+        case .group(let id): base = groupRows(id: id)
+        }
+        let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return base }
+        return base.filter { $0.title.localizedCaseInsensitiveContains(q) }
+    }
+
+    /// Route a click into the selection, honoring the modifier keys: ⌘ toggles
+    /// (or, on the first ⌘-click, starts fresh), ⇧ extends from the anchor
+    /// across the visible order, plain replaces the whole selection with this
+    /// one row.
+    func selectOnTap(_ row: SessionRow, modifiers: NSEvent.ModifierFlags) {
+        let listID = row.listID
+        if modifiers.contains(.command) {
+            if isMultiSelecting {
+                toggleSelected(listID)
+            } else {
+                // First ⌘-click: begin a new multi-selection with this row as
+                // member one, instead of absorbing a lingering single selection.
+                selectedIDs = [listID]
+                selectionAnchor = listID
+                isMultiSelecting = true
+            }
+        } else if modifiers.contains(.shift) {
+            extendSelection(to: listID)
+        } else {
+            selectOnly(listID)
+        }
+    }
+
+    func selectOnly(_ listID: String) {
+        selectedIDs = [listID]
+        selectionAnchor = listID
+        isMultiSelecting = false
+    }
+
+    func toggleSelected(_ listID: String) {
+        if selectedIDs.contains(listID) {
+            selectedIDs.remove(listID)
+        } else {
+            selectedIDs.insert(listID)
+        }
+        selectionAnchor = listID
+        isMultiSelecting = true
+    }
+
+    /// ⇧-click: select every row between the anchor and the clicked row in the
+    /// visible order (inclusive). The anchor stays put so a second ⇧-click
+    /// re-ranges from the same origin. Falls back to a plain select when there
+    /// is no resolvable anchor (e.g. first click was ⇧).
+    func extendSelection(to listID: String) {
+        let order = visibleRows().map(\.listID)
+        guard let anchor = selectionAnchor ?? selectedIDs.first,
+              let a = order.firstIndex(of: anchor),
+              let b = order.firstIndex(of: listID) else {
+            selectOnly(listID)
+            return
+        }
+        selectedIDs = Set(order[min(a, b)...max(a, b)])
+        isMultiSelecting = true
+    }
+
+    func selectAllVisible() {
+        let order = visibleRows().map(\.listID)
+        selectedIDs = Set(order)
+        selectionAnchor = order.first
+        isMultiSelecting = true
+    }
+
+    func clearSelection() {
+        selectedIDs = []
+        selectionAnchor = nil
+        isMultiSelecting = false
+    }
+
+    /// The selected rows in the current view, in display order. Snapshotted by
+    /// the bulk actions so the operation never depends on the selection
+    /// surviving the rebuilds it triggers.
+    func selectedRows() -> [SessionRow] {
+        visibleRows().filter { selectedIDs.contains($0.listID) }
     }
 
     var onboardingNeeded: Bool { !engine.settings.onboardingComplete }
@@ -724,11 +833,16 @@ final class AppModel: ObservableObject {
         // unchanged popover + main window for the lifetime of the app.
         if built != rows { rows = built }
         if archived != archivedRows { archivedRows = archived }
-        if let selection,
-           !built.contains(where: { $0.id == selection }),
-           !archived.contains(where: { $0.id == selection }) {
-            self.selection = nil
+        // Drop selection entries whose rows are gone (killed, removed, pruned),
+        // keyed by listID like the selection itself.
+        let liveListIDs = Set(built.map(\.listID)).union(archived.map(\.listID))
+        if !selectedIDs.isSubset(of: liveListIDs) {
+            selectedIDs.formIntersection(liveListIDs)
         }
+        if let anchor = selectionAnchor, !liveListIDs.contains(anchor) {
+            selectionAnchor = selectedIDs.first
+        }
+        if selectedIDs.isEmpty { isMultiSelecting = false }
         if let renamingRowId,
            !built.contains(where: { $0.id == renamingRowId }),
            !archived.contains(where: { $0.id == renamingRowId }) {
@@ -1240,6 +1354,107 @@ final class AppModel: ObservableObject {
         let windowId = row.windowId
         Task {
             await engine.removeFromCCorn(uuid: uuid, windowId: windowId)
+            await refreshAfterMutation()
+        }
+    }
+
+    // MARK: - Bulk actions (multi-select)
+
+    // Each bulk action snapshots its target rows up front (value copies) so the
+    // operation never depends on the selection surviving the rebuilds it
+    // triggers, confirms ONCE with the count, arms the same in-flight guards the
+    // single-row paths use (so no row jumps or flickers while the batch runs),
+    // and refreshes ONCE at the end instead of per session. A selection of one
+    // routes through the single-row path so its tailored wording still shows.
+
+    /// Remove every selected session from CCorn. `engine.removeFromCCorn`
+    /// already ignores each uuid before its kill, so none flashes to the top.
+    func removeSelected() {
+        let targets = selectedRows()
+        guard targets.count > 1 else {
+            if let only = targets.first { removeFromCCorn(only) }
+            return
+        }
+        let lead = targets.contains { $0.state.isAliveState }
+            ? "This stops the running ones and removes them from your list. "
+            : "This removes them from your list. "
+        guard Alerts.confirm(
+            title: "Remove \(targets.count) sessions from CCorn?",
+            message: lead + "Your conversations stay on disk and can be resumed anytime.",
+            action: "Remove \(targets.count)") else { return }
+        let work = targets.map { (uuid: $0.uuid, windowId: $0.windowId) }
+        clearSelection()
+        Task {
+            for item in work {
+                await engine.removeFromCCorn(uuid: item.uuid, windowId: item.windowId)
+            }
+            await refreshAfterMutation()
+        }
+    }
+
+    /// Stop every selected LIVE session (records/unmanaged are skipped).
+    func stopSelected() {
+        let targets = selectedRows().filter { $0.state.isAliveState && $0.windowId != nil }
+        guard targets.count > 1 else {
+            if let only = targets.first { stopSession(only) }
+            return
+        }
+        guard Alerts.confirm(
+            title: "Stop \(targets.count) sessions?",
+            message: "Each becomes a parked, restartable Stopped session. No work is lost.",
+            action: "Stop \(targets.count)") else { return }
+        let work = targets.compactMap { row -> (uuid: String, windowId: String)? in
+            guard let windowId = row.windowId else { return nil }
+            return (row.uuid, windowId)
+        }
+        for item in work where !item.uuid.isEmpty { stoppingUUIDs.insert(item.uuid) }
+        clearSelection()
+        Task {
+            defer { for item in work where !item.uuid.isEmpty { stoppingUUIDs.remove(item.uuid) } }
+            for item in work {
+                await engine.killSession(windowId: item.windowId)
+            }
+            await refreshAfterMutation()
+        }
+    }
+
+    /// Archive every selected session that can be archived (live or stopped,
+    /// not unmanaged, not already archived).
+    func archiveSelected() {
+        let targets = selectedRows().filter { $0.kind != .unmanaged && !$0.archived }
+        guard targets.count > 1 else {
+            if let only = targets.first { archiveSession(only) }
+            return
+        }
+        guard Alerts.confirm(
+            title: "Archive \(targets.count) sessions?",
+            message: "They move to Archived and stop if running. Restore them anytime.",
+            action: "Archive \(targets.count)") else { return }
+        let work = targets.map { (uuid: $0.uuid, windowId: $0.windowId) }
+        for item in work where !item.uuid.isEmpty { archivingUUIDs.insert(item.uuid) }
+        clearSelection()
+        Task {
+            defer { for item in work where !item.uuid.isEmpty { archivingUUIDs.remove(item.uuid) } }
+            for item in work {
+                await engine.archiveSession(uuid: item.uuid, windowId: item.windowId)
+            }
+            await refreshAfterMutation()
+        }
+    }
+
+    /// Unarchive every selected archived session (non-destructive, no confirm).
+    func unarchiveSelected() {
+        let targets = selectedRows().filter { $0.archived }
+        guard targets.count > 1 else {
+            if let only = targets.first { unarchiveSession(only) }
+            return
+        }
+        let work = targets.map(\.uuid)
+        clearSelection()
+        Task {
+            for uuid in work {
+                await engine.unarchiveSession(uuid: uuid)
+            }
             await refreshAfterMutation()
         }
     }
