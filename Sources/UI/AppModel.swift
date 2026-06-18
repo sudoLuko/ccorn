@@ -2,6 +2,34 @@ import AppKit
 import Combine
 import SwiftUI
 
+/// Window-appearance override the user picks in Settings ▸ Appearance: follow
+/// the system, or force the whole app light/dark. Mapped to the `NSAppearance`
+/// handed to `NSApp.appearance` (nil follows the system). `String`-backed so it
+/// persists in UserDefaults as a stable token; `CaseIterable` drives the picker.
+enum AppearanceMode: String, CaseIterable {
+    case system, light, dark
+
+    /// The override to assign to `NSApp.appearance`: nil follows the system, the
+    /// named appearances force light/dark. Mirrors the debug `appearance` command
+    /// (DebugCommandChannel) so scripted and user overrides resolve identically.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+
+    /// Picker label.
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+}
+
 /// UI-facing coordinator over the engine. Owns the 3s state poll, the
 /// FSEvents-driven discovery refresh, and the row models every screen renders.
 /// Milestone 3: also owns the full action surface (new session, stop,
@@ -31,6 +59,21 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(sidebarVisible, forKey: Self.sidebarVisibleKey) }
     }
     private static let sidebarVisibleKey = "sidebarVisible"
+
+    /// Window-appearance override (Settings ▸ Appearance): force the whole app
+    /// light or dark, or follow the system. Model-owned + persisted like
+    /// `sidebarVisible`, so the launch hook and the Settings picker drive one
+    /// source of truth and the choice survives relaunch. The `didSet` applies it
+    /// immediately via `NSApp.appearance` (see `applyAppearance`), which cascades
+    /// to every window EXCEPT the menu-bar popover, deliberately fixed dark
+    /// (PopoverPanel sets its own appearance).
+    @Published var appearanceMode: AppearanceMode {
+        didSet {
+            UserDefaults.standard.set(appearanceMode.rawValue, forKey: Self.appearanceModeKey)
+            applyAppearance()
+        }
+    }
+    private static let appearanceModeKey = "appearanceMode"
 
     /// Hidden-until-⌘F name filter (docs/CCORN_SPEC.md 5.1). `searchActive`
     /// swaps the title-bar corn for a focused search field; `searchQuery`
@@ -69,6 +112,17 @@ final class AppModel: ObservableObject {
     /// Archived. Cleared on every exit path (defer), so a failed or cancelled
     /// archive never strands the session invisible in both views.
     private var archivingUUIDs: Set<String> = []
+
+    /// UUIDs whose Stop is in flight. Like `archivingUUIDs`, this spans the gap
+    /// between the kill (the window leaving `liveSessions`) and the discovery
+    /// refresh that drops the dead process from the cached `liveUnmanaged`.
+    /// Without it, a poll/FSEvents rebuild in that gap still sees the just-killed
+    /// process as a live registry candidate but no longer as managed, so it
+    /// reclassifies the session as a live *unmanaged* row — a different list
+    /// section — and the row leaves the managed list and animates back in as
+    /// Stopped. Held, the session keeps rendering as its own Stopped record in
+    /// place. Cleared on every exit path (defer).
+    private var stoppingUUIDs: Set<String> = []
 
     /// User-defined groups (docs/CCORN_SPEC.md 5.11), mirrored from
     /// settings so the sidebar re-renders on every mutation. Definitions
@@ -150,6 +204,21 @@ final class AppModel: ObservableObject {
         self.groups = engine.settings.groups
         self.sidebarVisible =
             UserDefaults.standard.object(forKey: Self.sidebarVisibleKey) as? Bool ?? true
+        self.appearanceMode = AppearanceMode(
+            rawValue: UserDefaults.standard.string(forKey: Self.appearanceModeKey) ?? "")
+            ?? .system
+        // Not applied here: the initial assignment doesn't fire `didSet`, and
+        // NSApp isn't ready this early; AppDelegate calls `applyAppearance` once
+        // on launch.
+    }
+
+    /// Apply the persisted appearance override to the whole app. nil follows the
+    /// system; `.aqua`/`.darkAqua` force light/dark. The central place appearance
+    /// is applied: called once on launch (AppDelegate) and on every change (the
+    /// `appearanceMode` didSet). The fixed-dark popover overrides this for itself
+    /// (PopoverPanel.swift), so it stays dark under any forced mode.
+    func applyAppearance() {
+        NSApp.appearance = appearanceMode.nsAppearance
     }
 
     /// Toggle the main-window sidebar (titlebar button, View menu, ⌘⌃S).
@@ -430,6 +499,30 @@ final class AppModel: ObservableObject {
 
     // MARK: - Rows
 
+    /// Sort key for a Stopped/Archived record row. The list sorts by transcript
+    /// mtime, but `claude`'s shutdown write bumps that mtime when CCorn stops a
+    /// session, which would shoot the Stopped row to the top. Once a record
+    /// carries a pinned pre-shutdown `lastActivity`, keep using it; a genuine
+    /// later interaction (e.g. resumed in a terminal) pushes the on-disk mtime
+    /// past the post-shutdown `activityBaselineMtime` and wins.
+    ///
+    /// The nil-baseline case must also yield the pin, not the raw mtime: stop
+    /// persists `lastActivity` *before* `terminate` and the settled
+    /// `activityBaselineMtime` only after, so there is a brief window where the
+    /// reloaded record has the pin but no baseline yet — and the FSEvents the
+    /// shutdown write fires drives a rebuild inside it. Returning the raw
+    /// (already-bumped) mtime there is exactly what made the row jump to the top
+    /// and then animate back once the baseline landed. A record with no pin at
+    /// all (old records, never stopped under this build) still degrades to the
+    /// raw mtime.
+    private static func recordLastActive(_ record: SessionRecord, mtime: Date?) -> Date? {
+        guard let pin = record.lastActivity else { return mtime }
+        if let mtime, let baseline = record.activityBaselineMtime, mtime > baseline {
+            return mtime   // genuine interaction after the stop
+        }
+        return pin
+    }
+
     /// Rebuild the immutable row models from engine state + records +
     /// discovery results. Precedence per project: a live managed window wins;
     /// a persisted record renders as Stopped (or in Archived); only a project
@@ -526,12 +619,21 @@ final class AppModel: ObservableObject {
             managedPaths: managedPaths,
             recordUUIDs: recordUUIDs)
 
+        // A Stop/Archive in flight: keep rendering the session as its own
+        // (stopped/archived) record, never as a live-unmanaged row, for the
+        // whole kill→refresh window even while the stale `liveUnmanaged` still
+        // lists the just-killed process (see `stoppingUUIDs`/`archivingUUIDs`).
+        let inFlightKill = stoppingUUIDs.union(archivingUUIDs)
+
         // Persisted records with no live window: Stopped rows (or Archived). A
         // record whose uuid is currently managed (or running externally right
-        // now) is the same session, surfaced elsewhere; skip it here.
+        // now) is the same session, surfaced elsewhere; skip it here — unless a
+        // kill is in flight, where the "running externally" reading is the stale
+        // discovery signal for the very process we just killed.
         for record in records
         where !managedUUIDs.contains(record.uuid)
-            && !discovered.liveUUIDs.contains(record.uuid)
+            && (!discovered.liveUUIDs.contains(record.uuid)
+                || inFlightKill.contains(record.uuid))
             && !ignored.contains(record.uuid) {
             // An archive in flight counts as already-archived even before its
             // flag persists: during the kill's SIGTERM wait the window has left
@@ -554,7 +656,8 @@ final class AppModel: ObservableObject {
                 // its "Local" tag (and stays excluded from no-remote).
                 remoteControlRequested: record.launchConfig?.remoteControl ?? true,
                 archived: isArchived,
-                lastActive: transcriptIndex[record.uuid]?.modified,
+                lastActive: Self.recordLastActive(
+                    record, mtime: transcriptIndex[record.uuid]?.modified),
                 groupIDs: record.groupIDs
             )
             if isArchived {
@@ -568,7 +671,9 @@ final class AppModel: ObservableObject {
         // sessions sharing a directory are two distinct rows: no directory
         // collapse, no most-recent flip. A removed (ignored) UUID stays hidden
         // even once its conversation is resumed externally.
-        for session in discovered.live where !ignored.contains(session.uuid) {
+        for session in discovered.live
+        where !ignored.contains(session.uuid)
+            && !inFlightKill.contains(session.uuid) {
             built.append(SessionRow(
                 id: "unmanaged:session:\(session.uuid)",
                 kind: .unmanaged,
@@ -1005,7 +1110,13 @@ final class AppModel: ObservableObject {
     func stopSession(_ row: SessionRow) {
         guard let windowId = row.windowId else { return }
         guard Alerts.confirmStop(name: row.title) else { return }
+        // Pin the row to its Stopped record for the whole kill→refresh window so
+        // it never flickers through a live-unmanaged row (see `stoppingUUIDs`).
+        // An empty (still-binding) uuid simply skips the guard, like archive.
+        let uuid = row.uuid
+        if !uuid.isEmpty { stoppingUUIDs.insert(uuid) }
         Task {
+            defer { if !uuid.isEmpty { stoppingUUIDs.remove(uuid) } }
             await engine.killSession(windowId: windowId)
             await refreshAfterMutation()
         }

@@ -110,7 +110,9 @@ final class SessionStore: @unchecked Sendable {
                      title: String? = nil,
                      archived: Bool? = nil,
                      groupIDs: [String]? = nil,
-                     launchConfig: SessionLaunchConfig? = nil) {
+                     launchConfig: SessionLaunchConfig? = nil,
+                     lastActivity: Date? = nil,
+                     activityBaselineMtime: Date? = nil) {
         guard !uuid.isEmpty else { return }
         queue.sync {
             var records = loadRecordsLocked()
@@ -121,6 +123,8 @@ final class SessionStore: @unchecked Sendable {
             if let archived { record.archived = archived }
             if let groupIDs { record.groupIDs = groupIDs }
             if let launchConfig { record.launchConfig = launchConfig }
+            if let lastActivity { record.lastActivity = lastActivity }
+            if let activityBaselineMtime { record.activityBaselineMtime = activityBaselineMtime }
             if let idx = records.firstIndex(where: { $0.uuid == uuid }) {
                 records[idx] = record
             } else {

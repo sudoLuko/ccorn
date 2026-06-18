@@ -108,7 +108,7 @@ struct SessionListView: View {
                 if managedRows.isEmpty {
                     noManagedHint
                 } else {
-                    ForEach(managedRows) { row in
+                    ForEach(managedRows, id: \.listID) { row in
                         SessionRowView(row: row, model: model)
                         rowDivider
                     }
@@ -117,7 +117,7 @@ struct SessionListView: View {
                 if !discoveredRows.isEmpty {
                     discoveredHeader
                     if !discoveredCollapsed {
-                        ForEach(discoveredRows) { row in
+                        ForEach(discoveredRows, id: \.listID) { row in
                             SessionRowView(row: row, model: model)
                             rowDivider
                         }
@@ -126,7 +126,7 @@ struct SessionListView: View {
             }
             .padding(.top, 4)
             .animation(.easeInOut(duration: 0.2),
-                       value: (managedRows + discoveredRows).map(\.id))
+                       value: (managedRows + discoveredRows).map(\.listID))
         }
         // Fresh identity per sidebar view (F2): a nav switch swaps the whole
         // row set, and without this the ids animation above plays it as a

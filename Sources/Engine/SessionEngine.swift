@@ -375,6 +375,7 @@ final class SessionEngine: ObservableObject {
     @discardableResult
     func killSession(windowId: String, archived: Bool = false) async -> String {
         var uuid = ""
+        var transcriptPath: String?
         if let live = liveSessions[windowId] {
             uuid = live.sessionUUID
             let pid = live.pid
@@ -386,17 +387,66 @@ final class SessionEngine: ObservableObject {
             if !uuid.isEmpty {
                 let record = live.record
                 let store = self.store
+                let discovery = self.discovery
                 let frozen = uuid
+                // Genuine last-activity, read BEFORE terminate: the transcript
+                // mtime as it stands now, before claude's SIGTERM shutdown write
+                // bumps it to ~now. Persisted with the baseline below so the
+                // Stopped row keeps its true sort position instead of jumping to
+                // the top (stopping is not an interaction). nil for a session
+                // with no transcript yet: nothing to resume or sort.
+                let pre = await Task.detached { () -> (path: String, mtime: Date)? in
+                    guard let t = discovery.transcriptIndex()[frozen] else { return nil }
+                    return (t.transcriptPath, t.modified)
+                }.value
+                transcriptPath = pre?.path
                 await Task.detached {
                     store.mergeRecord(uuid: frozen,
                                       path: record.path.isEmpty ? nil : record.path,
                                       title: record.title.isEmpty ? nil : record.title,
-                                      archived: archived ? true : nil)
+                                      archived: archived ? true : nil,
+                                      lastActivity: pre?.mtime)
                 }.value
             }
         }
         await terminate(windowId: windowId)
+        // Baseline: the transcript mtime once the shutdown write has settled.
+        // kill-window SIGHUPs the pane's whole process group and `terminate`
+        // waits out the tracked pid, but the --rc bridge child can flush its
+        // teardown record a beat later, so settle until the mtime stops moving
+        // rather than racing that write. Pairs with `lastActivity`: while the
+        // on-disk mtime stays <= this baseline only the shutdown write has
+        // touched the file, so the row keeps its pin; a real later interaction
+        // pushes the mtime past the baseline and wins.
+        if !uuid.isEmpty, let transcriptPath {
+            let store = self.store
+            let frozen = uuid
+            if let baseline = await Self.settledMtime(ofFile: transcriptPath) {
+                await Task.detached {
+                    store.mergeRecord(uuid: frozen, activityBaselineMtime: baseline)
+                }.value
+            }
+        }
         return uuid
+    }
+
+    /// A file's modification date once it has stopped changing: read the mtime,
+    /// then re-read on a short cadence until two consecutive reads match (or a
+    /// small cap is hit). Used right after a kill to record the transcript mtime
+    /// *after* claude's shutdown write has landed, never mid-flush. Nonisolated
+    /// and async so the stat I/O and the settle sleeps stay off the main actor.
+    nonisolated static func settledMtime(ofFile path: String, checks: Int = 10) async -> Date? {
+        func read() -> Date? {
+            (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        }
+        var last = read()
+        for _ in 0..<checks {
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            let cur = read()
+            if cur == last { return last }
+            last = cur
+        }
+        return last
     }
 
     /// Restart a dead or stopped session (flow 6.7): tear down any window still

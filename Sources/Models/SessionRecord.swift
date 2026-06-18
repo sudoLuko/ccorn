@@ -25,17 +25,34 @@ struct SessionRecord: Codable, Identifiable, Equatable {
     /// nil for sessions CCorn did not start (adopted/reconciled): there is no
     /// known config to re-apply, so they resume plainly.
     var launchConfig: SessionLaunchConfig?
+    /// Genuine last-interaction time, pinned when CCorn stops/archives this
+    /// session. The list sorts by transcript mtime, but stopping makes `claude`
+    /// flush a shutdown record that bumps that mtime to ~now; persisting the
+    /// pre-shutdown value here keeps the Stopped row in its true sort position
+    /// instead of jumping to the top (stopping is not an interaction). nil for
+    /// records written before this field existed: they sort by raw mtime as
+    /// before, until their next stop. See `activityBaselineMtime`.
+    var lastActivity: Date?
+    /// Transcript mtime captured just after the stop's shutdown write settled.
+    /// Pairs with `lastActivity`: while the on-disk mtime stays <= this baseline
+    /// only the shutdown write has touched the file, so the pinned
+    /// `lastActivity` is used; a genuine later interaction pushes the mtime past
+    /// the baseline and the row sorts by real activity again.
+    var activityBaselineMtime: Date?
 
     var id: String { uuid }
 
     init(uuid: String, path: String, title: String, archived: Bool = false,
-         groupIDs: [String] = [], launchConfig: SessionLaunchConfig? = nil) {
+         groupIDs: [String] = [], launchConfig: SessionLaunchConfig? = nil,
+         lastActivity: Date? = nil, activityBaselineMtime: Date? = nil) {
         self.uuid = uuid
         self.path = path
         self.title = title
         self.archived = archived
         self.groupIDs = groupIDs
         self.launchConfig = launchConfig
+        self.lastActivity = lastActivity
+        self.activityBaselineMtime = activityBaselineMtime
     }
 
     /// Field-by-field defaults (the CCornSettings rule) so a sessions.json
@@ -48,6 +65,8 @@ struct SessionRecord: Codable, Identifiable, Equatable {
         archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         groupIDs = try c.decodeIfPresent([String].self, forKey: .groupIDs) ?? []
         launchConfig = try c.decodeIfPresent(SessionLaunchConfig.self, forKey: .launchConfig)
+        lastActivity = try c.decodeIfPresent(Date.self, forKey: .lastActivity)
+        activityBaselineMtime = try c.decodeIfPresent(Date.self, forKey: .activityBaselineMtime)
     }
 }
 

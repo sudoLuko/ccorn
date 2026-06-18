@@ -188,7 +188,7 @@ struct PopoverView: View {
 
     private var triageStack: some View {
         VStack(spacing: 0) {
-            ForEach(Array(attentionRows.enumerated()), id: \.element.id) { index, row in
+            ForEach(Array(attentionRows.enumerated()), id: \.element.listID) { index, row in
                 if index > 0 {
                     divider
                 }
@@ -200,7 +200,7 @@ struct PopoverView: View {
                 }
                 calmDisclosure
                 if calmExpanded {
-                    ForEach(calmRows) { row in
+                    ForEach(calmRows, id: \.listID) { row in
                         divider
                         popoverRow(row)
                     }
@@ -217,7 +217,7 @@ struct PopoverView: View {
         // growing/shrinking panel instead of fading on a second, competing
         // timeline (which made expand look unfinished).
         .animation(.easeInOut(duration: 0.2),
-                   value: attentionRows.map(\.id) + calmRows.map(\.id))
+                   value: attentionRows.map(\.listID) + calmRows.map(\.listID))
     }
 
     private func popoverRow(_ row: SessionRow) -> some View {

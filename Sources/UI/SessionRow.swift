@@ -103,6 +103,17 @@ struct SessionRow: Identifiable, Equatable {
         return nil
     }
 
+    /// Identity for the SwiftUI list/animation, kept stable across a session's
+    /// managed→record transition (Stop): a live row's `id` is its tmux window id
+    /// but the resulting Stopped row's `id` is `record:<uuid>`, so keying the
+    /// list on `id` makes Stop read as a remove+insert and the row animates out
+    /// then back in. The session uuid is the durable identity, so the row stays
+    /// put and updates in place. Falls back to the (unique) `id` for a brand-new
+    /// managed row whose uuid hasn't bound yet; that one row re-keys once on
+    /// bind, which `id`/`stateMemory` continue to key on `id` to avoid (see
+    /// `AppModel.emitStateTransitions`). This is display identity only.
+    var listID: String { uuid.isEmpty ? id : uuid }
+
     /// The one status mark this row shows (review item 1: one mark per row).
     /// Folds the remote-control condition (alive but RC inactive past the
     /// 30s activation grace, the old warning-overlay rule) into the mark as
