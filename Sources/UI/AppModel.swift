@@ -1409,10 +1409,24 @@ final class AppModel: ObservableObject {
         }
         for item in work where !item.uuid.isEmpty { stoppingUUIDs.insert(item.uuid) }
         clearSelection()
+        let engine = self.engine
+        let windowIds = work.map(\.windowId)
         Task {
             defer { for item in work where !item.uuid.isEmpty { stoppingUUIDs.remove(item.uuid) } }
-            for item in work {
-                await engine.killSession(windowId: item.windowId)
+            // Kill concurrently, not one-at-a-time: each kill's `terminate`
+            // drops its window from liveSessions up front, so firing them
+            // together lets every row cross-fade green->stopped in one
+            // synchronized rebuild instead of flipping in sequence across a
+            // multi-second loop (each kill waits out a SIGTERM + mtime settle).
+            // Safe because the engine is main-actor isolated (liveSessions
+            // access serializes) and record writes go through the store's serial
+            // queue; only the off-main process teardown overlaps. (Bulk Remove
+            // stays sequential: its ignore-list settings write isn't
+            // concurrency-safe.)
+            await withTaskGroup(of: Void.self) { group in
+                for windowId in windowIds {
+                    group.addTask { await engine.killSession(windowId: windowId) }
+                }
             }
             await refreshAfterMutation()
         }
