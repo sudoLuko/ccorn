@@ -410,6 +410,17 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
                 widthLock.forwarding = window.delegate
                 window.delegate = widthLock
             }
+            // A frame saved before the width lock (when the window could be
+            // dragged wide) is restored on open, so the window appears far too
+            // wide until the first relayout snaps it to the 480 content width.
+            // `windowWillResize` only fires on a drag, not on open, so correct
+            // the restored width here, keeping the restored height and origin,
+            // and the window opens at its natural width.
+            if window.frame.width != FixedWidthWindowDelegate.width {
+                var frame = window.frame
+                frame.size.width = FixedWidthWindowDelegate.width
+                window.setFrame(frame, display: false)
+            }
         }
     }
 
