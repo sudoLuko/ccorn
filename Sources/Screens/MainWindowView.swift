@@ -1,35 +1,44 @@
 import SwiftUI
 
-/// Main app window (docs/CCORN_SPEC.md section 5.1): NavigationSplitView with a
-/// 200px fixed sidebar and the session list (All Sessions or Archived).
+/// Main app window (docs/CCORN_SPEC.md section 5.1): a manual HStack split with
+/// a 200px fixed sidebar and the session list (All Sessions or Archived).
 /// Semantic colors only; the window follows system appearance. Also hosts the
 /// first-run import sheet (5.4).
 struct MainWindowView: View {
     @ObservedObject var model: AppModel
 
-    /// Explicit visibility binding: every collapse/expand path routes through
-    /// the model (persisted, and restorable from the titlebar toggle). An
-    /// unbound NavigationSplitView owns this state itself, and with no toolbar
-    /// or menu command a collapse had no recovery affordance at all.
-    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
-        Binding(
-            get: { model.sidebarVisible ? .all : .detailOnly },
-            set: { model.sidebarVisible = ($0 != .detailOnly) }
-        )
-    }
-
     var body: some View {
-        NavigationSplitView(columnVisibility: columnVisibility) {
+        // Manual split, not NavigationSplitView: on this macOS the split view
+        // animates the collapse cleanly but snaps the inbound (expand) reveal
+        // regardless of column width, so we drive the sidebar width ourselves
+        // and both directions interpolate off the same withAnimation in
+        // AppModel.toggleSidebar. Safe to drop the container because the detail
+        // pane keys off model.sidebarNav (SessionListView's own .id(nav)), not
+        // NavigationSplitView navigation; the sidebar List is just a selectable
+        // source list. The titlebar toggle / View menu / ⌘⌃S all flip
+        // model.sidebarVisible, which now animates this width.
+        HStack(spacing: 0) {
+            // The finished 200px sidebar is pinned to a fixed inner width so it
+            // never reflows as the column opens; the OUTER frame animates
+            // 200<->0 and .clipped() reveals or hides that finished content from
+            // the trailing edge. This is why collapse already looked clean: the
+            // content stays laid out and only the clip edge moves, now in both
+            // directions. The opaque fill lives inside SidebarView, so every
+            // visible slice is a solid surface, with no translucent band at the
+            // clip.
             SidebarView(model: model, nav: $model.sidebarNav)
-                .navigationSplitViewColumnWidth(200)
-        } detail: {
+                .frame(width: 200)
+                .frame(width: model.sidebarVisible ? 200 : 0, alignment: .leading)
+                .clipped()
+
             SessionListView(model: model, nav: model.sidebarNav)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // App identity lives in the branded sidebar header; the bound
-        // NavigationSplitView otherwise surfaces the window title ("CCorn") in
-        // the titlebar, duplicating it. AppKit's titleVisibility = .hidden no
-        // longer wins against SwiftUI's titlebar, so remove the title item
-        // here. window.title stays "CCorn" for the debug/window lookup.
+        // App identity lives in the branded sidebar header, so the titlebar
+        // text stays hidden. AppKit's titleVisibility = .hidden (set in
+        // MainWindowController) is the primary hide; on macOS 15 this also
+        // strips any SwiftUI-injected title item as a belt. window.title stays
+        // "CCorn" for the debug/window lookup.
         .hiddenWindowTitle()
         // App identity: the corn glyph lives in the title bar as a trailing
         // titlebar accessory (see MainWindowController.show). It is deliberately
