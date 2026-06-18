@@ -134,7 +134,9 @@ import Testing
     /// body shows the all-clear line.
     @Test func calmOnlyAggregateStaysCalm() {
         let worst = StatusPresentation.aggregate([.running, .working, .stale, .stopped])
-        #expect(worst == .stale)
+        // Working is the worst routine state, so an active calm fleet reads as
+        // working (blue) — still calm: never the attention tier or the symbol.
+        #expect(worst == .working)
         #expect(worst?.needsAttention == false)
         #expect(worst?.isBroken == false)
     }

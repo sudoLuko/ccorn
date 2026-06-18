@@ -164,17 +164,21 @@ import Testing
     // MARK: Aggregate-mark severity ordering
 
     @Test func aggregatePicksWorstPresentation() {
-        // Full ladder: crashed > needsAuth > noRemote > waiting > stale >
-        // working > running (broken tier on top).
+        // Full ladder: crashed > needsAuth > noRemote > waiting > working >
+        // stale > running (broken tier on top).
         #expect(StatusPresentation.aggregate(
             [.running, .working, .stale, .waiting, .noRemote, .needsAuth, .crashed]) == .crashed)
         #expect(StatusPresentation.aggregate(
             [.running, .working, .stale, .waiting, .noRemote, .needsAuth]) == .needsAuth)
         #expect(StatusPresentation.aggregate(
             [.running, .working, .stale, .waiting, .noRemote]) == .noRemote)
-        // Waiting outranks Stale (a waiting session is blocked on the user).
+        // Waiting outranks working (a waiting session is blocked on the user).
         #expect(StatusPresentation.aggregate([.running, .working, .stale, .waiting]) == .waiting)
-        #expect(StatusPresentation.aggregate([.running, .working, .stale]) == .stale)
+        // Working outranks stale: a fleet with anything actively working reads
+        // as working (blue), not the grey stale dot.
+        #expect(StatusPresentation.aggregate([.running, .working, .stale]) == .working)
+        // Stale still outranks a plain healthy running session.
+        #expect(StatusPresentation.aggregate([.running, .stale]) == .stale)
         #expect(StatusPresentation.aggregate([.running, .working]) == .working)
         #expect(StatusPresentation.aggregate([.running, .running]) == .running)
     }

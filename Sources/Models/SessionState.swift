@@ -99,18 +99,20 @@ enum StatusPresentation: String, Equatable {
     /// Severity rank for the menu-bar aggregate mark (higher = worse). The
     /// broken tier tops the ladder (crashed (terminal) > sign-in > no-remote,
     /// degraded, slotted next to sign-in) so a broken-tier worst shows the
-    /// symbol in the header, not a dot. Below it the routine order is
-    /// unchanged: waiting outranks stale because a waiting session is blocked
-    /// on the user. `stopped` and `unmanaged` carry no active color and rank
-    /// `nil`.
+    /// symbol in the header, not a dot. Below it: waiting (blocked on the user)
+    /// tops the routine tier, then `working` — an actively running task is the
+    /// most informative routine state, so a fleet with anything working reads
+    /// as working (blue) rather than the grey stale dot. `stale` still outranks
+    /// a plain healthy `running` so idle-too-long surfaces over healthy idle.
+    /// `stopped` and `unmanaged` carry no active color and rank `nil`.
     var aggregateSeverity: Int? {
         switch self {
         case .crashed:   return 7
         case .needsAuth: return 6
         case .noRemote:  return 5
         case .waiting:   return 4
-        case .stale:     return 3
-        case .working:   return 2
+        case .working:   return 3
+        case .stale:     return 2
         case .running:   return 1
         case .stopped, .unmanaged: return nil
         }
