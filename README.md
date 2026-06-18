@@ -107,6 +107,7 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 - "Open in Browser" deep-links to the session via its remote-control bridge id (`claude.ai/code/session_…`); until that id surfaces (remote control still activating, or a local session that has none), it falls back to the claude.ai/code session list.
 - Voice input does not work inside managed sessions.
 - Copy-mode drag-select auto-scroll is sluggish inside managed sessions.
+- Up-arrow prompt history is shared by every session in the same folder. Claude Code keys its input history (`~/.claude/history.jsonl`) by working directory, not by session, so recalling earlier prompts can surface ones typed in another session that ran in the same directory. This is Claude Code's behavior, not cross-session leakage; give a session its own working directory (a git worktree, say) if you want its history isolated.
 - CCorn tracks Claude Code's current on-disk layout under `~/.claude`. If a future Claude Code release renames or restructures that, discovery, titles, or deep links could break until CCorn catches up.
 
 ## Privacy
