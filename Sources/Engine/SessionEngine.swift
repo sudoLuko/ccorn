@@ -622,6 +622,16 @@ final class SessionEngine: ObservableObject {
                     ClaudeSessionRegistry.info(forPid: pid)?.sessionId ?? ""
                 }.value
             }
+            // Ignore BEFORE the kill, not after: `terminate` drops the window
+            // from `liveSessions` up front and then awaits the SIGTERM, and
+            // claude's shutdown write freshens the transcript mtime the list
+            // sorts on. A rebuild in that gap would otherwise render the
+            // still-present, not-yet-ignored record at the freshened top, so the
+            // row jumps to the top for a beat before it animates out. Ignored
+            // first, every such rebuild already excludes it and it animates out
+            // from its current position. Idempotent, so the trailing call is a
+            // no-op for this path.
+            if !uuid.isEmpty { ignoreSessionUUID(uuid) }
             await terminate(windowId: windowId)
         }
         guard !uuid.isEmpty else { return }
