@@ -101,6 +101,8 @@ struct TmuxController: Sendable {
     func setMouseMode(_ enabled: Bool) {
         tmux(["set-option", "-t", Self.sessionName, "mouse", enabled ? "on" : "off"])
         installCopyModeSelectBindings()
+        installCopyModeExitBindings()
+        installCopyModeBanner()
     }
 
     /// Rebind mouse-release in copy-mode so dragging to select text COPIES to the
@@ -139,6 +141,87 @@ struct TmuxController: Sendable {
                 "send-keys -X copy-pipe-and-cancel",
             ])
         }
+    }
+
+    /// Bind Escape to leave copy-mode, so a user who scrolled up with the mouse
+    /// can exit the same way `q` does (a drag enters copy-mode, but Escape is the
+    /// instinctive way out). `q` is untouched and keeps its stock `cancel`, so it
+    /// still exits; this only ADDS Escape alongside it.
+    ///
+    /// Key tables are SERVER-GLOBAL (in Release CCorn shares the user's default
+    /// tmux server), so the bind is gated exactly like the MouseDragEnd1Pane
+    /// rebind above: `if-shell -F "#{m:ccorn*,#{session_name}}"` cancels copy-mode
+    /// only inside CCorn's own sessions (`ccorn` and the `ccorn-view-*` views) and
+    /// falls through to the table's STOCK Escape everywhere else, so the user's
+    /// other tmux sessions keep their default copy-mode Escape (`cancel` in the
+    /// emacs table, `clear-selection` in the vi table). Both tables are bound
+    /// since `mode-keys` selects the live one. The same restraint and the same
+    /// residual tradeoff as the select rebind: a user who has REbound Escape in
+    /// copy-mode globally gets the stock behavior restored in the else branch,
+    /// not their own custom binding.
+    private func installCopyModeExitBindings() {
+        // Per-table stock Escape, restored in the non-CCorn else branch: the
+        // emacs copy-mode cancels, the vi copy-mode clears the selection.
+        let tables: [(table: String, stockEscape: String)] = [
+            ("copy-mode", "send-keys -X cancel"),
+            ("copy-mode-vi", "send-keys -X clear-selection"),
+        ]
+        for (table, stockEscape) in tables {
+            tmux([
+                "bind-key", "-T", table, "Escape",
+                "if-shell", "-F", "#{m:ccorn*,#{session_name}}",
+                "send-keys -X cancel",
+                stockEscape,
+            ])
+        }
+    }
+
+    /// A CCorn-namespaced GLOBAL user option stashing the status-right the session
+    /// would otherwise show, so the banner's non-copy-mode branch can reproduce
+    /// it. Global, not session-scoped, for two reasons: the grouped `ccorn-view-*`
+    /// sessions do not inherit a base session's user options, and a global `@`
+    /// stash lets them reference it without re-embedding the quote-laden default
+    /// status-right (which contains `"`) into `attachViewCommand`'s osascript
+    /// path. A `@`-prefixed user option is inert storage; it changes no tmux
+    /// behavior for the user's other sessions.
+    private static let savedStatusRightOption = "@ccorn_status_right_saved"
+
+    /// The `status-right` format that flips to a loud banner while a pane is in
+    /// copy-mode and restores the normal status-right otherwise. The bright bar
+    /// (black text on amber) appears the moment `#{pane_in_mode}` is true and
+    /// vanishes on exit. The non-copy-mode branch re-expands the stashed default
+    /// with `#{T:...}` so its own formats and clock still render. Style runs are
+    /// split into separate `#[...]` directives on purpose: a single
+    /// `#[bg=...,fg=...]` carries a comma that tmux would misread as the
+    /// conditional's true/false separator. Shared verbatim by the session
+    /// (`installCopyModeBanner`) and each view (`attachViewCommand`); it contains
+    /// no quote so it embeds safely single-quoted in the attach command.
+    static let copyModeStatusRight =
+        "#{?pane_in_mode,"
+        + "#[bg=colour214]#[fg=colour16] COPY MODE: q or esc to exit #[default]"
+        + ",#{T:\(savedStatusRightOption)}}"
+
+    /// Install the copy-mode banner on the `ccorn` SESSION. `status-right` is a
+    /// session option (like `mouse`), so it is scoped to CCorn's session and
+    /// every window in it, current and future, and never touches the user's other
+    /// tmux sessions. The default status-right is captured from the GLOBAL value
+    /// (which CCorn never writes, so re-applying on every ensure is idempotent)
+    /// and stashed for the non-copy-mode branch to reproduce. The grouped view
+    /// sessions carry their own session options, so `attachViewCommand` sets the
+    /// same `status-right` on each view too, the same way it re-applies `mouse`.
+    private func installCopyModeBanner() {
+        let saved = tmux(["show-options", "-gv", "status-right"]).trimmedOut
+        tmux(["set-option", "-g", Self.savedStatusRightOption, saved])
+        tmux(["set-option", "-t", Self.sessionName, "status-right", Self.copyModeStatusRight])
+        // status-right is only repainted on tmux's `status-interval` tick (15s by
+        // default), so the banner would lag a mouse selection or clear late. A
+        // session-scoped `pane-mode-changed` hook forces an immediate status
+        // refresh the moment a pane enters or leaves copy-mode, so the banner
+        // appears and disappears live. Set (not appended) on CCorn's own session,
+        // so re-applying on every ensure stays idempotent and never accumulates;
+        // the user's other sessions keep their own (global) hooks. Views carry
+        // their own hooks, so `attachViewCommand` sets the same one per view.
+        tmux(["set-hook", "-t", Self.sessionName, "pane-mode-changed", "refresh-client -S"])
     }
 
     /// A `claude` that inherits CLAUDE_CODE_CHILD_SESSION runs as a nested
@@ -389,13 +472,24 @@ struct TmuxController: Sendable {
     /// session shares the window list but carries its own session options, so
     /// it does not inherit the base session's `mouse` value; the terminal the
     /// user actually attaches to is the view, so the option must land here for
-    /// the scroll wheel to behave as configured.
+    /// the scroll wheel to behave as configured. The copy-mode banner is set on
+    /// the view for the same reason: `status-right` is a session option, the user
+    /// attaches to the view, so the banner must land here to be visible. Its
+    /// non-copy-mode branch resolves the GLOBAL `@ccorn_status_right_saved` stash
+    /// (set by `installCopyModeBanner` before any attach), so it needs nothing
+    /// else on the view; single-quoted because it carries spaces, `#{...}`, and
+    /// `[]`, none of which the shell must touch, and it holds no quote of its own.
+    /// The `pane-mode-changed` hook rides along for the same reason the base
+    /// session sets it: without it the banner would only repaint on the status
+    /// tick, not the instant the selection enters copy-mode.
     func attachViewCommand(windowId: String, mouseMode: Bool) -> String {
         let view = Self.uniqueViewSessionName(forWindowId: windowId, taken: Set(sessionNames()))
         let socket = Self.socketName.map { "-L \($0) " } ?? ""
         return "tmux \(socket)new-session -t \(Self.sessionName) -s \(view)"
             + " ';' set-option -t \(view) destroy-unattached on"
             + " ';' set-option -t \(view) mouse \(mouseMode ? "on" : "off")"
+            + " ';' set-option -t \(view) status-right '\(Self.copyModeStatusRight)'"
+            + " ';' set-hook -t \(view) pane-mode-changed 'refresh-client -S'"
             + " ';' select-window -t '\(view):\(windowId)'"
     }
 
