@@ -67,13 +67,15 @@ On a live row the working dot breathes a gentle brightness pulse and the waiting
 
 - macOS 13 or later
 - [tmux](https://github.com/tmux/tmux) (`brew install tmux`)
-- [Claude Code CLI](https://claude.com/claude-code) 2.1.51 or later (2.1.110+ for mobile push via Remote Control)
+- A recent version of the [Claude Code CLI](https://claude.com/claude-code); older versions may not be recognized correctly, because state detection tracks the current CLI's wording (2.1.110+ for mobile push via Remote Control)
 
 ## Install
 
 Download the latest build from [Releases](https://github.com/sudoLuko/ccorn/releases), unzip, drag **CCorn.app** to Applications, and open it. Release builds are signed and notarized; if macOS still warns that it cannot verify the developer, right-click the app and choose Open.
 
 On first launch, CCorn walks you through picking the directories it should watch for sessions.
+
+The first time you use **Open in Terminal**, or let the onboarding helper install prerequisites with Homebrew, macOS asks for permission to let CCorn automate Terminal. Both actions simply no-op if you deny it; you can grant it later under System Settings › Privacy & Security › Automation.
 
 ## Build from source
 
@@ -103,6 +105,13 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 - State detection reads the Claude Code TUI's pane text (polled every 3 seconds), so a CLI update can shift wording before CCorn catches up. The preflight suite in `scripts/preflight/` exists to catch exactly that before releases.
 - The App Sandbox is off by design. CCorn spawns `tmux` and `claude`, watches arbitrary directories with FSEvents, and sends AppleEvents to Terminal, none of which a sandboxed app may do.
 - "Open in Browser" deep-links to the session via its remote-control bridge id (`claude.ai/code/session_…`); until that id surfaces (remote control still activating, or a local session that has none), it falls back to the claude.ai/code session list.
+- Voice input does not work inside managed sessions.
+- Copy-mode drag-select auto-scroll is sluggish inside managed sessions.
+- CCorn tracks Claude Code's current on-disk layout under `~/.claude`. If a future Claude Code release renames or restructures that, discovery, titles, or deep links could break until CCorn catches up.
+
+## Privacy
+
+CCorn runs entirely on your Mac. It reads session metadata from `~/.claude/`, stores its own state in `~/Library/Application Support/CCorn/`, makes no network requests, and only opens links in your browser.
 
 ## More
 
