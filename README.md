@@ -4,7 +4,7 @@
 
 # CCorn
 
-**Mission control for your Claude Code sessions, right in the macOS menu bar.**
+**Spin up a Claude Code session per task. Close any of them. Get back to all of them.** Right in the macOS menu bar.
 
 [![license MIT](https://img.shields.io/badge/license-MIT-71717A?style=flat-square)](LICENSE)
 &nbsp;![macOS 13+](https://img.shields.io/badge/macOS-13%2B-71717A?style=flat-square&logo=apple&logoColor=white)
@@ -12,36 +12,36 @@
 
 </div>
 
-If you run several Claude Code sessions at once, you know the feeling: one of them has been blocked on a permission prompt for ten minutes and you had no idea. CCorn starts, watches, and manages [Claude Code](https://claude.com/claude-code) sessions running in tmux, all from a single corn glyph in your menu bar. One look tells you whether anything needs you: a session waiting on permission, a sign-in that expired, a crash. No more cycling through tmux panes to find the one that stalled.
+Once you can close a Claude Code session and trust you'll get it back, you stop hoarding context in a few long-lived sessions and start spinning up an agent per task. CCorn makes that safe: every session is a durable tmux window you can close, reopen, and resume without losing the conversation, one `tmux attach` away. And when a dozen are running, the menu-bar popover triages the fleet so the one stuck on a permission prompt floats to the top instead of going unnoticed.
 
-It is a process manager, not a chat interface. You keep talking to Claude in your terminal or at claude.ai/code, and CCorn keeps the fleet running.
+CCorn is a native macOS menu-bar app that starts, watches, and controls [Claude Code](https://claude.com/claude-code) sessions running in tmux, built for developers who keep many sessions going in parallel.
+
+It is a process manager, not a chat interface. The model, your prompts, and the conversation all stay in Claude Code. You keep working in your terminal, at claude.ai/code, or on your phone, and CCorn keeps the fleet running.
 
 ## See it in action
 
 <div align="center">
 
-<img src="docs/images/demo.gif" width="300" alt="CCorn menu-bar popover: a session goes from working to needs-input to crashed and back to calm, the corn icon changing color with the most urgent state">
+<img src="docs/images/demo.gif" width="300" alt="CCorn menu-bar popover: a session goes from working to needs-input to crashed and back to calm, the popover header reflecting the most urgent state">
 
-*The menu-bar popover, live. A session goes from working (blue) to needs-input (amber) to crashed (red), then back to calm, and the corn in the menu bar always wears the most urgent state.*
+*The menu-bar popover, live. A session moves from working (blue) to needs-input (amber) to crashed (red) and back to calm; the popover header always carries the single most urgent mark across every session.*
 
 </div>
 
 ## What it does
 
-- **Aggregate status in the menu bar.** The corn glyph reflects the most urgent session state across everything it manages.
-- **Triage popover.** Sessions that need attention float to the top; calm sessions stay behind a quiet disclosure.
-- **Full session manager.** A main window with every session: rename, group, archive, stop, restart, import.
-- **One-click handoff.** Open any session in Terminal (it is just a tmux window) or in the browser, with a per-session deep link when remote control is active.
-- **Discovery.** Finds existing Claude Code sessions on your machine and offers to import and resume them.
-- **Notifications.** Get pinged when a session needs your input or dies.
-
-Every session CCorn starts runs `claude --rc` in its own tmux window inside a single `ccorn` tmux session, so sessions survive CCorn restarts, and your terminal is always one `tmux attach` away.
+- **Close it and come back.** Each session is its own tmux window inside a single `ccorn` tmux session, so you can close CCorn, restart your Mac, or just walk away and still resume right where you left off. Sessions survive restarts, and your real terminal is always one `tmux attach` away. Open any session in Terminal in one click; CCorn raises the window if it is already up.
+- **Discovery and takeover.** Finds Claude Code sessions already running on your Mac and adopts them under management, resuming the same conversation without losing work.
+- **Worst-first triage.** Click the menu-bar corn and the popover sorts every session by urgency: waiting, sign-in, no-remote, and crashed sessions rise to the top, while the calm ones fold behind a single "all clear" line. The header shows one aggregate mark for the whole fleet.
+- **One mark per row.** Every session shows exactly one status mark, a colored dot or a single warning triangle, so you read state by glancing at color, never by parsing text.
+- **Set and forget.** CCorn launches and supervises; you drive. Keep working in your terminal, at claude.ai/code, or from your phone over Remote Control. CCorn never touches the conversation, and it does not set the model (you pick that in Claude Code with `/model`).
+- **Native macOS restraint.** A menu-bar app with no Dock icon by default, no chat window, and no color anywhere except the status marks. Notifications ping you when a session needs input, needs sign-in, or dies.
 
 <div align="center">
 
 <img src="docs/images/main-window-demo.gif" width="760" alt="CCorn main window: sessions flipping between working, needs-input, signed-in, and restarted as a new one slides in and an old one is cleared">
 
-*The main window. Sessions flip between working, needs-input, and healthy in real time as a new one slides in and an old one is cleared, all in one list with rename, group, archive, stop, restart, and import.*
+*The main window. Sessions flip between working, needs-input, and healthy in real time as a new one slides in and an old one is cleared, all in one list with rename, group, archive, remove, stop, restart, and import.*
 
 </div>
 
@@ -61,7 +61,7 @@ Status marks are the only color in CCorn. Every row shows exactly one mark, a co
 | ![grey](https://placehold.co/15x15/a1a1aa/a1a1aa.png) | **Stopped** | ○ | | You stopped it; not running |
 | ![grey](https://placehold.co/15x15/71717a/71717a.png) | **Unmanaged** | ○ | | Discovered on your machine, not yet imported |
 
-The menu-bar corn itself takes on the most urgent state across everything it manages, so the icon alone tells you if anything needs you. Exact light and dark hex for every token lives in [docs/CCORN_SPEC.md](docs/CCORN_SPEC.md), section 3.
+On a live row the working dot breathes a gentle brightness pulse and the waiting dot emits a slow expanding halo, so activity reads from motion as well as color. The popover header carries the single most urgent mark across everything CCorn manages, so the popover alone tells you whether anything needs you. The menu-bar corn itself is a monochrome glyph that follows the menu bar's appearance. Exact light and dark hex for every token lives in [docs/CCORN_SPEC.md](docs/CCORN_SPEC.md), section 3.
 
 ## Requirements
 
@@ -71,7 +71,7 @@ The menu-bar corn itself takes on the most urgent state across everything it man
 
 ## Install
 
-Download the latest notarized build from [Releases](https://github.com/sudoLuko/ccorn/releases), unzip, drag **CCorn.app** to Applications, and open it. The app is signed and notarized, so it opens without Gatekeeper warnings.
+Download the latest build from [Releases](https://github.com/sudoLuko/ccorn/releases), unzip, drag **CCorn.app** to Applications, and open it. Release builds are signed and notarized; if macOS still warns that it cannot verify the developer, right-click the app and choose Open.
 
 On first launch, CCorn walks you through picking the directories it should watch for sessions.
 
@@ -89,11 +89,12 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 
 ## Usage
 
-- **New Session.** Pick a folder; CCorn opens a tmux window there and starts `claude --rc` with a title you choose.
-- **Import.** Adopt sessions you started yourself; CCorn resumes them under management.
-- **Status marks.** A colored dot for routine states, a warning triangle for the broken trio (sign-in needed, remote control unavailable, crashed). See [Status colors](#status-colors) above.
-- **Open in Terminal or Browser.** Jump into the live tmux pane, or deep-link to the session in the browser (falling back to the claude.ai/code list if remote control hasn't activated yet).
+- **New Session.** Pick a folder; CCorn opens a tmux window there and starts a session with a title you choose (leave it blank to use Claude's own title). Set the permission mode (Default, Plan, Accept Edits, Auto, Allow Bypass, or Bypass; Auto is the default) and whether to enable Remote Control, and under Advanced add extra directories (`--add-dir`) or extra `claude` arguments. The defaults come from Settings. CCorn does not set the model; pick that inside Claude Code with `/model`.
+- **Import and take over.** Adopt sessions you started yourself; CCorn resumes them under management, preserving the conversation.
+- **Open in Terminal or Browser.** Jump into the live tmux pane, or deep-link to the session at claude.ai/code (falling back to the session list until the remote-control link is ready).
 - **Groups.** Organize sessions into user-defined collections in the sidebar.
+- **Archive vs Remove.** Archive hides a session reversibly; Unarchive brings it back. Remove from CCorn untracks it for good and stops discovery from re-surfacing it. Neither touches the conversation on disk, so `claude --resume` still works either way.
+- **Settings.** Watch directories, new-session defaults (permission mode and remote control), stale threshold, click behavior, launch options, and the full status legend.
 
 ## Known limitations
 
@@ -101,7 +102,7 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 - No chat UI by design. CCorn manages processes; conversations happen elsewhere.
 - State detection reads the Claude Code TUI's pane text (polled every 3 seconds), so a CLI update can shift wording before CCorn catches up. The preflight suite in `scripts/preflight/` exists to catch exactly that before releases.
 - The App Sandbox is off by design. CCorn spawns `tmux` and `claude`, watches arbitrary directories with FSEvents, and sends AppleEvents to Terminal, none of which a sandboxed app may do.
-- "Open in Browser" deep-links to the session via its remote-control bridge id (`claude.ai/code/session_…`); until that id surfaces (remote control still activating), it falls back to the claude.ai/code session list.
+- "Open in Browser" deep-links to the session via its remote-control bridge id (`claude.ai/code/session_…`); until that id surfaces (remote control still activating, or a local session that has none), it falls back to the claude.ai/code session list.
 
 ## More
 
@@ -113,3 +114,5 @@ The `.xcodeproj` is generated, so edit `project.yml`, not the project file. A fu
 [MIT](LICENSE) covers CCorn's source code.
 
 The app icon is the ear-of-corn glyph from [OpenMoji](https://openmoji.org), licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Per ShareAlike, the icon artwork (this adaptation) is itself CC BY-SA 4.0; this applies to the image only and does not affect the MIT-licensed code. Details in [design-assets/app-icon/ICON_CREDITS.md](design-assets/app-icon/ICON_CREDITS.md).
+</content>
+</invoke>
