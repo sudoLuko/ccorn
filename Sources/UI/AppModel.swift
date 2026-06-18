@@ -32,6 +32,16 @@ final class AppModel: ObservableObject {
     }
     private static let sidebarVisibleKey = "sidebarVisible"
 
+    /// Hidden-until-⌘F name filter (docs/CCORN_SPEC.md 5.1). `searchActive`
+    /// swaps the title-bar corn for a focused search field; `searchQuery`
+    /// narrows the visible list by session name (case-insensitive substring),
+    /// scoped to whichever sidebar view is shown. Both are model-owned so the
+    /// ⌘F command, the title-bar field, and the list filter share one source of
+    /// truth. Escape clears the query and lowers `searchActive`, restoring the
+    /// corn. Not persisted: a freshly shown window always opens un-searched.
+    @Published var searchActive = false
+    @Published var searchQuery = ""
+
     /// Inline rename state (docs/CCORN_SPEC.md 5.8): the row being edited and
     /// the inline error shown under it ("That name is already taken").
     @Published var renamingRowId: String?
@@ -148,6 +158,21 @@ final class AppModel: ObservableObject {
         withAnimation(.easeInOut(duration: 0.2)) {
             sidebarVisible.toggle()
         }
+    }
+
+    /// Reveal the ⌘F name filter: show the title-bar field, which focuses
+    /// itself (the corn/field swap is SwiftUI-observed off `searchActive`).
+    /// Idempotent, so a second ⌘F while the field is already up is a harmless
+    /// no-op rather than a reset.
+    func beginSearch() {
+        searchActive = true
+    }
+
+    /// Dismiss the filter (Escape, or a fresh window show): clear the query,
+    /// hide the field, and restore the corn. Safe to call when not searching.
+    func endSearch() {
+        searchQuery = ""
+        searchActive = false
     }
 
     /// The popover header's aggregate mark: worst presentation across all

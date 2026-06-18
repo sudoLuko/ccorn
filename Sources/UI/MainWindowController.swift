@@ -20,6 +20,14 @@ final class MainWindowController {
     /// app's main (selected) window, grayscale when another window or app is.
     /// Outlives the window so the binding survives a close/reopen cycle.
     private let cornActivation = TitlebarMarkActivation()
+    /// Fixed width of the trailing title-bar accessory. Wide enough to hold the
+    /// ⌘F search field; the corn right-aligns within it (so it keeps its prior
+    /// far-trailing position) and the field fills it when `searchActive`. The
+    /// accessory stays frame-based (NSTitlebarAccessoryViewController positions
+    /// frame-based views; switching it to Auto Layout left the view unpositioned
+    /// and the corn vanished). A fixed width means no resize is needed, so the
+    /// content swap is purely SwiftUI-observed off `model.searchActive`.
+    private static let accessoryWidth: CGFloat = 210
 
     init() {
         // Global observers cover the main window, Settings, and any future
@@ -77,8 +85,14 @@ final class MainWindowController {
             // the window resigned key; an accessory does not, so the glyph's
             // active/inactive tint is driven explicitly via `cornActivation`
             // (see the didBecomeMain/didResignMain observers below).
-            let cornHost = NSHostingView(rootView: TitlebarCornMark(activation: cornActivation))
-            cornHost.frame = NSRect(x: 0, y: 0, width: 38, height: 24)
+            // The accessory hosts either the corn (idle) or the ⌘F search
+            // field (searching); the content swap is SwiftUI-observed off the
+            // model. Frame-based and a fixed width (the corn right-aligns,
+            // the field fills): NSTitlebarAccessoryViewController positions
+            // frame-based views, and a constant width needs no reflow.
+            let cornHost = NSHostingView(
+                rootView: TitlebarAccessory(model: model, activation: cornActivation))
+            cornHost.frame = NSRect(x: 0, y: 0, width: Self.accessoryWidth, height: 24)
             let cornAccessory = NSTitlebarAccessoryViewController()
             cornAccessory.view = cornHost
             cornAccessory.layoutAttribute = .trailing
@@ -147,6 +161,10 @@ final class MainWindowController {
                 return nil
             }
         }
+        // A freshly shown window opens un-searched: clear any stale ⌘F state
+        // (e.g. a ⌘F pressed while no window was up) so the corn, not the
+        // field, is what appears.
+        model.endSearch()
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
         applyWindowLevel()
@@ -202,19 +220,79 @@ final class MainWindowController {
         @Published var isActive = true
     }
 
-    /// The trailing title-bar corn glyph. Full color while its window is the
-    /// app's main (selected) window, desaturated to grayscale otherwise. Tints
-    /// only this instance of `CornMark`; the shared glyph in the popover,
-    /// onboarding, and empty state is deliberately untouched.
-    private struct TitlebarCornMark: View {
+    /// The trailing title-bar accessory: the corn glyph at rest, the ⌘F name
+    /// filter once `searchActive` flips. The corn is decorative branding (no
+    /// control), so searching hides it and the field takes its spot, restored
+    /// on Escape (docs/CCORN_SPEC.md 5.1). Content is right-aligned within the
+    /// fixed-width accessory: the corn keeps its far-trailing position, the
+    /// field fills the width when searching.
+    private struct TitlebarAccessory: View {
+        @ObservedObject var model: AppModel
         @ObservedObject var activation: TitlebarMarkActivation
+        @FocusState private var fieldFocused: Bool
 
         var body: some View {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if model.searchActive {
+                    searchField
+                } else {
+                    corn
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The accessory is wider than the corn so the field has room, but
+            // the corn needs no clicks: disable hit-testing while idle so the
+            // empty span passes mouse events through to the titlebar (window
+            // drag / double-click-zoom keep working). Enabled while searching
+            // so the field is interactive.
+            .allowsHitTesting(model.searchActive)
+            // The ⌘F command only flips `searchActive`; the field grabs focus
+            // here once it is in the tree. Async so focus lands after SwiftUI
+            // installs the field's responder.
+            .onChange(of: model.searchActive) { active in
+                if active {
+                    DispatchQueue.main.async { fieldFocused = true }
+                } else {
+                    fieldFocused = false
+                }
+            }
+        }
+
+        /// Full color while its window is the app's main (selected) window,
+        /// desaturated otherwise. Tints only this instance of `CornMark`; the
+        /// shared glyph in the popover, onboarding, and empty state is untouched.
+        private var corn: some View {
             CornMark(size: 16)
                 .grayscale(activation.isActive ? 0 : 1)
                 .opacity(activation.isActive ? 1 : 0.55)
                 .padding(.trailing, 14)
                 .animation(.easeInOut(duration: 0.15), value: activation.isActive)
+        }
+
+        /// Name filter. Escape clears the query, hides the field, and restores
+        /// the corn (the model's `endSearch`); the same 0.5px-border, plain
+        /// editor the inline rename/group fields use.
+        private var searchField: some View {
+            HStack(spacing: 4) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                TextField("Filter by name", text: $model.searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .focused($fieldFocused)
+                    .frame(width: 150)
+                    .onExitCommand { model.endSearch() }
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color(.separatorColor), lineWidth: 0.5)
+            )
+            .padding(.trailing, 14)
+            .onAppear { fieldFocused = true }
         }
     }
 

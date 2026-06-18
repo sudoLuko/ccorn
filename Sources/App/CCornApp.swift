@@ -13,6 +13,26 @@ struct CCornApp: App {
         }
         .commands {
             SidebarToggleCommands(model: appDelegate.model)
+            SearchCommands(model: appDelegate.model)
+        }
+    }
+}
+
+/// Edit ▸ Find (⌘F): reveals the hidden title-bar name filter and focuses it.
+/// Like `SidebarToggleCommands`, the main window is AppKit-hosted rather than a
+/// SwiftUI scene, so this drives the model directly (the same `searchActive`
+/// state the title-bar field and the list filter bind to) instead of routing
+/// through a focused-scene command. Escape (handled on the field itself)
+/// dismisses it; there is no menu item for that, matching the field's behavior.
+struct SearchCommands: Commands {
+    let model: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .textEditing) {
+            Button("Find") {
+                model.beginSearch()
+            }
+            .keyboardShortcut("f", modifiers: .command)
         }
     }
 }

@@ -31,25 +31,50 @@ struct SessionListView: View {
 
     private var archived: Bool { nav == .archived }
 
+    /// Active ⌘F query, trimmed; empty means no filtering.
+    private var query: String {
+        model.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var isSearching: Bool { !query.isEmpty }
+
     /// The list's source per sidebar view: All Sessions, Archived, or one
-    /// group's members (record-backed, non-archived).
+    /// group's members (record-backed, non-archived). Narrowed in place by the
+    /// ⌘F filter, so the filter is naturally scoped to whatever view is shown.
     private var managedRows: [SessionRow] {
+        let base: [SessionRow]
         switch nav {
-        case .allSessions: return model.managedRows
-        case .archived: return model.archivedRows
-        case .group(let id): return model.groupRows(id: id)
+        case .allSessions: base = model.managedRows
+        case .archived: base = model.archivedRows
+        case .group(let id): base = model.groupRows(id: id)
         }
+        return matching(base)
     }
 
     /// Ambient discoveries belong to All Sessions only: groups are
     /// record-backed, and the archived view is records by definition.
     private var discoveredRows: [SessionRow] {
-        nav == .allSessions ? model.unmanagedRows : []
+        matching(nav == .allSessions ? model.unmanagedRows : [])
+    }
+
+    /// Case-insensitive substring match on the session name only (never the
+    /// working directory or status). An empty query passes every row through.
+    private func matching(_ rows: [SessionRow]) -> [SessionRow] {
+        guard isSearching else { return rows }
+        return rows.filter { $0.title.localizedCaseInsensitiveContains(query) }
     }
 
     var body: some View {
         Group {
-            if (model.hasScanned && managedRows.isEmpty && discoveredRows.isEmpty) || forceEmpty {
+            if isSearching {
+                // Searching never shows the full empty state (with its New
+                // Session / Add Directory actions): a no-match is a filter
+                // result, not an empty app, so it gets the quiet inline state.
+                if managedRows.isEmpty && discoveredRows.isEmpty {
+                    noMatchState
+                } else {
+                    list
+                }
+            } else if (model.hasScanned && managedRows.isEmpty && discoveredRows.isEmpty) || forceEmpty {
                 EmptyStateView(model: model, nav: nav)
             } else {
                 list
@@ -57,6 +82,24 @@ struct SessionListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.windowBackgroundColor))
+    }
+
+    /// No row name matches the ⌘F query: a quiet message in the list's place,
+    /// not a new surface and not the action-bearing empty state.
+    private var noMatchState: some View {
+        VStack(spacing: 6) {
+            Text("No matches")
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.primary)
+            Text("No sessions named “\(query)”")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
     }
 
     private var list: some View {

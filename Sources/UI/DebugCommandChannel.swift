@@ -230,6 +230,20 @@ final class DebugCommandChannel {
             }
             return "sidebar \(model.sidebarVisible ? "visible" : "hidden")"
 
+        // Scripted stand-in for the ⌘F name filter: `on` reveals + focuses the
+        // title-bar field (model.beginSearch, the same path the Edit ▸ Find
+        // command drives), `off` is Escape (model.endSearch), anything else is
+        // typed into the field as the query.
+        case "search" where parts.count >= 2:
+            switch parts[1] {
+            case "on": model.beginSearch()
+            case "off": model.endSearch()
+            default:
+                model.beginSearch()
+                model.searchQuery = parts[1...].joined(separator: " ")
+            }
+            return "search active=\(model.searchActive) query=\(model.searchQuery)"
+
         case "menu" where parts.count >= 3:
             // Find <menu> <item title...> in NSApp.mainMenu and perform its
             // action: exercises the real menu wiring (SwiftUI Commands bridge,
