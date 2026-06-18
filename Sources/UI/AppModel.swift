@@ -237,15 +237,22 @@ final class AppModel: ObservableObject {
     ///     to active lands sub-second instead of riding the 3s tick;
     ///   - a window is on screen but nothing is Working -> 3s (keep the list
     ///     fresh enough to notice work *starting*);
-    ///   - no window on screen -> 5s, clawing back wakeups when nobody is
-    ///     watching. The menu-bar icon carries no state, and the notified states
-    ///     (waiting/dead/needs-auth) are caught on the first poll regardless of
-    ///     cadence, so 5s costs nothing the user can perceive.
+    ///   - no window on screen but something is Working -> 5s, so the
+    ///     working->waiting transition (the one that fires the needs-input
+    ///     notification, our headline feature) is still caught promptly while
+    ///     CCorn runs in the background;
+    ///   - no window on screen and nothing is Working -> 30s, clawing back
+    ///     wakeups when nobody is watching. An idle session cannot reach a
+    ///     notified state without first Working (which pulls us back to the 5s
+    ///     cadence), so slowing the fully-idle background case delays nothing
+    ///     the user can perceive.
     private func nextPollNanos() -> UInt64 {
         let watching = popoverOnScreen || mainWindowOnScreen
-        guard watching else { return 5_000_000_000 }
         let anyWorking = engine.liveSessions.values.contains { $0.state == .working }
-        return anyWorking ? 750_000_000 : 3_000_000_000
+        if watching {
+            return anyWorking ? 750_000_000 : 3_000_000_000
+        }
+        return anyWorking ? 5_000_000_000 : 30_000_000_000
     }
 
     #if DEBUG
