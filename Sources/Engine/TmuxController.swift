@@ -343,8 +343,42 @@ struct TmuxController: Sendable {
     /// full-screen TUI on the alternate screen, which keeps no per-app
     /// scrollback, so `-S -<n>` would read stale pre-launch output. `-J` rejoins
     /// wrapped lines so pattern matching sees whole strings.
-    func capturePane(windowId: String) -> String {
-        tmux(["capture-pane", "-t", windowId, "-p", "-J"]).stdout
+    ///
+    /// `target` is any tmux target: a stable window id (`@N`), which resolves to
+    /// the window's *active* pane, or a specific pane id (`%N`). State detection
+    /// passes a freshly-resolved pane id when it found the pane running claude,
+    /// so a split window with the non-claude pane active does not blind capture;
+    /// it falls back to the window id (active-pane) target otherwise. The `-p -J`
+    /// flags are identical for either target.
+    func capturePane(windowId target: String) -> String {
+        tmux(["capture-pane", "-t", target, "-p", "-J"]).stdout
+    }
+
+    /// One `(paneId, shellPID)` pair per pane in the window. `%N` is the stable
+    /// pane id (a valid `capture-pane`/`send-keys` target, like the window id);
+    /// `#{pane_pid}` is each pane's shell pid, exactly the pid
+    /// `ProcessControl.findClaude(belowShell:)` walks. State detection uses this
+    /// to follow the pane actually running `claude` after a split, instead of
+    /// capturing whatever pane is active. A non-zero exit (no server, a killed
+    /// window, a timeout kill) yields an empty list, which detection treats as
+    /// "could not enumerate" and degrades to the window-target capture, never to
+    /// a worse state. Pure parser split out so the format contract is unit-tested
+    /// without a tmux server.
+    static func parsePaneList(from r: CommandResult) -> [(paneId: String, shellPID: Int32)] {
+        guard r.ok else { return [] }
+        var out: [(paneId: String, shellPID: Int32)] = []
+        for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
+            let cols = line.split(separator: " ", maxSplits: 1).map(String.init)
+            guard cols.count == 2,
+                  !cols[0].isEmpty,
+                  let pid = Int32(cols[1].trimmingCharacters(in: .whitespaces)) else { continue }
+            out.append((paneId: cols[0], shellPID: pid))
+        }
+        return out
+    }
+
+    func listPanes(windowId: String) -> [(paneId: String, shellPID: Int32)] {
+        Self.parsePaneList(from: tmux(["list-panes", "-t", windowId, "-F", "#{pane_id} #{pane_pid}"]))
     }
 
     /// Kill a window by id (sends SIGHUP to the pane's processes).

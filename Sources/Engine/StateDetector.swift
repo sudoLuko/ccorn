@@ -12,12 +12,19 @@ enum PanePIDProbe: Sendable, Equatable {
     case unknown
 }
 
-/// The two tmux reads a detection pass needs. `TmuxController` is the live
+/// The tmux reads a detection pass needs. `TmuxController` is the live
 /// implementation; tests substitute a stub so the classifier and the
 /// dead/grace/re-derive logic run against captured fixtures without a tmux server.
 protocol PaneSource: Sendable {
-    func capturePane(windowId: String) -> String
+    /// Capture a pane's visible frame. `target` is a window id (active pane) or a
+    /// freshly-resolved pane id (the pane actually running claude after a split).
+    func capturePane(windowId target: String) -> String
     func panePIDProbe(windowId: String) -> PanePIDProbe
+    /// `(paneId, shellPID)` per pane in the window, so detection can follow the
+    /// pane running `claude` instead of the active one. An empty list means the
+    /// enumeration failed (or, degenerate, no panes); detection then keeps the
+    /// window-target capture, never a worse state.
+    func listPanes(windowId: String) -> [(paneId: String, shellPID: Int32)]
 }
 
 extension TmuxController: PaneSource {}
@@ -420,6 +427,30 @@ struct StateDetector: Sendable {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
+    // MARK: - Pane following
+
+    /// Pick the pane whose shell subtree contains the tracked `claude` pid, so a
+    /// split window captures the claude pane rather than tmux's active one. Pure:
+    /// no Process/tmux I/O. Membership is delegated to `contains`, which the
+    /// caller backs with the SAME argv-based `ProcessControl.findClaude` walk
+    /// detection already uses (`findClaude(belowShell: shellPID) == .found(pid)`),
+    /// so this introduces no second way to identify claude.
+    ///
+    /// Returns nil and lets the caller fall back to the window-target capture
+    /// when: the list is empty (enumeration failed, or one pane — the common
+    /// single-pane case, where the window target already is the claude pane);
+    /// there is exactly one pane (no split, nothing to follow); or no pane's
+    /// subtree contains the pid (the determined-absent / dead path then runs
+    /// unchanged on the active pane). The single-pane short-circuit also avoids a
+    /// needless subtree walk in the overwhelmingly common case.
+    static func selectClaudePane(panes: [(paneId: String, shellPID: Int32)],
+                                 claudePID: Int32,
+                                 contains: (_ shellPID: Int32, _ claudePID: Int32) -> Bool)
+                                 -> String? {
+        guard panes.count > 1 else { return nil }
+        return panes.first { contains($0.shellPID, claudePID) }?.paneId
+    }
+
     // MARK: - Detection
 
     /// One detection pass. Pure with respect to shared state: reads tmux/process
@@ -518,7 +549,25 @@ struct StateDetector: Sendable {
         }
         result.pid = livePID
 
-        let pane = panes.capturePane(windowId: windowId)
+        // Follow the pane running claude, not tmux's active pane. After a split
+        // (the non-claude pane active) a window-target capture returns the wrong
+        // pane and the classifier loses the TUI footer it keys on, though the
+        // pane-agnostic pid walk keeps the session alive. Re-resolve the pane id
+        // every poll from the live pane list (pane ids are runtime state like
+        // pids; never persisted): pick the pane whose shell subtree contains the
+        // tracked claude pid, reusing the SAME argv-based `claudeBelowShell` walk.
+        // Falls back to the window-target capture (today's behavior, exactly)
+        // when there is one pane, the enumeration failed, or no pane matches, so
+        // a transient `list-panes` failure degrades to today's capture, never to
+        // a worse state, and single-pane sessions are untouched.
+        let captureTarget = livePID.flatMap { pid in
+            Self.selectClaudePane(panes: panes.listPanes(windowId: windowId),
+                                  claudePID: pid,
+                                  contains: { shellPID, claudePID in
+                                      claudeBelowShell(shellPID) == .found(claudePID)
+                                  })
+        } ?? windowId
+        let pane = panes.capturePane(windowId: captureTarget)
         // The registry bridge handle (a `session_…` id) is read up front: its
         // mere presence is one of the remote-control-active signals, AND its
         // value is the `claude.ai/code/<id>` per-session URL segment the browser

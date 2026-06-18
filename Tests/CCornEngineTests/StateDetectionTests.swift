@@ -10,8 +10,18 @@ struct StubPanes: PaneSource {
     /// with shell pid x"; `.unknown` models "tmux could not answer" (the
     /// transient tool-failure case detection must NOT read as crashed).
     var shellProbe: PanePIDProbe = .unknown
-    func capturePane(windowId: String) -> String { pane }
+    /// The window's pane list (`list-panes`). Empty by default, so detection
+    /// short-circuits the pane-following selection and captures the window
+    /// target exactly as before; split-case tests set it explicitly.
+    var panesList: [(paneId: String, shellPID: Int32)] = []
+    /// Per-pane-target captures keyed by the resolved pane id, so a split test
+    /// can give the claude pane and the active pane different frames. When a
+    /// target is absent (the single-pane / fallback window-target case), `pane`
+    /// is returned, so every existing test's behavior is preserved.
+    var paneCaptures: [String: String] = [:]
+    func capturePane(windowId target: String) -> String { paneCaptures[target] ?? pane }
     func panePIDProbe(windowId: String) -> PanePIDProbe { shellProbe }
+    func listPanes(windowId: String) -> [(paneId: String, shellPID: Int32)] { panesList }
 }
 
 extension StubPanes {
