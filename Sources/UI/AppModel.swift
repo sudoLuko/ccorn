@@ -53,6 +53,11 @@ final class AppModel: ObservableObject {
     @Published var selectedIDs: Set<String> = []
     /// Anchor for ⇧-click range selection: the last row clicked plain or with ⌘.
     private var selectionAnchor: String?
+    /// Whether the user is actively building a multi-selection (⌘/⇧/⌘A). The
+    /// FIRST ⌘-click starts fresh — it treats the clicked row as member one
+    /// rather than absorbing a lingering single (plain-click) selection — and
+    /// only later ⌘-clicks toggle/add. False after a plain click or a clear.
+    private var isMultiSelecting = false
     /// The sole selected row's listID, or nil when zero or many are selected;
     /// the single-selection consumers (Return-to-rename) use this.
     var soleSelection: String? { selectedIDs.count == 1 ? selectedIDs.first : nil }
@@ -293,21 +298,32 @@ final class AppModel: ObservableObject {
     }
 
     /// Route a click into the selection, honoring the modifier keys: ⌘ toggles
-    /// the row, ⇧ extends from the anchor across the visible order, plain
-    /// replaces the whole selection with this one row.
+    /// (or, on the first ⌘-click, starts fresh), ⇧ extends from the anchor
+    /// across the visible order, plain replaces the whole selection with this
+    /// one row.
     func selectOnTap(_ row: SessionRow, modifiers: NSEvent.ModifierFlags) {
+        let listID = row.listID
         if modifiers.contains(.command) {
-            toggleSelected(row.listID)
+            if isMultiSelecting {
+                toggleSelected(listID)
+            } else {
+                // First ⌘-click: begin a new multi-selection with this row as
+                // member one, instead of absorbing a lingering single selection.
+                selectedIDs = [listID]
+                selectionAnchor = listID
+                isMultiSelecting = true
+            }
         } else if modifiers.contains(.shift) {
-            extendSelection(to: row.listID)
+            extendSelection(to: listID)
         } else {
-            selectOnly(row.listID)
+            selectOnly(listID)
         }
     }
 
     func selectOnly(_ listID: String) {
         selectedIDs = [listID]
         selectionAnchor = listID
+        isMultiSelecting = false
     }
 
     func toggleSelected(_ listID: String) {
@@ -317,6 +333,7 @@ final class AppModel: ObservableObject {
             selectedIDs.insert(listID)
         }
         selectionAnchor = listID
+        isMultiSelecting = true
     }
 
     /// ⇧-click: select every row between the anchor and the clicked row in the
@@ -332,17 +349,20 @@ final class AppModel: ObservableObject {
             return
         }
         selectedIDs = Set(order[min(a, b)...max(a, b)])
+        isMultiSelecting = true
     }
 
     func selectAllVisible() {
         let order = visibleRows().map(\.listID)
         selectedIDs = Set(order)
         selectionAnchor = order.first
+        isMultiSelecting = true
     }
 
     func clearSelection() {
         selectedIDs = []
         selectionAnchor = nil
+        isMultiSelecting = false
     }
 
     /// The selected rows in the current view, in display order. Snapshotted by
@@ -821,6 +841,7 @@ final class AppModel: ObservableObject {
         if let anchor = selectionAnchor, !liveListIDs.contains(anchor) {
             selectionAnchor = selectedIDs.first
         }
+        if selectedIDs.isEmpty { isMultiSelecting = false }
         if let renamingRowId,
            !built.contains(where: { $0.id == renamingRowId }),
            !archived.contains(where: { $0.id == renamingRowId }) {
