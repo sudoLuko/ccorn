@@ -125,7 +125,7 @@ final class SessionEngine: ObservableObject {
         let launch = await Task.detached { () -> Launch in
             let session = tmux.ensureSession(mouseMode: mouse)
             guard session.ok else {
-                return Launch(result: .failed("could not create tmux session"), uuid: nil)
+                return Launch(result: .failed(Self.tmuxSessionFailureMessage(stderr: session.stderr)), uuid: nil)
             }
             let name = tmux.uniqueWindowName(from: label)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {
@@ -215,7 +215,7 @@ final class SessionEngine: ObservableObject {
         }.value
         let result = await Task.detached { () -> StartResult in
             let session = tmux.ensureSession(mouseMode: mouse)
-            guard session.ok else { return .failed("could not create tmux session") }
+            guard session.ok else { return .failed(Self.tmuxSessionFailureMessage(stderr: session.stderr)) }
             let name = tmux.uniqueWindowName(from: windowName)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {
                 return .failed("could not create tmux window")
@@ -280,6 +280,21 @@ final class SessionEngine: ObservableObject {
                                                   config: SessionLaunchConfig?) -> String {
         let flags = (config?.claudeFlagTokens() ?? []).map(TmuxController.shellQuote)
         return ([base] + flags).joined(separator: " ")
+    }
+
+    /// Message for a failed `tmux new-session`. Surfaces tmux's own stderr (so
+    /// the user sees the real reason, not a bare "could not create") and a
+    /// concrete recovery step: a stale tmux server left by another install or an
+    /// earlier crash is the usual first-run cause, and `tmux kill-server` clears
+    /// it. Plain prose, since this lands in an alert body, not a terminal.
+    private nonisolated static func tmuxSessionFailureMessage(stderr: String?) -> String {
+        var lines = ["Could not create the tmux session that runs Claude Code."]
+        let detail = stderr?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !detail.isEmpty {
+            lines.append("tmux reported: \(detail)")
+        }
+        lines.append("This usually means a stale tmux server is running. Open a terminal, run “tmux kill-server”, then try again.")
+        return lines.joined(separator: "\n\n")
     }
 
     /// Poll for the claude child of the window's pane shell (up to 5s; node

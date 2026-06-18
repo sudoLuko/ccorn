@@ -1439,7 +1439,7 @@ final class AppModel: ObservableObject {
                 Alerts.info(title: content.title, message: content.message)
             } else {
                 Alerts.info(title: "Claude Code didn't \(verb)",
-                            message: "No claude process started. Check that Claude Code is installed and signed in.")
+                            message: "No claude process started. Either Claude Code isn't installed, or it's installed but not signed in. In a terminal, run “claude” to confirm it launches, then “/login” to sign in, and try again.")
             }
         case let .failed(reason):
             Alerts.info(title: "Could not \(verb) the session", message: reason)

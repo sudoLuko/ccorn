@@ -66,6 +66,10 @@ struct TmuxController: Sendable {
     struct EnsureSessionResult: Sendable {
         let ok: Bool
         let strayDefaultWindowId: String?
+        /// tmux's own stderr from a failed `new-session`, so the caller can tell
+        /// the user *why* it failed (a stale/incompatible server, a socket
+        /// permission issue) instead of a bare "could not create". nil on success.
+        var stderr: String? = nil
     }
 
     /// Create the `ccorn` session if it does not already exist. Never recreate.
@@ -83,7 +87,7 @@ struct TmuxController: Sendable {
             "new-session", "-d", "-s", Self.sessionName,
             "-P", "-F", "#{window_id}",
         ])
-        guard r.ok else { return EnsureSessionResult(ok: false, strayDefaultWindowId: nil) }
+        guard r.ok else { return EnsureSessionResult(ok: false, strayDefaultWindowId: nil, stderr: r.stderr) }
         scrubNestedSessionMarkers()
         setMouseMode(mouseMode)
         let id = r.trimmedOut
