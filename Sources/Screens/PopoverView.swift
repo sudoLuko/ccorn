@@ -4,9 +4,9 @@ import SwiftUI
 /// mirror of the dashboard. Sessions that need the user (waiting, sign-in,
 /// no-remote, crashed) render as individual rows at the top, worst first; the
 /// calm rest collapse behind a single quiet-count disclosure that doubles as
-/// the all-clear line when nothing needs attention. Fixed dark zinc
-/// regardless of system appearance; hardcoded hex is correct here and only
-/// here. 280px wide, 12px padding, branded header with the aggregate mark,
+/// the all-clear line when nothing needs attention. Zinc palette that follows
+/// the app appearance (`PopoverPalette` is appearance-paired), so the popover is
+/// light or dark with the rest of the app. 280px wide, 12px padding, branded header with the aggregate mark,
 /// footer actions. The split is popover-local: the shared rows sort and the
 /// main window's full recency list are untouched.
 struct PopoverView: View {

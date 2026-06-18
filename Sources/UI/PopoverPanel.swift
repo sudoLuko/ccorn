@@ -87,9 +87,11 @@ final class PopoverPanelController {
         panel.hidesOnDeactivate = false
         // Instant like a native menu: no fade or scale on order-front.
         panel.animationBehavior = .none
-        // The popover surface is fixed dark regardless of system appearance;
-        // AppKit-vended colors inside the content must resolve dark.
-        panel.appearance = NSAppearance(named: .darkAqua)
+        // No appearance override: the popover follows the app appearance
+        // (Settings ▸ Appearance / the system, via NSApp.appearance), so its
+        // adaptive PopoverPalette and the appearance-paired status tokens resolve
+        // the same face as the main window. (It was pinned to .darkAqua before
+        // the appearance setting existed; now it tracks the toggle.)
         panel.level = .popUpMenu
         panel.collectionBehavior = [.transient, .ignoresCycle, .canJoinAllSpaces]
         // Clear + non-opaque: only the content's rounded fill is visible, and

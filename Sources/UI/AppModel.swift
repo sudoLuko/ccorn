@@ -65,8 +65,8 @@ final class AppModel: ObservableObject {
     /// `sidebarVisible`, so the launch hook and the Settings picker drive one
     /// source of truth and the choice survives relaunch. The `didSet` applies it
     /// immediately via `NSApp.appearance` (see `applyAppearance`), which cascades
-    /// to every window EXCEPT the menu-bar popover, deliberately fixed dark
-    /// (PopoverPanel sets its own appearance).
+    /// to every window including the menu-bar popover (its `PopoverPalette` is
+    /// appearance-paired and the panel no longer pins its own appearance).
     @Published var appearanceMode: AppearanceMode {
         didSet {
             UserDefaults.standard.set(appearanceMode.rawValue, forKey: Self.appearanceModeKey)
@@ -215,8 +215,9 @@ final class AppModel: ObservableObject {
     /// Apply the persisted appearance override to the whole app. nil follows the
     /// system; `.aqua`/`.darkAqua` force light/dark. The central place appearance
     /// is applied: called once on launch (AppDelegate) and on every change (the
-    /// `appearanceMode` didSet). The fixed-dark popover overrides this for itself
-    /// (PopoverPanel.swift), so it stays dark under any forced mode.
+    /// `appearanceMode` didSet). Every surface follows, including the menu-bar
+    /// popover (appearance-paired `PopoverPalette`); only the menu-bar icon stays
+    /// independent, a template tinted by the system menu bar.
     func applyAppearance() {
         NSApp.appearance = appearanceMode.nsAppearance
     }

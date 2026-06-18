@@ -22,15 +22,24 @@ struct SettingsView: View {
     var body: some View {
         Form {
             watchDirectoriesSection
+            appearanceSection
             behaviorSection
             launchDefaultsSection
             statusLegendSection
             aboutSection
         }
         .formStyle(.grouped)
+        // Fixed width holds the 480pt design column; height is flexible with a
+        // floor so the window resizes vertically and the Form scrolls its own
+        // content once it outgrows the window. This drops the old
+        // `.fixedSize(vertical:)`, which pinned the window to the Form's full
+        // height: the window could only grow to fit, never scroll or shrink
+        // below the screen. The window's resize handle, width lock, and size
+        // bounds are applied by SettingsWindowConfigurator below, paired with
+        // `.windowResizability(.contentMinSize)` on the Settings scene.
         .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(WindowTitleTextHider())
+        .frame(minHeight: 400, idealHeight: 640, maxHeight: .infinity)
+        .background(SettingsWindowConfigurator())
         .onAppear(perform: snapLegacyThreshold)
     }
 
@@ -114,6 +123,23 @@ struct SettingsView: View {
         guard !settings.watchDirectories.contains(dir) else { return }
         settings.watchDirectories.append(dir)
         model.applySettings(settings)
+    }
+
+    // MARK: Section: Appearance
+
+    /// Forces the whole app light or dark, or follows the system. Bound straight
+    /// to the model-owned setting; its didSet persists the choice and applies it
+    /// immediately via NSApp.appearance (AppModel.applyAppearance), so every
+    /// window flips, the menu-bar popover included (its palette is appearance-
+    /// paired). Menu picker to match the other Settings pickers.
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            Picker("Window appearance", selection: $model.appearanceMode) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+        }
     }
 
     // MARK: Section 2: Behavior
@@ -215,7 +241,14 @@ struct SettingsView: View {
     /// sheet, not here.
     private var launchDefaultsSection: some View {
         Section("New Session Defaults") {
-            Picker("Permission mode", selection: Binding(
+            // The summary rides in each Picker's label closure: the second Text
+            // renders as the grouped Form row's secondary caption (the
+            // scroll-wheel toggle's idiom above), so it stays anchored under the
+            // control it describes instead of floating to the bottom of the
+            // section, where the permission summary read as the remote-control
+            // note. The permission summary is dynamic per mode; the remote one
+            // flips on the chosen value.
+            Picker(selection: Binding(
                 get: { engine.settings.defaultLaunchConfig.permissionMode },
                 set: { value in
                     var settings = engine.settings
@@ -226,6 +259,9 @@ struct SettingsView: View {
                 ForEach(CCPermissionMode.selectable(isRoot: LaunchEnvironment.isRoot), id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
+            } label: {
+                Text("Permission mode")
+                Text(engine.settings.defaultLaunchConfig.permissionMode.summary)
             }
 
             // Seeds the New Session sheet's Remote Control checkbox so a user who
@@ -233,7 +269,7 @@ struct SettingsView: View {
             // `rcKnownUnavailable` verdict still forces local on top of this
             // (CCornSettings.effectiveDefaultConfig); the stored choice here is
             // left intact and resumes once the account proves RC-capable again.
-            Picker("Remote control", selection: Binding(
+            Picker(selection: Binding(
                 get: { engine.settings.defaultLaunchConfig.remoteControl },
                 set: { value in
                     var settings = engine.settings
@@ -243,16 +279,12 @@ struct SettingsView: View {
             )) {
                 Text("On").tag(true)
                 Text("Off").tag(false)
+            } label: {
+                Text("Remote control")
+                Text(engine.settings.defaultLaunchConfig.remoteControl
+                     ? "New sessions sync to claude.ai and your phone, and get a per-session URL."
+                     : "New sessions start local: no remote or phone access, and no per-session URL.")
             }
-
-            Text(engine.settings.defaultLaunchConfig.permissionMode.summary)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Text(engine.settings.defaultLaunchConfig.remoteControl
-                 ? "New sessions sync to claude.ai and your phone, and get a per-session URL."
-                 : "New sessions start local: no remote or phone access, and no per-session URL.")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
     }
 
@@ -305,20 +337,82 @@ struct SettingsView: View {
     }
 }
 
+/// Pins the Settings window to the 480pt design width while leaving the height
+/// freely resizable. There is no `windowResizability` value that locks one axis
+/// on a `Settings` window: `.contentSize` clamps both axes (so the window can't
+/// grow taller either), and `.contentMinSize` frees both maximums (so the
+/// window grows sideways and the 480 content floats with gutters). A manually
+/// set `NSWindow.contentMaxSize` is overridden by the resizability policy on
+/// each layout, so it can't hold the width. Clamping the proposed frame in
+/// `windowWillResize(_:to:)` is the one hook the policy doesn't override; it
+/// fires on every live user drag and we force the width back to 480.
+///
+/// Every other delegate message is forwarded to SwiftUI's original window
+/// delegate (captured before we take over), so the Settings scene's own
+/// lifecycle handling is untouched.
+private final class FixedWidthWindowDelegate: NSObject, NSWindowDelegate {
+    static let width: CGFloat = 480
+    weak var forwarding: NSWindowDelegate?
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        // Let the original delegate constrain height first (if it cares), then
+        // force the width. No horizontal window chrome, so frame width == the
+        // 480 content width.
+        var size = frameSize
+        if let forwarding, forwarding.responds(to: #selector(windowWillResize(_:to:))) {
+            size = forwarding.windowWillResize?(sender, to: frameSize) ?? frameSize
+        }
+        size.width = Self.width
+        return size
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        super.responds(to: aSelector) || (forwarding?.responds(to: aSelector) ?? false)
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if let forwarding, forwarding.responds(to: aSelector) { return forwarding }
+        return super.forwardingTarget(for: aSelector)
+    }
+}
+
 /// The Settings scene's window is created by SwiftUI, so there is no
-/// controller to configure chrome on: this reaches the hosting window and
-/// hides the title-bar TEXT, the same treatment as the main and onboarding
-/// windows, whose identity lives in their content, not the titlebar. The
-/// title STRING stays whatever the scene set (it contains "Settings"), so
-/// DebugStage's window lookup keeps working.
-private struct WindowTitleTextHider: NSViewRepresentable {
-    final class HidingView: NSView {
+/// controller to configure chrome on: this reaches the hosting window to
+/// configure it directly.
+///
+/// 1. Hides the title-bar TEXT, the same treatment as the main and onboarding
+///    windows, whose identity lives in their content, not the titlebar. The
+///    title STRING stays whatever the scene set (it contains "Settings"), so
+///    DebugStage's window lookup keeps working.
+/// 2. Inserts `.resizable` into the style mask. SwiftUI builds a Settings
+///    window WITHOUT it (a preferences window is fixed by default), and
+///    `windowResizability` alone never adds it, so the handle has to be set by
+///    hand for the window to resize at all.
+/// 3. Installs `FixedWidthWindowDelegate` to lock the width to 480 (see there).
+///
+/// Re-run in `updateNSView` so a relayout can't quietly drop any of it; the
+/// delegate install is guarded so it captures SwiftUI's delegate once, not
+/// itself.
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    final class ConfiguringView: NSView {
+        let widthLock = FixedWidthWindowDelegate()
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            window?.titleVisibility = .hidden
+            configureWindow()
+        }
+
+        func configureWindow() {
+            guard let window else { return }
+            window.titleVisibility = .hidden
+            window.styleMask.insert(.resizable)
+            if window.delegate !== widthLock {
+                widthLock.forwarding = window.delegate
+                window.delegate = widthLock
+            }
         }
     }
 
-    func makeNSView(context: Context) -> HidingView { HidingView() }
-    func updateNSView(_ nsView: HidingView, context: Context) {}
+    func makeNSView(context: Context) -> ConfiguringView { ConfiguringView() }
+    func updateNSView(_ nsView: ConfiguringView, context: Context) { nsView.configureWindow() }
 }

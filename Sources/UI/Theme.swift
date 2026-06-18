@@ -4,8 +4,9 @@ import SwiftUI
 // MARK: - Hex colors
 
 extension Color {
-    /// 0xRRGGBB. Only for the status palette (same in light/dark) and the
-    /// menu-bar popover (fixed dark). Main-window chrome uses semantic colors.
+    /// 0xRRGGBB. Only for status/popover tokens that are identical in both
+    /// appearances; tokens that adapt use Color(lightHex:darkHex:), and
+    /// main-window chrome uses semantic colors.
     init(hex: UInt32) {
         self.init(.sRGB,
                   red: Double((hex >> 16) & 0xFF) / 255,
@@ -30,7 +31,7 @@ extension Color {
 /// declaration); the rest are identical in light and dark.
 enum StatusPalette {
     /// Running green, adaptive: green-600 on light; green-500 on dark (and
-    /// therefore the fixed-dark popover) so the healthy dot keeps its weight
+    /// the popover in dark) so the healthy dot keeps its weight
     /// next to the bright dark-face amber instead of receding. Same hue,
     /// lifted one step. Green-500 is dark-face ONLY: it sits near 2.3:1 on
     /// white and fails the 3:1 UI-component floor there.
@@ -40,7 +41,7 @@ enum StatusPalette {
                                darkHex: runningDarkHex)
 
     /// Working blue, adaptive: blue-600 on light; blue-500 on dark (and
-    /// therefore the fixed-dark popover) so working reads active and
+    /// the popover in dark) so working reads active and
     /// separates from the muted stale slate. Same hue, lifted one step.
     static let workingLightHex: UInt32 = 0x2563EB
     static let workingDarkHex: UInt32 = 0x3B82F6
@@ -52,7 +53,7 @@ enum StatusPalette {
     /// word. Appearance-adaptive because the word is body-size TEXT: on light
     /// it must clear WCAG AA 4.5:1 against the window background. Amber-500
     /// (#F59E0B) and the old waiting #D97706 both sit near 3:1 and fail, so
-    /// it darkens to between amber-700 and -800; on dark and the fixed-dark
+    /// it darkens to between amber-700 and -800; on dark and the dark
     /// popover the brighter amber reads well (~9:1 on #09090B).
     static let attentionLightHex: UInt32 = 0xA34A0B
     static let attentionDarkHex: UInt32 = 0xF59E0B
@@ -69,7 +70,7 @@ enum StatusPalette {
     /// 3:1 (this is ~3.4:1 on white; the previous tertiaryLabelColor resolved
     /// near #BDBDBD, ~1.6:1, and the ring all but vanished), while staying
     /// lighter than the unmanaged #71717A so stopped remains the quieter of
-    /// the two hollow dots. Dark, and therefore the fixed-dark popover:
+    /// the two hollow dots. Dark, and therefore the popover in dark:
     /// zinc-400, visibly present, recessive, and a step lighter than the
     /// unmanaged outline so the hierarchy holds there too.
     static let stoppedOutlineLightHex: UInt32 = 0x8A8A8F
@@ -81,15 +82,20 @@ enum StatusPalette {
     static let importPending = Color.secondary.opacity(0.5)
 }
 
-/// Menu-bar popover palette: the popover is fixed dark regardless of system
-/// appearance, so hardcoded hex is correct here (and only here).
+/// Menu-bar popover palette. The popover follows the app appearance (Settings ▸
+/// Appearance / the system), so these are appearance-paired hex. The DARK face is
+/// byte-identical to the old fixed-dark popover (so system-dark / forced-dark is
+/// unchanged); the LIGHT face mirrors each token across the same zinc scale, so
+/// the popover reads as a clean light menu when the app is light. Light surfaces
+/// land on #FAFAFA, the ground `ThemeTokenTests` already pins the status faces
+/// against; `secondaryText` is zinc-500, legible on both, so it needs no pair.
 enum PopoverPalette {
-    static let background = Color(hex: 0x09090B)
-    static let rowHover = Color(hex: 0x18181B)
-    static let divider = Color(hex: 0x27272A)
-    static let primaryText = Color(hex: 0xFAFAFA)
+    static let background = Color(lightHex: 0xFAFAFA, darkHex: 0x09090B)
+    static let rowHover = Color(lightHex: 0xF4F4F5, darkHex: 0x18181B)
+    static let divider = Color(lightHex: 0xE4E4E7, darkHex: 0x27272A)
+    static let primaryText = Color(lightHex: 0x18181B, darkHex: 0xFAFAFA)
     static let secondaryText = Color(hex: 0x71717A)
-    static let footerText = Color(hex: 0xA1A1AA)
+    static let footerText = Color(lightHex: 0x52525B, darkHex: 0xA1A1AA)
 }
 
 // MARK: - StatusPresentation colors
@@ -126,17 +132,20 @@ extension StatusPresentation {
 
 // MARK: - Status mark
 
-/// KEEP-OR-CUT (review item 1, "Process"): the Working dot's gentle brightness
-/// breath: the dot stays clearly blue, full size, and full opacity, and only
-/// its brightness oscillates in a narrow band, so it reads as quietly alive
-/// rather than blinking or fading. The motion is a continuous sine driven from
-/// a linear phase (no dwell or hold at the trough, unlike easeInOut+autoreverse
-/// which parks at the extremes and reads as a flicker), and each row carries a
-/// stable phase offset so a list never breathes in unison. Breathing in place
-/// keeps it subordinate to the waiting halo's outward expansion (the halo stays
-/// exclusive to Waiting). Flip to false to cut. Renders only in
-/// RowStatusIndicator (live rows); the static StatusMark used in
-/// legends/headers stays a plain solid dot.
+/// The Working dot's breath: the dot pulses size (grows and returns) while its
+/// brightness eases in the same cycle, so it reads as actively alive. Size is
+/// the carrier — it is appearance-independent, so the motion is equally legible
+/// on light and dark, where the brightness swing alone fought one scheme or the
+/// other (a brighten-only breath washed into a near-white background). Brightness
+/// is the secondary cue and is direction-aware (see `BreathPulse`). The motion is
+/// a continuous sine driven from a linear phase (no dwell or hold at the trough,
+/// unlike easeInOut+autoreverse which parks at the extremes and reads as a
+/// flicker), and each row carries a stable phase offset so a list never breathes
+/// in unison. The dot grows IN PLACE and returns; it stays distinct from the
+/// Waiting halo, which is a separate ring emanating outward from a still dot (the
+/// halo stays exclusive to Waiting). Flip to false to cut. Renders only in
+/// RowStatusIndicator (live rows); the static StatusMark used in legends/headers
+/// stays a plain solid dot.
 enum WorkingBreath {
     static let enabled = true
 }
@@ -232,19 +241,33 @@ struct RowStatusIndicator: View {
     var identity: String = ""
 
     @Environment(\.rowMotionEnabled) private var motionEnabled
+    /// The breath moves the dot AWAY from the surface luminance so the motion
+    /// always gains contrast: brighten on a dark surface, darken on a light one.
+    /// Read per-surface (resolved scheme), so the always-dark popover keeps
+    /// brightening even when the app is forced light. Brightening toward a
+    /// near-white background drops the dot to ~3:1 at the breath peak (measured),
+    /// which is why the working animation washed out in light mode.
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var pulsing = false
     /// Linear breath clock: held at 1 while a working row is on screen and
     /// driven 0→1 forever by the repeatForever linear animation below; the
-    /// BreathBrightness modifier maps it through a sine. 0 at rest.
+    /// BreathPulse modifier maps it through a sine. 0 at rest.
     @State private var breathPhase: Double = 0
 
-    /// Peak brightness the breath adds to the base working blue (it oscillates
-    /// in [0, peak], so the dot only ever brightens, never darkens or fades).
-    /// Narrow on purpose: noticeable up close, calm across a list.
-    private static let breathPeak: Double = 0.16
-    /// Seconds per full sine cycle: slow, so many rows together feel calm.
-    private static let breathPeriod: Double = 3.0
+    /// Fraction the dot grows at the breath peak. The base dot is 7px, so each
+    /// 1/7 (≈0.143) is +1px of peak diameter: 0.143 → 7px grows to 8px. The
+    /// primary, appearance-independent cue (reads on light and dark alike); grows
+    /// from rest and returns, never below the base size. Tune in ~0.143 steps to
+    /// move the peak ±1px at a time.
+    private static let breathScale: Double = 0.143
+    /// Peak brightness magnitude layered on top of the size pulse. The SIGN is
+    /// chosen per-surface at the call site (brighten on dark, darken on light), so
+    /// the color always moves away from the background, never fades into it.
+    private static let breathPeak: Double = 0.2
+    /// Seconds per full sine cycle: unhurried, so many rows together stay calm,
+    /// but quick enough to read as active.
+    private static let breathPeriod: Double = 2.4
 
     /// Deterministic phase offset in [0,1) from the row id, so rows do not
     /// breathe in unison. A small FNV-1a hash, NOT String.hashValue (which is
@@ -264,23 +287,27 @@ struct RowStatusIndicator: View {
 
     var body: some View {
         StatusMark(presentation: presentation)
-            // Working: a gentle in-place brightness breath. The base blue dot
-            // is redrawn so .brightness touches ONLY the working mark (never
-            // other states'), keeping full size and full opacity while its
-            // brightness eases on a continuous sine, driven from a linear
-            // phase, so it never dwells at the trough the way easeInOut +
-            // autoreverse does. Breathing in place (not expanding) keeps it
-            // quietly alive and subordinate to the waiting halo. At rest /
-            // motion-off the overlay matches the base dot, so a hidden or
-            // non-breathing working row is a plain blue dot.
+            // Working: a size-and-brightness breath. The blue dot is redrawn as an
+            // overlay so the pulse touches ONLY the working mark (never other
+            // states'): the overlay scales up from the base dot and returns, with
+            // its brightness easing in the same sine cycle, driven from a linear
+            // phase so it never dwells at the trough the way easeInOut +
+            // autoreverse does. The overlay is always ≥ the 7px base, so it fully
+            // covers it as it grows; at rest / motion-off the overlay matches the
+            // base dot, so a hidden or non-breathing working row is a plain blue
+            // dot. The brightness sign is per-surface (brighten on dark, darken on
+            // light) so the color moves away from the background on both schemes.
             .overlay {
                 if isWorking {
                     Circle()
                         .fill(StatusPalette.working)
                         .frame(width: 7, height: 7)
-                        .modifier(BreathBrightness(phase: breathPhase,
-                                                   offset: phaseOffset,
-                                                   peak: Self.breathPeak))
+                        .modifier(BreathPulse(phase: breathPhase,
+                                              offset: phaseOffset,
+                                              scalePeak: Self.breathScale,
+                                              brightnessPeak: colorScheme == .dark
+                                                  ? Self.breathPeak
+                                                  : -Self.breathPeak))
                         .animation(motionEnabled
                                    ? .linear(duration: Self.breathPeriod).repeatForever(autoreverses: false)
                                    : .easeInOut(duration: 0.2),
@@ -348,16 +375,22 @@ struct RowStatusIndicator: View {
 }
 
 /// Maps a linearly-advancing phase (0→1, driven by a repeatForever animation)
-/// through a sine, so the working dot's brightness eases continuously and never
-/// dwells at the extremes the way easeInOut + autoreverse parks at them. The
+/// through a sine, so the working dot's size and brightness ease continuously and
+/// never dwell at the extremes the way easeInOut + autoreverse parks at them. The
 /// phase runs exactly one sine cycle over 0→1, so the repeatForever loop is
-/// seamless (sin is identical at phase 0 and 1). `offset` (stable per row)
-/// desyncs rows; brightness stays in [0, peak], so the dot only brightens from
-/// its base blue, full size, full opacity, never darkening or fading.
-private struct BreathBrightness: ViewModifier, Animatable {
+/// seamless (sin is identical at phase 0 and 1). Driving both effects off the one
+/// `animatableData` phase keeps them in lockstep and smoothly sampled per frame.
+/// `offset` (stable per row) desyncs rows. The unit ramp `0.5*(1+s)` runs [0,1],
+/// so the dot grows from its base size and returns (never shrinks below it), and
+/// the brightness rides [0, brightnessPeak] — the caller passes a positive peak
+/// to brighten on dark surfaces, a negative one to darken on light ones, so the
+/// color always eases away from the background. At rest (s = -1) both are 0: base
+/// size, base blue.
+private struct BreathPulse: ViewModifier, Animatable {
     var phase: Double
     let offset: Double
-    let peak: Double
+    let scalePeak: Double
+    let brightnessPeak: Double
 
     var animatableData: Double {
         get { phase }
@@ -366,7 +399,10 @@ private struct BreathBrightness: ViewModifier, Animatable {
 
     func body(content: Content) -> some View {
         let s = sin((phase + offset) * 2 * .pi)   // [-1, 1]
-        return content.brightness(peak * 0.5 * (1 + s))   // [0, peak]
+        let unit = 0.5 * (1 + s)                   // [0, 1]
+        return content
+            .scaleEffect(1 + scalePeak * unit)
+            .brightness(brightnessPeak * unit)
     }
 }
 
@@ -400,8 +436,8 @@ struct AttentionWord: View {
 /// metadata, not status; it carries no status color (secondary grey only), so
 /// the one-mark-per-row and status-is-the-only-color rules hold. Shown only on
 /// local rows; remote rows (the default) carry nothing. The color is injected
-/// so one view reads correctly on the light main window (`.secondary`) and the
-/// fixed-dark popover (`PopoverPalette.secondaryText`). Shared by both rows so
+/// so one view reads correctly on the main window (`.secondary`) and the
+/// popover (`PopoverPalette.secondaryText`). Shared by both rows so
 /// the tag matches across surfaces, like `AttentionWord`.
 struct LocalTag: View {
     let isLocal: Bool

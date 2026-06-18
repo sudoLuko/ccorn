@@ -26,6 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // while a regular window is open (MainWindowController).
         NSApp.setActivationPolicy(.accessory)
 
+        // Apply the persisted window-appearance override (Settings ▸ Appearance)
+        // before any window is built, so the first frame is already in the chosen
+        // mode. nil follows the system; every surface follows, the popover
+        // included (PopoverPalette is appearance-paired). The debug
+        // CCORN_DEBUG_UI=light override below still wins in Debug builds.
+        model.applyAppearance()
+
         model.openMainWindow = { [weak self] in self?.openMainWindow() }
         model.closePopover = { [weak self] in self?.popoverPanel.close() }
         model.closeOnboarding = { [weak self] in self?.onboarding.close() }

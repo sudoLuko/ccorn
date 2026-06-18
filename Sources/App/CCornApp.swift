@@ -11,6 +11,13 @@ struct CCornApp: App {
         Settings {
             SettingsView(model: appDelegate.model)
         }
+        // Derive only the MINIMUM window size from the content; leave the
+        // maximum unconstrained so the preferences window can be dragged
+        // taller. `.contentSize` (and the Settings default) pin max == min to
+        // the content height, which leaves the window scrollable but not
+        // resizable. The resize handle and the width lock are applied directly
+        // on the NSWindow by SettingsWindowConfigurator.
+        .windowResizability(.contentMinSize)
         .commands {
             SidebarToggleCommands(model: appDelegate.model)
             SearchCommands(model: appDelegate.model)
