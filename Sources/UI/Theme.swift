@@ -261,10 +261,18 @@ struct RowStatusIndicator: View {
     /// from rest and returns, never below the base size. Tune in ~0.143 steps to
     /// move the peak ±1px at a time.
     private static let breathScale: Double = 0.143
-    /// Peak brightness magnitude layered on top of the size pulse. The SIGN is
-    /// chosen per-surface at the call site (brighten on dark, darken on light), so
-    /// the color always moves away from the background, never fades into it.
-    private static let breathPeak: Double = 0.2
+    /// Peak brightness magnitude layered on top of the size pulse, signed per
+    /// surface at the call site (brighten on dark, darken on light) so the color
+    /// always moves away from the background, never fades into it. The LIGHT face
+    /// uses a larger magnitude than the dark one: darkening the already-dark
+    /// blue-600 clamps its red channel early, so −0.2 moved the dot's luminance
+    /// only ~half as far as +0.2 did on the dark face (ΔL 0.10 vs 0.20), and the
+    /// light-adapted eye is less sensitive to the change, leaving the light breath
+    /// faint. ~0.35 restores rough parity without pushing the peak past a deep,
+    /// still-recognizably-blue navy. Bump `breathPeakLight` for a stronger light
+    /// pulse.
+    private static let breathPeak: Double = 0.2        // dark face (brighten)
+    private static let breathPeakLight: Double = 0.35  // light face (darken)
     /// Seconds per full sine cycle: unhurried, so many rows together stay calm,
     /// but quick enough to read as active.
     private static let breathPeriod: Double = 2.4
@@ -307,7 +315,7 @@ struct RowStatusIndicator: View {
                                               scalePeak: Self.breathScale,
                                               brightnessPeak: colorScheme == .dark
                                                   ? Self.breathPeak
-                                                  : -Self.breathPeak))
+                                                  : -Self.breathPeakLight))
                         .animation(motionEnabled
                                    ? .linear(duration: Self.breathPeriod).repeatForever(autoreverses: false)
                                    : .easeInOut(duration: 0.2),
