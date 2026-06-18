@@ -185,6 +185,13 @@ struct StatusMark: View {
         }
         .frame(width: Self.slotWidth)
         .accessibilityLabel(presentation.displayName)
+        // Distinct identity per presentation so a glyph change (e.g. waiting's
+        // amber dot -> crashed's red triangle) CROSSFADES as two whole marks
+        // under the call site's .animation(value: presentation). Without it the
+        // dot and triangle share one structural slot and SwiftUI interpolates
+        // the shared fill, flashing an intermediate red dot before the triangle.
+        .id(presentation)
+        .transition(.opacity)
     }
 }
 
@@ -281,18 +288,29 @@ struct RowStatusIndicator: View {
                         .transition(.opacity)
                 }
             }
-            .background(
-                Circle()
-                    .stroke(StatusPalette.attention, lineWidth: 1)
-                    // The halo tracks the 7px dot, not the wider slot.
-                    .frame(width: 7, height: 7)
-                    .scaleEffect(pulsing ? 2.6 : 1)
-                    .opacity(presentation == .waiting ? (pulsing ? 0 : 0.5) : 0)
-                    .animation(motionEnabled && presentation == .waiting
-                               ? .easeOut(duration: 1.8).repeatForever(autoreverses: false)
-                               : nil,
-                               value: pulsing)
-            )
+            // The halo lives ONLY while waiting, mirroring the working breath's
+            // `if isWorking` overlay above: a value write (pulsing = false) does
+            // NOT cancel an in-flight repeatForever animator, and identity flips
+            // only on visibility (.id below), not on presentation, so an
+            // always-present halo kept its loop alive after waiting -> working
+            // and the amber ring pulsed on the now-blue dot. Removing the view
+            // on exit destroys its animator dead; .transition fades it under the
+            // 0.25s presentation crossfade.
+            .background {
+                if presentation == .waiting {
+                    Circle()
+                        .stroke(StatusPalette.attention, lineWidth: 1)
+                        // The halo tracks the 7px dot, not the wider slot.
+                        .frame(width: 7, height: 7)
+                        .scaleEffect(pulsing ? 2.6 : 1)
+                        .opacity(pulsing ? 0 : 0.5)
+                        .animation(motionEnabled
+                                   ? .easeOut(duration: 1.8).repeatForever(autoreverses: false)
+                                   : nil,
+                                   value: pulsing)
+                        .transition(.opacity)
+                }
+            }
             .animation(.easeInOut(duration: 0.25), value: presentation)
             .onAppear {
                 // Next tick, never in the insertion transaction: a
