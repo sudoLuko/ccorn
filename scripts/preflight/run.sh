@@ -43,6 +43,8 @@ build() {
         Sources/Engine/ClaudeSessionRegistry.swift \
         Sources/Models/SessionState.swift \
         Sources/Models/Discovery.swift \
+        Sources/Models/StatusBarFormat.swift \
+        Sources/Models/SessionLaunchConfig.swift \
         -o "$BIN"
 }
 
