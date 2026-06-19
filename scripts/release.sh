@@ -30,6 +30,13 @@ xcodebuild -project CCorn.xcodeproj -scheme CCorn -configuration Release \
     -derivedDataPath ./build-release build 2>&1 | grep -E "^\*\*" || true
 [[ -d "$APP" ]] || { echo "[release] no Release app produced" >&2; exit 1; }
 
+# Strip BEFORE signing: the Release binary ships unstripped and its debug-map
+# STAB entries carry /Users build paths. -S drops those debug symbols, -x the
+# local symbols, -r keeps dynamically-referenced symbols so the app still runs.
+# Stripping invalidates a signature, so this must run before the codesign below.
+echo "[release] stripping debug symbols so no build paths ship in the binary"
+strip -rSx "$APP/Contents/MacOS/CCorn"
+
 echo "[release] signing with Developer ID (hardened runtime + timestamp)"
 codesign --force --options runtime --timestamp \
     --entitlements Sources/CCorn.entitlements \

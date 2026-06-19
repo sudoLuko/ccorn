@@ -81,6 +81,15 @@ else
     find "$DLAPP" -exec xattr -w com.apple.quarantine \
         "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" {} \; 2>/dev/null || true
 
+    # The shipped binary must be stripped (release.sh runs strip -rSx before
+    # signing): no /Users build paths in its symbol table. strings can't see
+    # these STAB entries, so probe with nm -pa, the way they actually hide.
+    if nm -pa "$DLAPP/Contents/MacOS/CCorn" 2>/dev/null | grep -q "/Users/"; then
+        fail "artifact binary contains absolute build paths (not stripped before signing)"
+    else
+        pass "artifact binary carries no absolute build paths"
+    fi
+
     if codesign --verify --strict --verbose=2 "$DLAPP" 2>&1; then
         pass "codesign --verify --strict accepts the artifact"
     else
