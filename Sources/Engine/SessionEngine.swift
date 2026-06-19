@@ -872,12 +872,6 @@ final class SessionEngine: ObservableObject {
         let store = self.store
         let staleThreshold = settings.staleThresholdSeconds
 
-        struct Reconciled: Sendable {
-            let window: TmuxWindow
-            let record: SessionRecord
-            let result: DetectionResult
-        }
-
         let reconciled = await Task.detached { () -> [Reconciled] in
             // Reap "Open in Terminal" view sessions left by a crashed terminal
             // before enumerating windows; destroy-unattached covers the normal
@@ -894,9 +888,13 @@ final class SessionEngine: ObservableObject {
                 // Seed the pid only on a determined .found; .absent/.unknown
                 // leave it nil and let detect() re-derive (where the
                 // determined-absent-vs-unknown distinction decides Dead vs hold).
-                if let shellPID = window.panePID,
-                   case .found(let pid) = ProcessControl.findClaude(belowShell: shellPID) {
-                    claudePID = pid
+                // The full scan is also kept (`liveness`): the duplicate-window
+                // reap below must tell a determined `.absent` (safe to kill) from
+                // an `.unknown` probe failure (never killed).
+                var liveness: ProcessControl.ClaudeScan = .unknown
+                if let shellPID = window.panePID {
+                    liveness = ProcessControl.findClaude(belowShell: shellPID)
+                    if case .found(let pid) = liveness { claudePID = pid }
                 }
                 if uuid.isEmpty, let pid = claudePID,
                    let info = ClaudeSessionRegistry.info(forPid: pid) {
@@ -944,12 +942,22 @@ final class SessionEngine: ObservableObject {
                                              transcript: uuid.isEmpty ? nil : index[uuid],
                                              staleThreshold: staleThreshold,
                                              now: now)
-                return Reconciled(window: window, record: record, result: result)
+                return Reconciled(window: window, record: record, result: result,
+                                  hasLiveClaude: claudePID != nil, liveness: liveness)
             }
         }.value
 
+        // One-window-per-UUID invariant. A restart whose old window hadn't
+        // settled, or a resume-next-to-a-live-window, can leave two tmux windows
+        // tagged with the same @ccorn_id; without deduping here, rebuildRows
+        // renders the session as two identical rows. Group the reconciled
+        // windows by their non-empty UUID, keep one per group, and reap any
+        // confirmed-dead duplicate. Empty-UUID (unbound) windows are genuinely
+        // distinct sessions and are never grouped — they pass through untouched.
+        let kept = Self.dedupeReconciledWindows(reconciled, tmux: tmux)
+
         liveSessions.removeAll()
-        for item in reconciled {
+        for item in kept {
             let live = LiveSession(record: item.record,
                                    windowId: item.window.windowId,
                                    ccornTag: item.record.uuid.isEmpty ? nil : item.record.uuid,
@@ -958,6 +966,177 @@ final class SessionEngine: ObservableObject {
             liveSessions[item.window.windowId] = live
         }
         return Array(liveSessions.values)
+    }
+
+    /// One reconciled tmux window: the window, its resolved record, the fresh
+    /// detection result, and the claude-liveness facts the duplicate dedup needs.
+    private struct Reconciled: Sendable {
+        let window: TmuxWindow
+        let record: SessionRecord
+        let result: DetectionResult
+        /// True iff `findClaude(belowShell:)` returned a determined `.found` for
+        /// this window's pane at reconcile time. `false` covers both `.absent`
+        /// (genuinely no claude) and `.unknown` (a pgrep call could not answer);
+        /// the dedup keeps the two apart via `liveness` so a `.unknown`
+        /// non-keeper is never reaped. Drives keeper selection.
+        let hasLiveClaude: Bool
+        /// The determined absence/unknown split, so the reap only kills a window
+        /// we can affirmatively say has no claude (`.absent`), never one where
+        /// the probe itself failed (`.unknown`).
+        let liveness: ProcessControl.ClaudeScan
+    }
+
+    /// Per-window facts the keeper decision needs, as plain values so the choice
+    /// is pure and unit-testable (no tmux/Process I/O). `order` is the tmux
+    /// window-id ordinal (`@N` -> N): higher means more recently created.
+    struct DedupCandidate: Sendable, Equatable {
+        let windowId: String
+        let hasLiveClaude: Bool
+        let order: Int
+    }
+
+    /// The tmux window-id ordinal (`@12` -> 12). tmux assigns these in creation
+    /// order and never reuses a live id, so the largest ordinal in a group is the
+    /// most-recently-created window. A malformed id sorts to the bottom (-1).
+    static func windowOrdinal(_ windowId: String) -> Int {
+        Int(windowId.drop(while: { !$0.isNumber })) ?? -1
+    }
+
+    /// Choose the single window to keep among same-UUID duplicates. Pure: keeps
+    /// the one window with a live claude process if exactly one has one; if none
+    /// (or, pathologically, more than one) do, keeps the most-recently-created
+    /// window (largest ordinal, with the window id as a stable tiebreak). A
+    /// single-candidate group always returns that candidate (the normal,
+    /// overwhelmingly-common case is a no-op). Returns nil only for an empty
+    /// input, which callers never pass.
+    static func chooseKeeper(_ candidates: [DedupCandidate]) -> DedupCandidate? {
+        guard !candidates.isEmpty else { return nil }
+        if candidates.count == 1 { return candidates[0] }
+        let live = candidates.filter(\.hasLiveClaude)
+        if live.count == 1 { return live[0] }
+        // No single live claude (zero, or the pathological multiple): newest wins.
+        return candidates.max {
+            ($0.order, $0.windowId) < ($1.order, $1.windowId)
+        }
+    }
+
+    /// UI backstop for the one-row-per-UUID display invariant, independent of the
+    /// engine-side reap so the screens hold even if the engine ever slips. Given
+    /// the live managed windows (each a windowId + its non-empty @ccorn_id uuid +
+    /// whether it currently has a live pid), returns the set of windowIds that
+    /// should produce a managed row: at most one per non-empty uuid, the survivor
+    /// chosen deterministically by `chooseKeeper` (live pid first, else the
+    /// highest window-id ordinal — NOT dictionary iteration order). Empty-uuid
+    /// (unbound) windows are each kept: two unbound sessions stay two rows. Pure
+    /// and unit-testable; the caller logs each collapse.
+    ///
+    /// - Returns: `(survivors, collapsed)` — the windowIds to render, and the
+    ///   windowIds dropped as same-uuid duplicates (so the caller can log them).
+    static func dedupeManagedRowWindows(
+        _ windows: [(windowId: String, uuid: String, hasLivePid: Bool)]
+    ) -> (survivors: Set<String>, collapsed: [String]) {
+        var groups: [String: [(windowId: String, hasLivePid: Bool)]] = [:]
+        var survivors = Set<String>()
+        var collapsed: [String] = []
+        for w in windows {
+            if w.uuid.isEmpty {
+                // Unbound: never collapsed against another unbound window.
+                survivors.insert(w.windowId)
+            } else {
+                groups[w.uuid, default: []].append((w.windowId, w.hasLivePid))
+            }
+        }
+        for (_, group) in groups {
+            let candidates = group.map {
+                DedupCandidate(windowId: $0.windowId,
+                               hasLiveClaude: $0.hasLivePid,
+                               order: windowOrdinal($0.windowId))
+            }
+            guard let keeper = chooseKeeper(candidates) else { continue }
+            survivors.insert(keeper.windowId)
+            for c in group where c.windowId != keeper.windowId {
+                collapsed.append(c.windowId)
+            }
+        }
+        return (survivors, collapsed)
+    }
+
+    /// Enforce one window per non-empty @ccorn_id on the reconciled set. Returns
+    /// the windows to keep (one per UUID group, plus every empty-UUID window
+    /// untouched). For each kept group it reaps confirmed-dead duplicates:
+    ///
+    /// - A non-keeper with a determined `.absent` claude scan is an orphan
+    ///   (a stale window a restart's kill hadn't settled): `kill-window` it.
+    /// - A non-keeper whose scan is `.unknown` (a pgrep probe that could not
+    ///   answer) is NOT killed — absence is unproven — it is just dropped from
+    ///   liveSessions so the row collapses; a later reconcile reaps it once the
+    ///   probe answers.
+    /// - A non-keeper with a LIVE claude (two live windows for one UUID) is the
+    ///   pathological case: it is never killed (CCorn never auto-kills a live
+    ///   session). It is dropped from liveSessions and the anomaly is logged.
+    private static func dedupeReconciledWindows(_ reconciled: [Reconciled],
+                                                tmux: TmuxController) -> [Reconciled] {
+        // Group preserving first-seen order so empty-UUID windows and the kept
+        // representatives come out in a stable order.
+        var order: [String] = []
+        var groups: [String: [Reconciled]] = [:]
+        for item in reconciled {
+            let uuid = item.record.uuid
+            if groups[uuid] == nil { order.append(uuid) }
+            groups[uuid, default: []].append(item)
+        }
+
+        var out: [Reconciled] = []
+        for uuid in order {
+            let group = groups[uuid] ?? []
+            // Empty-UUID (unbound) windows are each distinct: keep them all,
+            // never dedupe. This path is exactly as before.
+            if uuid.isEmpty || group.count == 1 {
+                out.append(contentsOf: group)
+                continue
+            }
+            let candidates = group.map {
+                DedupCandidate(windowId: $0.window.windowId,
+                               hasLiveClaude: $0.hasLiveClaude,
+                               order: windowOrdinal($0.window.windowId))
+            }
+            guard let keeper = chooseKeeper(candidates) else {
+                out.append(contentsOf: group)
+                continue
+            }
+            Log.tmux.notice("""
+                duplicate @ccorn_id windows reconciled \
+                (count \(group.count, privacy: .public), \
+                keeping \(keeper.windowId, privacy: .public))
+                """)
+            for item in group where item.window.windowId != keeper.windowId {
+                switch item.liveness {
+                case .found:
+                    // Two live windows for one UUID: never auto-kill a live
+                    // session. Drop the duplicate from the row set and flag it.
+                    Log.tmux.error("""
+                        two live windows share one @ccorn_id; keeping \
+                        \(keeper.windowId, privacy: .public), leaving \
+                        \(item.window.windowId, privacy: .public) alive in tmux
+                        """)
+                case .absent:
+                    // Confirmed-dead orphan: safe to reap.
+                    tmux.killWindow(windowId: item.window.windowId)
+                    Log.tmux.notice("""
+                        reaped dead duplicate @ccorn_id window \
+                        \(item.window.windowId, privacy: .public)
+                        """)
+                case .unknown:
+                    // Probe could not answer: absence unproven, do not kill.
+                    Log.tmux.notice("""
+                        dropped unresolved duplicate @ccorn_id window \
+                        \(item.window.windowId, privacy: .public) (claude liveness unknown)
+                        """)
+                }
+            }
+            out.append(group.first { $0.window.windowId == keeper.windowId }!)
+        }
+        return out
     }
 
     /// Last-known directory for an adopted window with no persisted record: the

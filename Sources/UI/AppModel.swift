@@ -673,7 +673,26 @@ final class AppModel: ObservableObject {
         // built from the same resolved row fields the screens render, then
         // handed to the engine to push (diffed) into each window's tmux option.
         var statusBars: [String: String] = [:]
+        // Display-invariant backstop: even though the engine reaps duplicate
+        // same-@ccorn_id windows during reconcile, dedup again here so the screen
+        // can never show one session as two managed rows if the engine ever
+        // slips (e.g. a duplicate that appeared after the last reconcile). The
+        // survivor is chosen deterministically (live pid first, then the highest
+        // window-id ordinal), NOT by liveSessions' nondeterministic dict order.
+        // Empty-uuid (unbound) windows are each kept — two unbound sessions stay
+        // two rows. See SessionEngine.dedupeManagedRowWindows.
+        let (managedSurvivors, collapsedManaged) = SessionEngine.dedupeManagedRowWindows(
+            engine.liveSessions.map {
+                (windowId: $0.key, uuid: $0.value.sessionUUID, hasLivePid: $0.value.pid != nil)
+            })
+        for windowId in collapsedManaged {
+            Log.discovery.notice("""
+                collapsed duplicate managed row for window \
+                \(windowId, privacy: .public) (same @ccorn_id)
+                """)
+        }
         for (windowId, live) in engine.liveSessions {
+            guard managedSurvivors.contains(windowId) else { continue }
             let uuid = live.sessionUUID
             if !uuid.isEmpty { managedUUIDs.insert(uuid) }
             if live.adopted { adoptedIds.insert(windowId) }
