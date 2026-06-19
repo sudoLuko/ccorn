@@ -26,6 +26,13 @@ build-release/
 docs/research/
 docs/ANIMATION_AUDIT_VERIFICATION.md
 
+# Landing-page feature inventory; generated input for the marketing site, not shipped source
+features.md
+
+# Code-anchored visual reference captured for the web mockup (screenshots +
+# REFERENCE.md); internal mockup ground-truth, not shipped source
+docs/demo-reference/
+
 # Design-process artifacts (iteration screenshots, source files); the shipped
 # assets live in Sources/Assets.xcassets and docs/images; these are working history
 docs/screenshots/
