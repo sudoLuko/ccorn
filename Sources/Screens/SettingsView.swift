@@ -330,7 +330,7 @@ struct SettingsView: View {
             // OpenMoji is CC BY-SA 4.0; attribution must appear somewhere
             // user-facing (see design-assets/app-icon/ICON_CREDITS.md). The
             // markdown links render tappable in a Text/LocalizedStringKey.
-            Text("App icon: ear-of-corn glyph from [OpenMoji](https://openmoji.org), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)")
+            Text("App icon: adapted from the [ear-of-corn glyph](https://openmoji.org/library/emoji-1F33D/) by [OpenMoji](https://openmoji.org), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

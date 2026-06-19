@@ -123,6 +123,4 @@ CCorn runs entirely on your Mac. It reads session metadata from `~/.claude/`, st
 
 [MIT](LICENSE) covers CCorn's source code.
 
-The app icon is the ear-of-corn glyph from [OpenMoji](https://openmoji.org), licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Per ShareAlike, the icon artwork (this adaptation) is itself CC BY-SA 4.0; this applies to the image only and does not affect the MIT-licensed code. Details in [design-assets/app-icon/ICON_CREDITS.md](design-assets/app-icon/ICON_CREDITS.md).
-</content>
-</invoke>
+The app icon is the [ear-of-corn glyph `1F33D`](https://openmoji.org/library/emoji-1F33D/) from [OpenMoji](https://openmoji.org), licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Per ShareAlike, the icon artwork (this adaptation) is itself CC BY-SA 4.0; this applies to the image only and does not affect the MIT-licensed code. Details in [design-assets/app-icon/ICON_CREDITS.md](design-assets/app-icon/ICON_CREDITS.md).

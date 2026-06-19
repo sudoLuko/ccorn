@@ -1,5 +1,5 @@
-/Users/luke/.nvm/versions/node/v22.22.2/bin/claude --rc 'model probe'
-dev@host ccorn-probe % /Users/luke/.nvm/versions/node/v22.22.2/bin/claude --rc 'model probe'
+/Users/dev/.local/bin/claude --rc 'model probe'
+dev@host ccorn-probe % /Users/dev/.local/bin/claude --rc 'model probe'
 ╭─── Claude Code v2.1.173 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                    │ Tips for getting started                                                                                │
 │                 Welcome back!                 │ Ask Claude to create a new app or clone a repository                                                    │

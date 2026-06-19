@@ -1,5 +1,5 @@
-/Users/luke/.nvm/versions/node/v22.22.2/bin/claude --model haiku --rc 'collide probe'
-dev@host ccorn-probe % /Users/luke/.nvm/versions/node/v22.22.2/bin/claude --model haiku --rc 'collide probe'
+/Users/dev/.local/bin/claude --model haiku --rc 'collide probe'
+dev@host ccorn-probe % /Users/dev/.local/bin/claude --model haiku --rc 'collide probe'
 ╭─── Claude Code v2.1.173 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                    │ Tips for getting started                                                                                │
 │                 Welcome back!                 │ Ask Claude to create a new app or clone a repository                                                    │

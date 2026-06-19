@@ -32,8 +32,8 @@ import Testing
     /// Two concurrent live sessions in ONE directory must become TWO distinct
     /// UUID-keyed rows, never a single directory row. This is the core fix.
     @Test func twoLiveSessionsInOneDirectoryAreTwoRows() {
-        let dir = "/Users/luke/dev/ccorn"
-        let proj = project("-Users-luke-dev-ccorn", path: dir, sessions: [
+        let dir = "/Users/you/dev/ccorn"
+        let proj = project("-Users-you-dev-ccorn", path: dir, sessions: [
             session("uuid-A", modified: 200),
             session("uuid-B", modified: 100),
             session("old-1", modified: 50),   // dormant historical transcripts
@@ -56,7 +56,7 @@ import Testing
     /// Resolution is independent of which transcript was written most recently,
     /// the property that broke before (most-recent-wins flip).
     @Test func resolutionIsStableAcrossTranscriptRecency() {
-        let dir = "/Users/luke/dev/ccorn"
+        let dir = "/Users/you/dev/ccorn"
         let live = [candidate("uuid-A", cwd: dir), candidate("uuid-B", cwd: dir)]
 
         func resolveWith(newest: String) -> DiscoveryMerge.Resolution {
@@ -76,18 +76,18 @@ import Testing
     /// A directory with only historical transcripts (no live process, no record)
     /// collapses to exactly one summary row.
     @Test func dormantDirectoryCollapsesToOneSummary() {
-        let proj = project("-Users-luke-dev-ledger", path: "/Users/luke/dev/ledger",
+        let proj = project("-Users-you-dev-notes", path: "/Users/you/dev/notes",
                            sessions: [session("h1", modified: 10), session("h2", modified: 5)])
         let r = DiscoveryMerge.resolve(projects: [proj], liveCandidates: [],
                                        managedUUIDs: [], managedPaths: [], recordUUIDs: [])
         #expect(r.live.isEmpty)
-        #expect(r.dormantDirKeys == ["-Users-luke-dev-ledger"])
+        #expect(r.dormantDirKeys == ["-Users-you-dev-notes"])
     }
 
     /// A directory that holds a persisted record is already represented by that
     /// record's Stopped row; no dormant summary on top of it.
     @Test func directoryWithRecordHasNoDormantSummary() {
-        let proj = project("-d", path: "/Users/luke/dev/x",
+        let proj = project("-d", path: "/Users/you/dev/x",
                            sessions: [session("rec-uuid"), session("other")])
         let r = DiscoveryMerge.resolve(projects: [proj], liveCandidates: [],
                                        managedUUIDs: [], managedPaths: [],
@@ -99,7 +99,7 @@ import Testing
     /// managed row represents it), matched by path, so it holds even when the
     /// managed session's UUID isn't among the directory's discovered transcripts.
     @Test func managedDirectoryHasNoDormantSummary() {
-        let dir = "/Users/luke/dev/ccorn"
+        let dir = "/Users/you/dev/ccorn"
         let proj = project("-d", path: dir, sessions: [session("h1")])
         let r = DiscoveryMerge.resolve(projects: [proj], liveCandidates: [],
                                        managedUUIDs: ["managed-uuid"],
@@ -111,7 +111,7 @@ import Testing
 
     /// A managed session never also appears as a live discovered row.
     @Test func managedSessionExcludedFromLive() {
-        let dir = "/Users/luke/dev/ccorn"
+        let dir = "/Users/you/dev/ccorn"
         let live = [candidate("managed-uuid", cwd: dir), candidate("ext-uuid", cwd: dir)]
         let r = DiscoveryMerge.resolve(projects: [], liveCandidates: live,
                                        managedUUIDs: ["managed-uuid"],
@@ -122,7 +122,7 @@ import Testing
     /// A managed + external session in the SAME directory: the external one
     /// still surfaces as its own live row (live rows are not path-gated).
     @Test func externalSessionSurfacesAlongsideManagedInSameDir() {
-        let dir = "/Users/luke/dev/ccorn"
+        let dir = "/Users/you/dev/ccorn"
         let r = DiscoveryMerge.resolve(projects: [], liveCandidates: [candidate("ext", cwd: dir)],
                                        managedUUIDs: ["mgd"], managedPaths: [dir], recordUUIDs: [])
         #expect(r.live.map(\.uuid) == ["ext"])
@@ -131,7 +131,7 @@ import Testing
     /// A live session whose UUID also has a Stopped record: the live row wins
     /// (liveUUIDs carries it, so AppModel's record loop skips it).
     @Test func liveSessionOutranksItsStaleRecord() {
-        let dir = "/Users/luke/dev/x"
+        let dir = "/Users/you/dev/x"
         let r = DiscoveryMerge.resolve(projects: [], liveCandidates: [candidate("u", cwd: dir)],
                                        managedUUIDs: [], managedPaths: [],
                                        recordUUIDs: ["u"])
@@ -141,7 +141,7 @@ import Testing
 
     /// Duplicate registry files for the same UUID produce a single live row.
     @Test func duplicateLiveUUIDDeduped() {
-        let dir = "/Users/luke/dev/x"
+        let dir = "/Users/you/dev/x"
         let live = [candidate("u", cwd: dir, pid: 1), candidate("u", cwd: dir, pid: 2)]
         let r = DiscoveryMerge.resolve(projects: [], liveCandidates: live,
                                        managedUUIDs: [], managedPaths: [], recordUUIDs: [])
