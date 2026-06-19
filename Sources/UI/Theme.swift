@@ -113,16 +113,19 @@ extension StatusPresentation {
         case .waiting: return StatusPalette.attention
         case .stale: return StatusPalette.stale
         case .stopped, .unmanaged: return nil
-        case .noRemote, .needsAuth, .crashed: return nil
+        case .noRemote, .needsAuth, .ended: return nil
         }
     }
 
-    /// Color of the exclamation symbol for the broken tier: amber recoverable,
-    /// red terminal. nil for the dot states.
+    /// Color of the exclamation symbol for the broken tier. All three are the
+    /// one recoverable attention amber: sign-in and no-remote are alive but
+    /// degraded, and `ended` (the process is gone) is recoverable by restart,
+    /// not a terminal alarm — CCorn can't tell a clean `/exit` from a crash, so
+    /// it doesn't claim one. nil for the dot states. (`StatusPalette.dead`, the
+    /// old red terminal token, is no longer mapped to any presentation.)
     var symbolColor: Color? {
         switch self {
-        case .noRemote, .needsAuth: return StatusPalette.attention
-        case .crashed: return StatusPalette.dead
+        case .noRemote, .needsAuth, .ended: return StatusPalette.attention
         case .running, .working, .waiting, .stale, .stopped, .unmanaged: return nil
         }
     }
@@ -199,10 +202,10 @@ struct StatusMark: View {
         .frame(width: Self.slotWidth)
         .accessibilityLabel(presentation.displayName)
         // Distinct identity per presentation so a glyph change (e.g. waiting's
-        // amber dot -> crashed's red triangle) CROSSFADES as two whole marks
+        // dot -> the broken tier's triangle) CROSSFADES as two whole marks
         // under the call site's .animation(value: presentation). Without it the
         // dot and triangle share one structural slot and SwiftUI interpolates
-        // the shared fill, flashing an intermediate red dot before the triangle.
+        // the shared fill, flashing an intermediate dot before the triangle.
         .id(presentation)
         .transition(.opacity)
     }
@@ -421,7 +424,7 @@ private struct BreathPulse: ViewModifier, Animatable {
 // MARK: - Attention word
 
 /// The short colored word after the title for the states that need the user
-/// (Needs input, Sign in, No remote, Crashed), and nothing for the silent
+/// (Needs input, Sign in, No remote, Ended), and nothing for the silent
 /// states (their word lives in the mark's tooltip). One view shared by the
 /// main-window row and the popover row, so the word reads, colors, and fades
 /// identically on both surfaces; the fade animates under the row's

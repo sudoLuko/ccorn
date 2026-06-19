@@ -43,18 +43,21 @@ import Testing
 
     // MARK: One attention amber
 
-    /// The waiting dot, both recoverable warning triangles, and every amber
-    /// attention word all point at the one token; the second amber is gone.
+    /// The waiting dot, all three warning triangles, and every amber attention
+    /// word all point at the one token; the second amber is gone, and the whole
+    /// broken tier is now the recoverable amber (no red terminal status).
     @Test func attentionAmberIsTheOnlyAmber() {
         #expect(StatusPresentation.waiting.dotFill == StatusPalette.attention)
         #expect(StatusPresentation.needsAuth.symbolColor == StatusPalette.attention)
         #expect(StatusPresentation.noRemote.symbolColor == StatusPalette.attention)
-        for amberWorded: StatusPresentation in [.waiting, .needsAuth, .noRemote] {
+        for amberWorded: StatusPresentation in [.waiting, .needsAuth, .noRemote, .ended] {
             #expect(amberWorded.labelColor == StatusPalette.attention)
         }
-        // The terminal tier stays red, as the symbol and as the word.
-        #expect(StatusPresentation.crashed.symbolColor == StatusPalette.dead)
-        #expect(StatusPresentation.crashed.labelColor == StatusPalette.dead)
+        // Ended (the process is gone) is recoverable: amber, as the symbol and
+        // as the word, never the red terminal token.
+        #expect(StatusPresentation.ended.symbolColor == StatusPalette.attention)
+        #expect(StatusPresentation.ended.labelColor == StatusPalette.attention)
+        #expect(StatusPresentation.ended.symbolColor != StatusPalette.dead)
     }
 
     /// The token is appearance-adaptive: dark amber on light, bright amber on

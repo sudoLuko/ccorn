@@ -59,7 +59,7 @@ import Testing
     /// and unmanaged keep their own presentations.
     @Test func noRemoteExclusions() {
         #expect(resolve(.needsAuth, rc: false) == .needsAuth)
-        #expect(resolve(.dead, rc: false) == .crashed)
+        #expect(resolve(.dead, rc: false) == .ended)
         #expect(resolve(.stopped, rc: false) == .stopped)
         #expect(resolve(.unmanaged, rc: false) == .unmanaged)
     }
@@ -71,19 +71,19 @@ import Testing
     @Test func brokenTierIsExactlyTheTrio() {
         #expect(StatusPresentation.noRemote.isBroken)
         #expect(StatusPresentation.needsAuth.isBroken)
-        #expect(StatusPresentation.crashed.isBroken)
+        #expect(StatusPresentation.ended.isBroken)
         for routine: StatusPresentation in [.running, .working, .waiting,
                                             .stale, .stopped, .unmanaged] {
             #expect(!routine.isBroken)
         }
     }
 
-    /// Words appear only on waiting, sign-in, no-remote, and crashed.
+    /// Words appear only on waiting, sign-in, no-remote, and ended.
     @Test func attentionWordsOnlyOnTheFourStates() {
         #expect(StatusPresentation.waiting.attentionLabel == "Needs input")
         #expect(StatusPresentation.needsAuth.attentionLabel == "Sign in")
         #expect(StatusPresentation.noRemote.attentionLabel == "No remote")
-        #expect(StatusPresentation.crashed.attentionLabel == "Crashed")
+        #expect(StatusPresentation.ended.attentionLabel == "Ended")
         for silent: StatusPresentation in [.running, .working, .stale,
                                            .stopped, .unmanaged] {
             #expect(silent.attentionLabel == nil)
@@ -93,13 +93,28 @@ import Testing
     // MARK: Severity ranking
 
     /// No-remote ranks as a degraded condition near sign-in: above the whole
-    /// routine ladder, below sign-in, below crashed.
+    /// routine ladder and above the recoverable `ended` mark, below sign-in.
     @Test func noRemoteSeveritySlotSitsBetweenWaitingAndNeedsAuth() {
         #expect(StatusPresentation.aggregate([.noRemote, .waiting]) == .noRemote)
         #expect(StatusPresentation.aggregate([.noRemote, .stale]) == .noRemote)
         #expect(StatusPresentation.aggregate([.noRemote, .working, .running]) == .noRemote)
         #expect(StatusPresentation.aggregate([.noRemote, .needsAuth]) == .needsAuth)
-        #expect(StatusPresentation.aggregate([.noRemote, .crashed]) == .crashed)
+        // Ended is now recoverable and ranks BELOW no-remote, so no-remote wins.
+        #expect(StatusPresentation.aggregate([.noRemote, .ended]) == .noRemote)
+    }
+
+    /// The recoverable `ended` mark sits low on the ladder: any
+    /// attention-needing state (waiting, no-remote, sign-in) outranks it, and
+    /// the active routine states (working, stale) outrank it too, but it still
+    /// surfaces over a plain healthy `running` so an all-idle/ended fleet shows
+    /// the ended mark rather than a calm green dot.
+    @Test func endedRanksBelowAttentionAndActivityButAboveRunning() {
+        #expect(StatusPresentation.aggregate([.ended, .waiting]) == .waiting)
+        #expect(StatusPresentation.aggregate([.ended, .noRemote]) == .noRemote)
+        #expect(StatusPresentation.aggregate([.ended, .needsAuth]) == .needsAuth)
+        #expect(StatusPresentation.aggregate([.ended, .working]) == .working)
+        #expect(StatusPresentation.aggregate([.ended, .stale]) == .stale)
+        #expect(StatusPresentation.aggregate([.ended, .running]) == .ended)
     }
 
     /// stopped/unmanaged stay colorless and never become the aggregate.
@@ -113,7 +128,7 @@ import Testing
     /// running/working/stale/stopped collapse behind the quiet disclosure,
     /// and unmanaged is ambient (neither tier).
     @Test func attentionTierMembership() {
-        for needy: StatusPresentation in [.waiting, .noRemote, .needsAuth, .crashed] {
+        for needy: StatusPresentation in [.waiting, .noRemote, .needsAuth, .ended] {
             #expect(needy.needsAttention)
         }
         for calm: StatusPresentation in [.running, .working, .stale, .stopped, .unmanaged] {
@@ -122,11 +137,13 @@ import Testing
     }
 
     /// Attention rows order by the aggregate severity ladder, worst first;
-    /// the popover sorts its attention section with exactly this key.
+    /// the popover sorts its attention section with exactly this key. The
+    /// recoverable `ended` mark sorts last of the attention rows now (it ranks
+    /// below the others on the ladder).
     @Test func attentionOrderFollowsSeverityLadder() {
-        let sorted: [StatusPresentation] = [.waiting, .crashed, .noRemote, .needsAuth]
+        let sorted: [StatusPresentation] = [.waiting, .ended, .noRemote, .needsAuth]
             .sorted { ($0.aggregateSeverity ?? 0) > ($1.aggregateSeverity ?? 0) }
-        #expect(sorted == [.crashed, .needsAuth, .noRemote, .waiting])
+        #expect(sorted == [.needsAuth, .noRemote, .waiting, .ended])
     }
 
     /// All-clear: a calm-only set never aggregates into the attention tier,

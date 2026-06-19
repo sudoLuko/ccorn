@@ -22,9 +22,9 @@ It is a process manager, not a chat interface. The model, your prompts, and the 
 
 <div align="center">
 
-<img src="docs/images/demo.gif" width="300" alt="CCorn menu-bar popover: a session goes from working to needs-input to crashed and back to calm, the popover header reflecting the most urgent state">
+<img src="docs/images/demo.gif" width="300" alt="CCorn menu-bar popover: a session goes from working to needs-input to ended and back to calm, the popover header reflecting the most urgent state">
 
-*The menu-bar popover, live. A session moves from working (blue) to needs-input (amber) to crashed (red) and back to calm; the popover header always carries the single most urgent mark across every session.*
+*The menu-bar popover, live. A session moves from working (blue) to needs-input (amber) to ended (amber) and back to calm; the popover header always carries the single most urgent mark across every session.*
 
 </div>
 
@@ -32,10 +32,10 @@ It is a process manager, not a chat interface. The model, your prompts, and the 
 
 - **Close it and come back.** Each session is its own tmux window inside a single `ccorn` tmux session, so you can close CCorn, restart your Mac, or just walk away and still resume right where you left off. Sessions survive restarts, and your real terminal is always one `tmux attach` away. Open any session in Terminal in one click; CCorn raises the window if it is already up.
 - **Discovery and takeover.** Finds Claude Code sessions already running on your Mac and adopts them under management, resuming the same conversation without losing work.
-- **Worst-first triage.** Click the menu-bar corn and the popover sorts every session by urgency: waiting, sign-in, no-remote, and crashed sessions rise to the top, while the calm ones fold behind a single "all clear" line. The header shows one aggregate mark for the whole fleet.
+- **Worst-first triage.** Click the menu-bar corn and the popover sorts every session by urgency: sign-in, no-remote, waiting, and ended sessions rise to the top, while the calm ones fold behind a single "all clear" line. The header shows one aggregate mark for the whole fleet.
 - **One mark per row.** Every session shows exactly one status mark, a colored dot or a single warning triangle, so you read state by glancing at color, never by parsing text.
 - **Set and forget.** CCorn launches and supervises; you drive. Keep working in your terminal, at claude.ai/code, or from your phone over Remote Control. CCorn never touches the conversation, and it does not set the model (you pick that in Claude Code with `/model`).
-- **Native macOS restraint.** A menu-bar app with no Dock icon by default, no chat window, and no color anywhere except the status marks. Notifications ping you when a session needs input, needs sign-in, or dies.
+- **Native macOS restraint.** A menu-bar app with no Dock icon by default, no chat window, and no color anywhere except the status marks. Notifications ping you when a session needs input, needs sign-in, or ends.
 
 <div align="center">
 
@@ -47,7 +47,7 @@ It is a process manager, not a chat interface. The model, your prompts, and the 
 
 ## Status colors
 
-Status marks are the only color in CCorn. Every row shows exactly one mark, a colored dot for routine states or a single warning triangle for the broken trio (sign-in, no-remote, crashed). That is the whole product: glance at the colors, know the state.
+Status marks are the only color in CCorn. Every row shows exactly one mark, a colored dot for routine states or a single warning triangle for the broken trio (sign-in, no-remote, ended). That is the whole product: glance at the colors, know the state.
 
 | Swatch | State | Mark | Label | What it means |
 |:------:|-------|:----:|-------|---------------|
@@ -57,7 +57,7 @@ Status marks are the only color in CCorn. Every row shows exactly one mark, a co
 | ![slate](https://placehold.co/15x15/64748b/64748b.png) | **Stale** | ● | | Idle past your threshold |
 | ![amber](https://placehold.co/15x15/f59e0b/f59e0b.png) | **Sign in** | ▲ | Sign in | Login prompt is showing; sign-in needed |
 | ![amber](https://placehold.co/15x15/f59e0b/f59e0b.png) | **No remote** | ▲ | No remote | Alive, but remote control is not active past the grace period |
-| ![red](https://placehold.co/15x15/dc2626/dc2626.png) | **Crashed** | ▲ | Crashed | Process crashed or died unexpectedly |
+| ![amber](https://placehold.co/15x15/f59e0b/f59e0b.png) | **Ended** | ▲ | Ended | Claude exited; restart it to resume |
 | ![grey](https://placehold.co/15x15/a1a1aa/a1a1aa.png) | **Stopped** | ○ | | You stopped it; not running |
 | ![grey](https://placehold.co/15x15/71717a/71717a.png) | **Unmanaged** | ○ | | Discovered on your machine, not yet imported |
 

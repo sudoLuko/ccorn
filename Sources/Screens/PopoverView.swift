@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Menu-bar popover (docs/CCORN_SPEC.md section 5.2): a TRIAGE surface, not a
 /// mirror of the dashboard. Sessions that need the user (waiting, sign-in,
-/// no-remote, crashed) render as individual rows at the top, worst first; the
+/// no-remote, ended) render as individual rows at the top, worst first; the
 /// calm rest collapse behind a single quiet-count disclosure that doubles as
 /// the all-clear line when nothing needs attention. Zinc palette that follows
 /// the app appearance (`PopoverPalette` is appearance-paired), so the popover is
@@ -81,7 +81,7 @@ struct PopoverView: View {
     // MARK: Triage split (popover-local)
 
     /// Sessions that need the user, worst first: the aggregate severity
-    /// ladder (crashed > sign-in > no-remote > waiting), recency as tiebreak.
+    /// ladder (sign-in > no-remote > waiting > ended), recency as tiebreak.
     private var attentionRows: [SessionRow] {
         model.managedRows
             .filter { $0.presentation.needsAttention }

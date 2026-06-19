@@ -23,7 +23,7 @@ enum DebugStage {
     /// A realistic mix covering every presentation: routine dots (working,
     /// waiting, running, stale, stopped), the full broken trio (sign-in,
     /// no-remote (one generic, one with the captured plan notice) and
-    /// crashed), a few unmanaged discoveries, and an archived pair. Group
+    /// ended), a few unmanaged discoveries, and an archived pair. Group
     /// coverage: members of each seed group, one session in BOTH groups, an
     /// archived-and-grouped record, and one brand-new UNBOUND session (empty
     /// uuid, the Groups control must gate disabled on it).

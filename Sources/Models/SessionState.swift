@@ -42,7 +42,8 @@ enum StatusPresentation: String, Equatable {
     // Broken tier: the one exclamation symbol.
     case noRemote   // alive, but remote control never came up past the grace
     case needsAuth  // login screen: sign-in is the root cause
-    case crashed    // process died unexpectedly
+    case ended      // the claude process is gone (clean /exit or crash, which
+                    // are indistinguishable to CCorn); recoverable by restart
 
     /// Resolve a session's detected state plus its remote-control condition
     /// to the mark the row shows. An otherwise-alive session whose remote
@@ -51,7 +52,11 @@ enum StatusPresentation: String, Equatable {
     /// `.noRemote` regardless of the underlying activity; the activity moves
     /// to the tooltip. Exclusions are unchanged: needsAuth wins (sign-in is
     /// the root cause, missing remote control just its consequence), and
-    /// dead/stopped/unmanaged keep their own presentations.
+    /// dead/stopped/unmanaged keep their own presentations. The persisted
+    /// `dead` state presents as the recoverable `ended` mark: CCorn never
+    /// sees claude's exit code (it runs as a grandchild via the pane shell),
+    /// so a clean `/exit` and a crash are indistinguishable; both are simply
+    /// "the process is gone, restart to resume," not a terminal alarm.
     ///
     /// `remoteControlRequested` is the session's intent: a session the user
     /// launched as local (`--rc` omitted) never has remote control and never
@@ -69,7 +74,7 @@ enum StatusPresentation: String, Equatable {
         case .waiting: routine = .waiting
         case .stale: routine = .stale
         case .needsAuth: return .needsAuth
-        case .dead: return .crashed
+        case .dead: return .ended
         case .stopped: return .stopped
         case .unmanaged: return .unmanaged
         }
@@ -80,7 +85,7 @@ enum StatusPresentation: String, Equatable {
     /// True for the broken tier: the states that render the symbol.
     var isBroken: Bool {
         switch self {
-        case .noRemote, .needsAuth, .crashed: return true
+        case .noRemote, .needsAuth, .ended: return true
         case .running, .working, .waiting, .stale, .stopped, .unmanaged: return false
         }
     }
@@ -91,28 +96,31 @@ enum StatusPresentation: String, Equatable {
     /// disclosure; unmanaged is ambient and belongs to neither tier.
     var needsAttention: Bool {
         switch self {
-        case .waiting, .noRemote, .needsAuth, .crashed: return true
+        case .waiting, .noRemote, .needsAuth, .ended: return true
         case .running, .working, .stale, .stopped, .unmanaged: return false
         }
     }
 
     /// Severity rank for the menu-bar aggregate mark (higher = worse). The
-    /// broken tier tops the ladder (crashed (terminal) > sign-in > no-remote,
-    /// degraded, slotted next to sign-in) so a broken-tier worst shows the
-    /// symbol in the header, not a dot. Below it: waiting (blocked on the user)
-    /// tops the routine tier, then `working` — an actively running task is the
+    /// attention-needing broken pair tops the ladder (sign-in > no-remote,
+    /// degraded, slotted next to sign-in) so a broken worst shows the symbol in
+    /// the header, not a dot. Below them: waiting (blocked on the user) tops the
+    /// active routine states, then `working` — an actively running task is the
     /// most informative routine state, so a fleet with anything working reads
-    /// as working (blue) rather than the grey stale dot. `stale` still outranks
-    /// a plain healthy `running` so idle-too-long surfaces over healthy idle.
-    /// `stopped` and `unmanaged` carry no active color and rank `nil`.
+    /// as working (blue) rather than the grey stale dot — then `stale`.
+    /// `ended` sits BELOW the routine activity but ABOVE plain `running`: an
+    /// ended session is recoverable and usually intentional, so a genuinely
+    /// attention-needing state must always outrank it, yet an otherwise
+    /// all-ended/idle fleet still surfaces the ended mark over a plain healthy
+    /// dot. `stopped` and `unmanaged` carry no active color and rank `nil`.
     var aggregateSeverity: Int? {
         switch self {
-        case .crashed:   return 7
-        case .needsAuth: return 6
-        case .noRemote:  return 5
-        case .waiting:   return 4
-        case .working:   return 3
-        case .stale:     return 2
+        case .needsAuth: return 7
+        case .noRemote:  return 6
+        case .waiting:   return 5
+        case .working:   return 4
+        case .stale:     return 3
+        case .ended:     return 2
         case .running:   return 1
         case .stopped, .unmanaged: return nil
         }
@@ -138,7 +146,7 @@ enum StatusPresentation: String, Equatable {
         case .unmanaged: return "Not managed by CCorn"
         case .noRemote: return "Remote control not active"
         case .needsAuth: return "Sign-in required"
-        case .crashed: return "Crashed"
+        case .ended: return "Ended"
         }
     }
 
@@ -150,7 +158,7 @@ enum StatusPresentation: String, Equatable {
         case .waiting: return "Needs input"
         case .needsAuth: return "Sign in"
         case .noRemote: return "No remote"
-        case .crashed: return "Crashed"
+        case .ended: return "Ended"
         case .running, .working, .stale, .stopped, .unmanaged: return nil
         }
     }
@@ -169,7 +177,7 @@ enum StatusPresentation: String, Equatable {
         case .unmanaged: return "Discovered, but not imported into CCorn"
         case .needsAuth: return "Blocked on a sign-in prompt"
         case .noRemote: return "Remote control never came up, so there is no phone access"
-        case .crashed: return "The process exited unexpectedly"
+        case .ended: return "Claude exited; restart it to resume."
         }
     }
 
@@ -177,6 +185,6 @@ enum StatusPresentation: String, Equatable {
     /// trio) for the Settings legend to render with the real `StatusMark`.
     static let legendOrder: [StatusPresentation] = [
         .running, .working, .waiting, .stale, .stopped, .unmanaged,
-        .needsAuth, .noRemote, .crashed,
+        .needsAuth, .noRemote, .ended,
     ]
 }

@@ -224,14 +224,16 @@ Blue:            #2563EB light / #3B82F6 dark   : Claude actively working mid-ta
                                                   separates from the muted stale slate
 
 Attention amber: #A34A0B light / #F59E0B dark   : waiting dot + halo, recoverable warning
-                                                  triangles (sign-in, no-remote), and every
-                                                  amber attention word
+                                                  triangles (sign-in, no-remote, ended), and
+                                                  every amber attention word
 
 Slate:           #64748b                        : stale, idle past threshold (recessive on
                                                   purpose; the original #EA580C orange read
-                                                  like Crashed at 7px)
+                                                  like a danger red at 7px)
 
-Red:             #dc2626                        : crashed (triangle + word), rename error
+Red:             #dc2626                        : rename error and import-failure text only
+                                                  (no longer a status-mark color; the gone-
+                                                  process state is the recoverable amber Ended)
 
 Stopped outline: #8A8A8F light / #A1A1AA dark   : hollow dot ring (dark face also the fixed-dark
                                                   popover); the light face is fixed because the
@@ -326,7 +328,7 @@ the title; the routine states keep their word in the mark's tooltip.
 |Stale       |Filled circle       |Slate `#64748b`                          |-            |Idle past user-defined threshold               |
 |Sign in     |Warning triangle    |Attention amber (same token)             |"Sign in"    |Login prompt showing; sign-in is the root cause|
 |No remote   |Warning triangle    |Attention amber (same token)             |"No remote"  |Alive, remote control not active past the grace|
-|Crashed     |Warning triangle    |Red `#dc2626`                            |"Crashed"    |Process crashed or died unexpectedly (Dead)    |
+|Ended       |Warning triangle    |Attention amber (same token)             |"Ended"      |Claude exited; restart to resume (the Dead state). Recoverable: a clean `/exit` and a crash are indistinguishable to CCorn, so this is never a red alarm.|
 |Stopped     |Empty circle        |Stopped outline (tertiaryLabel light / `#A1A1AA` dark+popover)|-|Manually stopped by user, not running|
 |Unmanaged   |Outline circle      |`#71717A` ring                           |-            |Discovered but not yet imported into CCorn     |
 
@@ -341,7 +343,7 @@ Poll each session every 3 seconds with `tmux capture-pane -t <window-id> -p` (th
 - **Waiting (amber):** Output ends with Claude’s prompt indicator, typically a `>` or `?` prompt with no spinner, or contains phrases like “Would you like”, “Do you want”, “Please confirm”, “Allow”, or Claude Code’s permission prompt patterns. Process is running but no Working pattern matched.
 - **Running (green):** Process is alive and remote control is active (see Remote Control in Section 2 for the detection signal and its fallback), but no Working or Waiting pattern matched. This is the default healthy idle state.
 - **Stale (slate):** Running state but pane output hash unchanged for longer than the user-defined threshold. Implementation: store a SHA256 hash of captured pane output each poll cycle. Compare to previous hash; if identical for longer than threshold → stale. Track last-hash-change timestamp per session.
-- **Dead (red):** The session's tracked PID is gone (`kill -0 <pid>` fails). Confirm against the process list (see Process Identification), matching by PID rather than a grep on the command line.
+- **Dead (presents as the amber, recoverable "Ended" mark):** The session's tracked PID is gone (`kill -0 <pid>` fails). Confirm against the process list (see Process Identification), matching by PID rather than a grep on the command line. CCorn cannot see claude's exit code (it runs as a grandchild via the pane shell), so a clean `/exit` and a real crash are indistinguishable; the state is detected the same either way and PRESENTS as the recoverable amber "Ended" mark, not a red crash alarm. The persisted state name stays `dead`; only its presentation is "Ended".
 - **Stopped (empty circle):** User-initiated stop, set by CCorn, not detected from process state.
 - **Unmanaged (outline):** discovered via `~/.claude/projects/` (a project whose `cwd` resolves into a watch directory), or a live `claude` process running in such a directory, with no window in the `ccorn` session matching this project path. Not detected from a `.claude/` folder (see Session Discovery).
 
@@ -353,12 +355,15 @@ Detect that remote control is active via the `Remote Control active` footer stri
 **Warning presentation (one mark per row, no overlay):**
 There is no separate warning indicator next to the dot. A session that is
 broken for the user, sign-in required, remote control not active past the
-30s grace, or crashed, REPLACES its dot with the single warning symbol
-`exclamationmark.triangle.fill`: attention amber for the recoverable pair
-(sign-in, no-remote), red for crashed. The short word after the title names
-the specific problem, and the mark's tooltip carries the full reason
-(including the underlying activity a No-remote session was in). Waiting is
-routine, not broken: it keeps its amber dot plus the "Needs input" word.
+30s grace, or ended (the claude process is gone), REPLACES its dot with the
+single warning symbol `exclamationmark.triangle.fill`, in attention amber:
+all three are recoverable (sign-in and no-remote are alive-but-degraded;
+ended is restartable, and a clean `/exit` and a crash are indistinguishable
+to CCorn, so it is never a red terminal alarm). The short word after the
+title names the specific problem, and the mark's tooltip carries the full
+reason (including the underlying activity a No-remote session was in).
+Waiting is routine, not broken: it keeps its amber dot plus the "Needs
+input" word.
 
 **Bypass detection (no on-row marker for now):**
 Bypass is still tracked at runtime; the detector's pane footer signal
@@ -461,7 +466,7 @@ Triggered by clicking the CCorn icon in the macOS menu bar. Follows the app appe
 **Header (32px):**
 
 - Corn glyph (`CornMark`, 18pt) far left, no wordmark; the popover is summoned from the menu-bar corn, so “CCorn” text would be redundant
-- Aggregate status mark far right: reflects the worst presentation across all sessions, severity order crashed > sign-in > no-remote > waiting > stale > working > running (waiting outranks stale because a waiting session is blocked on the user). A broken-tier worst renders the exclamation symbol colored by severity (amber recoverable, red terminal); otherwise the worst state's dot. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
+- Aggregate status mark far right: reflects the worst presentation across all sessions, severity order sign-in > no-remote > waiting > working > stale > ended > running (waiting outranks working/stale because a waiting session is blocked on the user; ended ranks low because it is recoverable and usually intentional, but still outranks a plain healthy running session so an otherwise all-idle/ended fleet surfaces the ended mark). A broken-tier worst renders the exclamation symbol in attention amber (the whole broken tier is recoverable now; red is not a status color); otherwise the worst state's dot. If every session is stopped or unmanaged (no active-state color), show the empty/outline dot.
 - 0.5px divider below, `#3C3C3C` (dark face)
 
 **Session list, triage layout:**
@@ -471,9 +476,9 @@ The popover is a triage surface, not a mirror of the dashboard: it answers
 popover-local; the main window keeps its full recency-ordered list.
 
 - Attention section, top: sessions whose presentation needs the user:
-  Waiting (Needs input), Sign in, No remote, Crashed, as individual rows,
-  sorted worst-first by the aggregate severity ladder (crashed > sign-in >
-  no-remote > waiting), recency as tiebreak
+  Waiting (Needs input), Sign in, No remote, Ended, as individual rows,
+  sorted worst-first by the aggregate severity ladder (sign-in > no-remote >
+  waiting > ended), recency as tiebreak
 - Calm section, below: running/working/stale/stopped sessions are NOT listed
   individually by default; they collapse behind one disclosure row showing a
   count ("5 quiet", chevron left), which expands on click to the full
@@ -757,7 +762,7 @@ Empty state for archived view:
 
 Local macOS notifications (`UNUserNotificationCenter`) for state changes worth surfacing while the user is not looking at the app. Request permission on first launch after onboarding.
 
-- Fire when a session transitions to **Waiting** (Claude needs input/approval) or **Dead** (crashed or timed out). Coalesce rapid transitions; never notify on every poll.
+- Fire when a session transitions to **Waiting** (Claude needs input/approval) or **Dead** (Claude exited; presents as the recoverable "Ended" mark, so the notification is calm: "<title> ended" / "Claude exited. Restart it from CCorn to resume."). Coalesce rapid transitions; never notify on every poll.
 - Do not fire for Working/Running/Stale transitions (too noisy).
 - Tapping a notification opens that session in the browser (same as "Open in Browser").
 - Separate from Claude Code's own mobile push (which fires on the phone when remote control is active, v2.1.110+); these are local desktop alerts about session state.

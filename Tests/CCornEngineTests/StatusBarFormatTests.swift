@@ -136,10 +136,15 @@ import Testing
         #expect(bar(state: .waiting).contains("needs input"))
     }
 
-    @Test func deadReadsCrashedRed() {
+    /// A gone process is recoverable, not a terminal alarm: the dead state now
+    /// reads as an amber "ended" chip (mirroring the GUI's `.ended` mark), never
+    /// the red danger chip. Red is reserved for active BYPASS.
+    @Test func deadReadsEndedAmber() {
         let out = bar(state: .dead)
-        #expect(out.contains(dangerBg))
-        #expect(out.contains("crashed"))
+        #expect(out.contains(amberBg))
+        #expect(out.contains("ended"))
+        #expect(!out.contains(dangerBg))
+        #expect(!out.contains("crashed"))
     }
 
     @Test func idleSurfacesForRunningAndStale() {

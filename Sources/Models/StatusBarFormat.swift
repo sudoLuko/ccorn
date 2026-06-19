@@ -12,8 +12,8 @@ import Foundation
 /// its terminal counterpart, and it follows the same restraint: color marks
 /// attention only. Calm facts (title, mode, remote/local, idle) render in the
 /// status bar's base style; only the states that want the user get a colored
-/// chip (amber recoverable, red terminal), mirroring the GUI's broken-tier
-/// severity.
+/// chip (amber for the recoverable broken tier, mirroring the GUI; red is
+/// reserved for active BYPASS, the one genuinely loud condition).
 ///
 /// tmux format mechanics this relies on (verified against tmux 3.6's
 /// `format_draw`): `#{@ccorn_status}` inserts the option value verbatim, then
@@ -149,7 +149,10 @@ enum StatusBarFormat {
         case .needsAuth:
             segments.append(amberChip("sign in"))
         case .dead:
-            segments.append(dangerChip("crashed"))
+            // The process is gone (clean /exit or crash, indistinguishable to
+            // CCorn): a recoverable amber "ended" chip, not a red alarm,
+            // mirroring the GUI's `.ended` broken-tier mark.
+            segments.append(amberChip("ended"))
         case .running, .stale:
             if let seconds = idleSeconds, let label = idleLabel(seconds: seconds) {
                 segments.append(label)

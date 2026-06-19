@@ -52,8 +52,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             content.title = "\(title) needs sign-in"
             content.body = "Open the session in Terminal and run /login."
         case .dead:
-            content.title = "\(title) died"
-            content.body = "The process is gone; restart it from CCorn."
+            content.title = "\(title) ended"
+            content.body = "Claude exited. Restart it from CCorn to resume."
         default:
             return
         }

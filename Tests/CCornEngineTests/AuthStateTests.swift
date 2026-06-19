@@ -187,12 +187,12 @@ import Testing
 
     // MARK: Aggregate severity
 
-    /// needsAuth slots between Crashed and No remote: blocked-on-sign-in
-    /// outranks the degraded no-remote condition and blocked-on-input, and a
-    /// crash still outranks everything.
+    /// needsAuth tops the ladder now that the recoverable `ended` mark no
+    /// longer sits above it: blocked-on-sign-in outranks the degraded
+    /// no-remote condition, blocked-on-input, and the recoverable ended mark.
     @Test func needsAuthAggregateSeverity() {
         #expect(StatusPresentation.aggregate([.running, .waiting, .needsAuth]) == .needsAuth)
-        #expect(StatusPresentation.aggregate([.needsAuth, .crashed]) == .crashed)
+        #expect(StatusPresentation.aggregate([.needsAuth, .ended]) == .needsAuth)
         #expect(StatusPresentation.aggregate([.stale, .needsAuth]) == .needsAuth)
         #expect(StatusPresentation.aggregate([.noRemote, .needsAuth]) == .needsAuth)
     }
