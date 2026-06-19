@@ -38,6 +38,17 @@ struct TmuxController: Sendable {
     static let sessionName = "ccorn"
     static let socketName: String? = nil
     #endif
+
+    /// The base-session target, exact-match. tmux's target matching is
+    /// PREFIX-based, so a bare `-t ccorn` also resolves to a leftover
+    /// `ccorn-view-*` grouped session (a stray view from "Open in Terminal").
+    /// That would make `hasSession()` falsely true (the base never rebuilt) and
+    /// route new windows/options onto the view. The `=` prefix forces an EXACT
+    /// session-name match, so a stray view can never shadow the base. Use this
+    /// for every command whose `-t` targets the base SESSION; the creation
+    /// `-s` name and `-t <windowId>`/`-t <paneId>` targets stay bare.
+    static var sessionTarget: String { "=" + sessionName }
+
     private let runner = CommandRunner.shared
 
     /// Every tmux invocation funnels through here so the debug socket
@@ -54,7 +65,7 @@ struct TmuxController: Sendable {
 
     /// True if the `ccorn` session exists.
     func hasSession() -> Bool {
-        tmux(["has-session", "-t", Self.sessionName]).ok
+        tmux(["has-session", "-t", Self.sessionTarget]).ok
     }
 
     /// Outcome of `ensureSession`. `strayDefaultWindowId` is set only when the
@@ -103,7 +114,7 @@ struct TmuxController: Sendable {
     /// Terminal do NOT inherit this (they carry their own session options), so
     /// `attachViewCommand` sets it on each view too.
     func setMouseMode(_ enabled: Bool) {
-        tmux(["set-option", "-t", Self.sessionName, "mouse", enabled ? "on" : "off"])
+        tmux(["set-option", "-t", Self.sessionTarget, "mouse", enabled ? "on" : "off"])
         installCopyModeSelectBindings()
         installCopyModeExitBindings()
         installCopyModeBanner()
@@ -217,7 +228,7 @@ struct TmuxController: Sendable {
     private func installCopyModeBanner() {
         let saved = tmux(["show-options", "-gv", "status-right"]).trimmedOut
         tmux(["set-option", "-g", Self.savedStatusRightOption, saved])
-        tmux(["set-option", "-t", Self.sessionName, "status-right", Self.copyModeStatusRight])
+        tmux(["set-option", "-t", Self.sessionTarget, "status-right", Self.copyModeStatusRight])
         // status-right is only repainted on tmux's `status-interval` tick (15s by
         // default), so the banner would lag a mouse selection or clear late. A
         // session-scoped `pane-mode-changed` hook forces an immediate status
@@ -226,7 +237,7 @@ struct TmuxController: Sendable {
         // so re-applying on every ensure stays idempotent and never accumulates;
         // the user's other sessions keep their own (global) hooks. Views carry
         // their own hooks, so `attachViewCommand` sets the same one per view.
-        tmux(["set-hook", "-t", Self.sessionName, "pane-mode-changed", "refresh-client -S"])
+        tmux(["set-hook", "-t", Self.sessionTarget, "pane-mode-changed", "refresh-client -S"])
     }
 
     /// The `status-left` format every CCorn session uses: it expands each
@@ -257,7 +268,7 @@ struct TmuxController: Sendable {
     /// `window-status-current-format` is resolved from the window, not the
     /// session, so a session-level blank is ignored for the current window.
     private func installStatusLine() {
-        let s = Self.sessionName
+        let s = Self.sessionTarget
         tmux(["set-option", "-t", s, "status-left", Self.statusLeftFormat])
         tmux(["set-option", "-t", s, "status-left-length", "200"])
         tmux(["set-option", "-t", s, "status-interval", "5"])
@@ -274,7 +285,7 @@ struct TmuxController: Sendable {
     /// ensure, covering servers and sessions CCorn did not create.
     private func scrubNestedSessionMarkers() {
         for name in ["CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID"] {
-            tmux(["set-environment", "-t", Self.sessionName, "-r", name])
+            tmux(["set-environment", "-t", Self.sessionTarget, "-r", name])
         }
     }
 
@@ -292,7 +303,7 @@ struct TmuxController: Sendable {
             // tries to reuse its index, failing with "create window failed:
             // index N in use" and breaking every new session. The colon forces
             // the session interpretation.
-            "new-window", "-t", Self.sessionName + ":",
+            "new-window", "-t", Self.sessionTarget + ":",
             "-n", name, "-c", cwd,
             "-P", "-F", "#{window_id}",
         ])
@@ -462,7 +473,7 @@ struct TmuxController: Sendable {
         guard hasSession() else { return [] }
         // Tab-separated so names containing spaces don't break the split.
         let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}\t#{pane_current_path}\t#{@ccorn_managed}"
-        let r = tmux(["list-windows", "-t", Self.sessionName, "-F", fmt])
+        let r = tmux(["list-windows", "-t", Self.sessionTarget, "-F", fmt])
         guard r.ok else { return [] }
         var windows: [TmuxWindow] = []
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
@@ -598,7 +609,13 @@ struct TmuxController: Sendable {
     func attachViewCommand(windowId: String, mouseMode: Bool) -> String {
         let view = Self.uniqueViewSessionName(forWindowId: windowId, taken: Set(sessionNames()))
         let socket = Self.socketName.map { "-L \($0) " } ?? ""
-        return "tmux \(socket)new-session -t \(Self.sessionName) -s \(view)"
+        // The base target is SINGLE-QUOTED here, unlike the engine's other
+        // `=ccorn` targets: this command is run by the user's shell (Terminal
+        // `do script`), and zsh equals-expands a leading `=`, so a bare
+        // `-t =ccorn` makes zsh try to run `ccorn` ("zsh: ccorn not found")
+        // before tmux ever sees it. Every other base-session target execs tmux
+        // via argv (no shell), so this is the only path that needs the quotes.
+        return "tmux \(socket)new-session -t '\(Self.sessionTarget)' -s \(view)"
             + " ';' set-option -t \(view) destroy-unattached on"
             + " ';' set-option -t \(view) mouse \(mouseMode ? "on" : "off")"
             + " ';' set-option -t \(view) status-right '\(Self.copyModeStatusRight)'"
