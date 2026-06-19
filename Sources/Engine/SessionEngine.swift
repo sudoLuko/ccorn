@@ -460,12 +460,21 @@ final class SessionEngine: ObservableObject {
         return last
     }
 
-    /// Restart a dead or stopped session (flow 6.7): tear down any window still
-    /// holding the session first; a crashed claude leaves its window and shell
-    /// behind, and resuming next to it would orphan a dead window plus create a
-    /// `-2` duplicate. Then `claude --resume <uuid> --rc` in a fresh window.
-    func restartSession(uuid: String, directory: String,
-                        replacingWindowId: String? = nil) async -> StartResult {
+    /// Tear down every tmux window bound to `uuid` so a following `resumeSession`
+    /// is born next to no live or dead twin: resuming alongside a window that
+    /// already holds the uuid orphans the old window and lets `uniqueWindowName`
+    /// mint a `-2` duplicate, breaking the one-window-per-`@ccorn_id` invariant
+    /// that `window(forCcornId:)` depends on. The doomed set is the optional
+    /// `replacingWindowId` plus every `liveSessions` entry whose
+    /// `sessionUUID == uuid`; those are dropped from `liveSessions` on the main
+    /// actor, then killed in tmux. Finally sweep ALL windows still carrying the
+    /// tag (`allWindows(forCcornId:)`, not the first-match `window(forCcornId:)`)
+    /// for ones unknown to `liveSessions` — a window from a previous run, a
+    /// reconcile skipped mid-kill, or a `-2` duplicate left by an earlier
+    /// resume-next-to-a-live-window bug. Shared by `restartSession` and
+    /// `importSession` so both reach the same single-window state before resume.
+    private func reconcileWindows(forUUID uuid: String,
+                                  replacingWindowId: String? = nil) async {
         var doomed = Set<String>()
         if let replacingWindowId { doomed.insert(replacingWindowId) }
         for (windowId, live) in liveSessions where live.sessionUUID == uuid {
@@ -473,6 +482,20 @@ final class SessionEngine: ObservableObject {
         }
         for windowId in doomed { liveSessions[windowId] = nil }
         let tmux = self.tmux
+        await Task.detached {
+            for windowId in doomed { tmux.killWindow(windowId: windowId) }
+            for lingering in tmux.allWindows(forCcornId: uuid) {
+                tmux.killWindow(windowId: lingering.windowId)
+            }
+        }.value
+    }
+
+    /// Restart a dead or stopped session (flow 6.7): tear down any window still
+    /// holding the session first; a crashed claude leaves its window and shell
+    /// behind, and resuming next to it would orphan a dead window plus create a
+    /// `-2` duplicate. Then `claude --resume <uuid> --rc` in a fresh window.
+    func restartSession(uuid: String, directory: String,
+                        replacingWindowId: String? = nil) async -> StartResult {
         let store = self.store
         // The session's stored launch flags, to re-apply on the fresh process
         // (they don't survive --resume). nil for sessions CCorn didn't start;
@@ -480,14 +503,7 @@ final class SessionEngine: ObservableObject {
         let storedConfig = await Task.detached { () -> SessionLaunchConfig? in
             store.loadRecords().first { $0.uuid == uuid }?.launchConfig
         }.value
-        await Task.detached {
-            for windowId in doomed { tmux.killWindow(windowId: windowId) }
-            // A window tagged with this uuid from a previous run, unknown to
-            // liveSessions (e.g. reconcile skipped it mid-kill).
-            if let lingering = tmux.window(forCcornId: uuid) {
-                tmux.killWindow(windowId: lingering.windowId)
-            }
-        }.value
+        await reconcileWindows(forUUID: uuid, replacingWindowId: replacingWindowId)
         return await resumeSession(uuid: uuid, directory: directory, config: storedConfig)
     }
 
@@ -495,6 +511,17 @@ final class SessionEngine: ObservableObject {
     /// the external claude process running the session (if any: matched by
     /// session UUID via the pid registry, else by working directory), then
     /// resume it under CCorn with remote control on.
+    ///
+    /// `reconcileWindows` before the resume makes a repeated take-over
+    /// idempotent: the external process has no `ccorn` window, but an earlier
+    /// take-over of this same uuid can have left a window behind (and, under the
+    /// pre-fix resume-next-to-it path, a `-2` duplicate). Resuming next to those
+    /// would mint yet another duplicate and leave the unmanaged row showing
+    /// through a managed/unmanaged precedence race. Tearing every same-uuid
+    /// window down first lands a single window per `@ccorn_id`, which `resume`
+    /// then re-tags. It cannot orphan the session being taken over: that claude
+    /// is the external pid handled above, not a `ccorn` window or a
+    /// `liveSessions` entry, and we resume the same uuid/transcript right after.
     func importSession(uuid: String, directory: String) async -> StartResult {
         await Task.detached {
             if let external = UnmanagedClaudeFinder.find(inDirectory: directory,
@@ -502,6 +529,7 @@ final class SessionEngine: ObservableObject {
                 await ProcessControl.terminate(pid: external.pid)
             }
         }.value
+        await reconcileWindows(forUUID: uuid)
         return await resumeSession(uuid: uuid, directory: directory)
     }
 

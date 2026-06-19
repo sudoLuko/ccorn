@@ -526,6 +526,16 @@ struct TmuxController: Sendable {
         listWindows().first { $0.ccornId == uuid }
     }
 
+    /// Every window carrying this @ccorn_id tag, not just the first. The single
+    /// `@ccorn_id == one window` invariant is what `window(forCcornId:)` assumes;
+    /// a teardown that resumes the same uuid must sweep ALL matches (one
+    /// `list-windows`, not a `window(forCcornId:)` loop), or a `-2` duplicate
+    /// left by an earlier resume-next-to-a-live-window bug survives the kill and
+    /// the invariant stays broken.
+    func allWindows(forCcornId uuid: String) -> [TmuxWindow] {
+        listWindows().filter { $0.ccornId == uuid }
+    }
+
     // MARK: Name sanitization
 
     /// Sanitize a folder name into a tmux-safe window name: spaces, dots, colons
