@@ -51,15 +51,29 @@ final class SessionStore: @unchecked Sendable {
     private var settingsURL: URL { supportDir.appendingPathComponent("settings.json") }
 
     private func ensureDir() {
-        try? fileManager.createDirectory(at: supportDir, withIntermediateDirectories: true)
+        do {
+            try fileManager.createDirectory(at: supportDir, withIntermediateDirectories: true)
+        } catch {
+            // A support dir we cannot create means the next write will also fail
+            // (records/settings won't persist). Domain/code public; path private.
+            let ns = error as NSError
+            Log.store.error("could not create support dir (\(ns.domain, privacy: .public) \(ns.code, privacy: .public)): \(self.supportDir.path, privacy: .private)")
+        }
     }
 
     // MARK: - Session records
 
     /// Non-locking core reads/writes; callers must already hold `queue`.
     private func loadRecordsLocked() -> [SessionRecord] {
-        let records = (try? Data(contentsOf: sessionsURL))
-            .flatMap { try? JSONDecoder().decode([SessionRecord].self, from: $0) } ?? []
+        let data = try? Data(contentsOf: sessionsURL)
+        let decoded = data.flatMap { try? JSONDecoder().decode([SessionRecord].self, from: $0) }
+        // Log only a genuine CORRUPTION (the file is present but won't decode),
+        // not the normal first-launch absence (data == nil). Behavior is
+        // unchanged: still degrades to []. .error: a corrupt store is data loss.
+        if data != nil, decoded == nil {
+            Log.store.error("sessions.json present but failed to decode; ignoring (records reset to empty)")
+        }
+        let records = decoded ?? []
         #if DEBUG
         DebugLife.set("store-records", to: records.count)
         #endif
@@ -71,7 +85,16 @@ final class SessionStore: @unchecked Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? encoder.encode(records) {
-            try? data.write(to: sessionsURL, options: .atomic)
+            do {
+                try data.write(to: sessionsURL, options: .atomic)
+            } catch {
+                // The records could not be persisted; on next launch they revert
+                // to the last good write (or empty). Domain/code public.
+                let ns = error as NSError
+                Log.store.error("failed to write sessions.json (\(ns.domain, privacy: .public) \(ns.code, privacy: .public))")
+            }
+        } else {
+            Log.store.error("failed to encode \(records.count, privacy: .public) session record(s); not persisted")
         }
         #if DEBUG
         DebugLife.set("store-records", to: records.count)
@@ -233,8 +256,14 @@ final class SessionStore: @unchecked Sendable {
 
     func loadSettings() -> CCornSettings {
         queue.sync {
-            guard let data = try? Data(contentsOf: settingsURL),
-                  let settings = try? JSONDecoder().decode(CCornSettings.self, from: data) else {
+            guard let data = try? Data(contentsOf: settingsURL) else {
+                return .default       // absent: normal first launch, not a failure
+            }
+            guard let settings = try? JSONDecoder().decode(CCornSettings.self, from: data) else {
+                // Present but won't decode: corrupt settings revert to defaults.
+                // Logged because it silently discards user preferences. Behavior
+                // is unchanged: still returns .default.
+                Log.store.error("settings.json present but failed to decode; using defaults")
                 return .default
             }
             return settings

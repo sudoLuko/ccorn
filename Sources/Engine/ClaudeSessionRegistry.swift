@@ -33,10 +33,17 @@ enum ClaudeSessionRegistry {
         let url = claudeDir
             .appendingPathComponent("sessions")
             .appendingPathComponent("\(pid).json")
-        guard let data = try? Data(contentsOf: url),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        // A missing file is the normal case (dead pids linger, callers query
+        // freely), so absence is not logged. A file that IS present but won't
+        // parse or lacks a sessionId is a malformed registry entry: logged at
+        // .notice, the pid kept public (not user data), the contents never.
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let sessionId = obj["sessionId"] as? String,
-              !sessionId.isEmpty else { return nil }
+              !sessionId.isEmpty else {
+            Log.discovery.notice("registry file for pid \(pid, privacy: .public) present but malformed")
+            return nil
+        }
         let cwd = (obj["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let bridge = (obj["bridgeSessionId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return Info(sessionId: sessionId, cwd: cwd, bridgeSessionId: bridge)

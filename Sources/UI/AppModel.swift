@@ -489,7 +489,10 @@ final class AppModel: ObservableObject {
             // An empty index almost certainly means the projects root was
             // unreadable, not that every transcript vanished; pruning on it
             // would wipe every record. Skip; next launch retries.
-            guard !index.isEmpty else { return }
+            guard !index.isEmpty else {
+                Log.discovery.notice("orphaned-record prune skipped: transcript index is empty (projects dir likely unreadable); orphans retained until next launch")
+                return
+            }
             store.pruneRecords(withoutTranscriptIn: Set(index.keys), keeping: keep)
             // Retention on what survives: archived records inactive past the
             // age limit go, then the total is capped; the store must not
@@ -1103,7 +1106,10 @@ final class AppModel: ObservableObject {
                 activate
             end tell
             """
-            runner.run("osascript", ["-e", script])
+            let result = runner.run("osascript", ["-e", script])
+            if !result.ok {
+                Log.process.error("opening Terminal via osascript failed (exit \(result.exitCode, privacy: .public)): \(result.stderr)")
+            }
         }
     }
 

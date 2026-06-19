@@ -175,6 +175,8 @@ final class SessionEngine: ObservableObject {
                 tmux.setCcornId(windowId: windowId, uuid: uuid)
                 store.upsert(SessionRecord(uuid: uuid, path: directory, title: storedTitle,
                                            groupIDs: groupIDs, launchConfig: cfg))
+            } else {
+                Log.process.notice("session started (pid \(pid, privacy: .public)) but its UUID could not be bound from the registry; it runs unbound until the next-launch reconcile")
             }
             // No uuid (registry never appeared): fall back to the old behavior:
             // reconcile binds it on the next launch, though the title is then
@@ -321,6 +323,7 @@ final class SessionEngine: ObservableObject {
         // (e.g. bypass refused under root). Capture the pane before tearing the
         // window down so the alert can lead with the CLI's own line instead of
         // the generic "no process appeared".
+        Log.process.notice("claude spawn watch timed out after 25 polls (~5s); no child appeared, tearing down the orphan window")
         let finalPane = tmux.capturePane(windowId: windowId)
         tmux.killWindow(windowId: windowId)
         if let fatal = StateDetector().launchFatalError(pane: finalPane) {

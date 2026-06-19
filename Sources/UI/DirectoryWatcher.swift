@@ -37,7 +37,10 @@ final class DirectoryWatcher {
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             1.0, // FSEvents-side latency: coalesce bursts of transcript writes
             FSEventStreamCreateFlags(kFSEventStreamCreateFlagNone)
-        ) else { return nil }
+        ) else {
+            Log.discovery.error("FSEventStreamCreate failed; directory watch will not start (caller falls back to launch-time discovery only)")
+            return nil
+        }
 
         self.stream = stream
         FSEventStreamSetDispatchQueue(stream, .main)

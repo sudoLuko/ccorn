@@ -66,6 +66,10 @@ targets:
         excludes:
           - "Fixtures/**"   # read at runtime via #filePath, never compiled/bundled
       - path: Sources/Engine/StateDetector.swift
+      # Production diagnostic logger (os.Logger). The engine sources above are
+      # compiled into this hostless test bundle and now reference Log, so it
+      # must ride along or the test target won't compile.
+      - path: Sources/Engine/Log.swift
       - path: Sources/Engine/SessionDiscovery.swift
       - path: Sources/Engine/ProcessControl.swift
       - path: Sources/Engine/TmuxController.swift

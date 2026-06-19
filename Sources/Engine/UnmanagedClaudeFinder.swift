@@ -72,6 +72,11 @@ enum UnmanagedClaudeFinder {
     /// correctly) excludes them.
     static func processTableCandidates() -> [Candidate] {
         let r = CommandRunner.shared.run("/bin/ps", ["-axo", "pid="])
+        if !r.ok {
+            // ps could not enumerate the process table; the import kill step
+            // can't find the unmanaged claude and skips it. .notice; exit public.
+            Log.process.notice("ps process-table scan failed (exit \(r.exitCode, privacy: .public))")
+        }
         var out: [Candidate] = []
         for line in r.stdout.split(whereSeparator: \.isNewline) {
             guard let pid = Int32(line.trimmingCharacters(in: .whitespaces)),
@@ -100,6 +105,9 @@ enum UnmanagedClaudeFinder {
         for line in r.stdout.split(whereSeparator: \.isNewline) where line.hasPrefix("n") {
             return String(line.dropFirst())
         }
+        // No cwd line: lsof failed or the pid's cwd is unreadable (e.g. another
+        // user's process); the candidate drops out. .notice; pid + exit public.
+        Log.process.notice("lsof could not read cwd for pid \(pid, privacy: .public) (exit \(r.exitCode, privacy: .public))")
         return nil
     }
 }

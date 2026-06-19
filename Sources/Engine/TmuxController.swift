@@ -307,9 +307,15 @@ struct TmuxController: Sendable {
             "-n", name, "-c", cwd,
             "-P", "-F", "#{window_id}",
         ])
-        guard r.ok else { return nil }
+        guard r.ok else {
+            Log.tmux.error("new-window failed (exit \(r.exitCode, privacy: .public)): \(r.stderr, privacy: .private)")
+            return nil
+        }
         let id = r.trimmedOut
-        guard !id.isEmpty else { return nil }
+        guard !id.isEmpty else {
+            Log.tmux.error("new-window succeeded but returned no window id")
+            return nil
+        }
         disableRenaming(windowId: id)
         hideSiblingRoster(windowId: id)
         // Durable marker: this window exists for a claude session, even if the
@@ -362,7 +368,15 @@ struct TmuxController: Sendable {
     /// it falls back to the window id (active-pane) target otherwise. The `-p -J`
     /// flags are identical for either target.
     func capturePane(windowId target: String) -> String {
-        tmux(["capture-pane", "-t", target, "-p", "-J"]).stdout
+        let r = tmux(["capture-pane", "-t", target, "-p", "-J"])
+        // Log only a genuine capture FAILURE (non-zero exit), never an empty
+        // stdout on a clean exit: capture-pane runs every 3s on the state poll,
+        // and an empty-but-successful frame is a normal result for a freshly
+        // created pane. Behavior is unchanged: still returns r.stdout verbatim.
+        if !r.ok {
+            Log.tmux.notice("capture-pane failed (exit \(r.exitCode, privacy: .public))")
+        }
+        return r.stdout
     }
 
     /// One `(paneId, shellPID)` pair per pane in the window. `%N` is the stable
@@ -376,7 +390,13 @@ struct TmuxController: Sendable {
     /// a worse state. Pure parser split out so the format contract is unit-tested
     /// without a tmux server.
     static func parsePaneList(from r: CommandResult) -> [(paneId: String, shellPID: Int32)] {
-        guard r.ok else { return [] }
+        guard r.ok else {
+            // Expected when a window/server is gone; detection degrades to the
+            // window-target capture. .notice, not .error, and only on a genuine
+            // non-zero exit so the 3s poll never logs a healthy empty result.
+            Log.tmux.notice("list-panes (pane list) failed (exit \(r.exitCode, privacy: .public))")
+            return []
+        }
         var out: [(paneId: String, shellPID: Int32)] = []
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
             let cols = line.split(separator: " ", maxSplits: 1).map(String.init)
@@ -410,7 +430,14 @@ struct TmuxController: Sendable {
     /// never read `.unknown` as a crashed session. Pure classifier split out so
     /// the exit-code contract is unit-tested without a tmux server.
     static func panePIDProbe(from r: CommandResult) -> PanePIDProbe {
-        guard r.ok else { return .unknown }
+        guard r.ok else {
+            // Expected when tmux could not answer (no server, killed window,
+            // timeout kill); detection holds the session non-dead and retries.
+            // .notice, not .error, and only on a genuine non-zero exit so the
+            // 3s poll never logs on a healthy window.
+            Log.tmux.notice("list-panes (pane pid) failed (exit \(r.exitCode, privacy: .public))")
+            return .unknown
+        }
         if let pid = r.stdout
             .split(whereSeparator: { $0 == "\n" })
             .first
@@ -474,7 +501,12 @@ struct TmuxController: Sendable {
         // Tab-separated so names containing spaces don't break the split.
         let fmt = "#{window_id}\t#{window_name}\t#{@ccorn_id}\t#{pane_pid}\t#{pane_current_path}\t#{@ccorn_managed}"
         let r = tmux(["list-windows", "-t", Self.sessionTarget, "-F", fmt])
-        guard r.ok else { return [] }
+        guard r.ok else {
+            // hasSession() was already true, so an existing session that cannot
+            // be listed is a genuine tmux failure, not the normal no-session case.
+            Log.tmux.error("list-windows failed (exit \(r.exitCode, privacy: .public)): \(r.stderr, privacy: .private)")
+            return []
+        }
         var windows: [TmuxWindow] = []
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
             let cols = line.components(separatedBy: "\t")
@@ -558,7 +590,10 @@ struct TmuxController: Sendable {
     /// Every session name on the server: the managed `ccorn` plus any live views.
     func sessionNames() -> [String] {
         let r = tmux(["list-sessions", "-F", "#{session_name}"])
-        guard r.ok else { return [] }
+        guard r.ok else {
+            Log.tmux.error("list-sessions failed (exit \(r.exitCode, privacy: .public)): \(r.stderr, privacy: .private)")
+            return []
+        }
         return r.stdout
             .split(whereSeparator: { $0 == "\n" })
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -640,7 +675,10 @@ struct TmuxController: Sendable {
     /// kept alive by the managed session). Run from the launch reconcile sweep.
     func killStrayViewSessions() {
         let r = tmux(["list-sessions", "-F", "#{session_name}\t#{session_attached}"])
-        guard r.ok else { return }
+        guard r.ok else {
+            Log.tmux.error("list-sessions (stray-view sweep) failed (exit \(r.exitCode, privacy: .public)): \(r.stderr, privacy: .private)")
+            return
+        }
         for line in r.stdout.split(whereSeparator: { $0 == "\n" }) {
             let cols = line.components(separatedBy: "\t")
             guard cols.count >= 2 else { continue }
@@ -663,7 +701,10 @@ struct TmuxController: Sendable {
     /// means "open a fresh one".
     func viewClientTTY(forWindowId windowId: String) -> String? {
         let r = tmux(["list-clients", "-F", "#{client_session}\t#{client_tty}"])
-        guard r.ok else { return nil }
+        guard r.ok else {
+            Log.tmux.error("list-clients failed (exit \(r.exitCode, privacy: .public)): \(r.stderr, privacy: .private)")
+            return nil
+        }
         return Self.matchViewClient(windowId: windowId, clientLines: r.stdout)
     }
 

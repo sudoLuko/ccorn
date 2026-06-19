@@ -78,6 +78,13 @@ final class CommandRunner: @unchecked Sendable {
             let data = out.fileHandleForReading.readDataToEndOfFile()
             shellPath = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
+            // The login-shell PATH probe could not run; we fall back to the
+            // well-known bins. Logged because a wrong PATH is the usual cause of
+            // "tmux/claude not found" in the field. .notice: the fallback is a
+            // designed degradation, not a hard failure. Domain/code only, not
+            // localizedDescription, which can embed a path.
+            let ns = error as NSError
+            Log.process.notice("login-shell PATH probe failed (\(ns.domain, privacy: .public) \(ns.code, privacy: .public)), using fallback PATH")
             return fallback
         }
         var parts = shellPath.split(separator: ":").map(String.init)
@@ -138,6 +145,10 @@ final class CommandRunner: @unchecked Sendable {
             // pipes will never EOF: balance the termination enter, leave the
             // drains undispatched, and return the launch failure (still 127).
             group.leave()
+            // Binary name kept at default private redaction; only the error
+            // domain/code is public (no user data in either).
+            let ns = error as NSError
+            Log.process.error("failed to launch \(binary, privacy: .private) (\(ns.domain, privacy: .public) \(ns.code, privacy: .public))")
             return CommandResult(stdout: "", stderr: "failed to launch \(binary): \(error)", exitCode: 127)
         }
 

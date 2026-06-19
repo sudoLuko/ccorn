@@ -41,7 +41,14 @@ struct SessionDiscovery: Sendable {
             at: projectsRoot,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
-        ) else { return [] }
+        ) else {
+            // Expected on a fresh install (no ~/.claude/projects yet); also fires
+            // if the projects root is unreadable. .notice, not .error, and the
+            // root path stays private. Not a per-line hot path: one read per
+            // discovery refresh, not per transcript.
+            Log.discovery.notice("projects root unreadable or absent: \(projectsRoot.path, privacy: .private)")
+            return []
+        }
         return entries
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -55,7 +62,13 @@ struct SessionDiscovery: Sendable {
             at: dir,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]
-        ) else { return [] }
+        ) else {
+            // A project dir that vanished or turned unreadable between the parent
+            // listing and this read; the project drops out of discovery. .notice;
+            // the dir path stays private. One read per project dir, not per line.
+            Log.discovery.notice("project dir unreadable: \(dir.path, privacy: .private)")
+            return []
+        }
 
         var sessions: [DiscoveredSession] = []
         for file in files where file.pathExtension == "jsonl" {
@@ -147,7 +160,13 @@ struct SessionDiscovery: Sendable {
     /// the head of the file (the cwd-bearing `system`/`user` record appears near
     /// the top); falls back to the full file if the head doesn't contain it.
     static func firstCwd(inTranscript path: String) -> String? {
-        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        guard let handle = FileHandle(forReadingAtPath: path) else {
+            // Transcript could not be opened (removed mid-discovery, or a
+            // permission problem); the project's real path stays unresolved.
+            // .notice; the transcript path stays private.
+            Log.discovery.notice("transcript unreadable for cwd: \(path, privacy: .private)")
+            return nil
+        }
         defer { try? handle.close() }
         let head = handle.readData(ofLength: 256 * 1024)
         // Only drop a partial trailing line when the head was actually truncated
@@ -199,7 +218,12 @@ struct SessionDiscovery: Sendable {
     /// transcripts carry no ai-title at all; callers fall back to the
     /// directory basename.
     static func lastAITitle(inTranscript path: String) -> String? {
-        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        guard let handle = FileHandle(forReadingAtPath: path) else {
+            // Transcript could not be opened; the session falls back to the
+            // directory basename for its title. .notice; path stays private.
+            Log.discovery.notice("transcript unreadable for title: \(path, privacy: .private)")
+            return nil
+        }
         defer { try? handle.close() }
         let window = 256 * 1024
         // Throwing read API, not the legacy readData(ofLength:); that one
