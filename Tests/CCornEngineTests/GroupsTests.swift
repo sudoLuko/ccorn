@@ -116,6 +116,18 @@ import Testing
         #expect(members.map(\.uuid) == ["u1", "u4"])
     }
 
+    // MARK: New-session-into-active-group seeding
+
+    /// The pure mapping behind AppModel.activeGroupIDsForNewSession: a group
+    /// view seeds the new session into that group, every other view seeds none.
+    /// This is what makes a session started while a group is open appear in the
+    /// group the user is looking at instead of vanishing to All Sessions.
+    @Test func activeGroupViewSeedsNewSessionMembership() {
+        #expect(SidebarNav.group("x").groupIDsForNewSession == ["x"])
+        #expect(SidebarNav.allSessions.groupIDsForNewSession == [])
+        #expect(SidebarNav.archived.groupIDsForNewSession == [])
+    }
+
     // MARK: Placeholder naming
 
     @Test func defaultGroupNameDedupes() {

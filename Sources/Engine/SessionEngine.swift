@@ -99,8 +99,15 @@ final class SessionEngine: ObservableObject {
     /// F2), so a record that survives relaunch is the only thing keeping the
     /// displayed name in sync with what claude.ai/mobile shows. Returns the
     /// window id and the captured claude PID.
+    /// `groupIDs` seeds the new record's group membership at creation time, so a
+    /// session started while a group view is active joins that group durably (it
+    /// survives relaunch like any membership) and surfaces in the view the user
+    /// is looking at, instead of vanishing to All Sessions. Defaulted to []: the
+    /// New Session sheet is the only caller that passes a group; restart/import
+    /// and the "start new here" retry path stay group-less, exactly as before.
     func startNewSession(directory: String, title userTitle: String? = nil,
-                         config: SessionLaunchConfig? = nil) async -> StartResult {
+                         config: SessionLaunchConfig? = nil,
+                         groupIDs: [String] = []) async -> StartResult {
         // `label` names the tmux window and the `--rc` handle, which both need a
         // non-empty string. The persisted title is the user's chosen name, or
         // empty so the row falls through to Claude's AI title (as resume does):
@@ -167,7 +174,7 @@ final class SessionEngine: ObservableObject {
             if let uuid {
                 tmux.setCcornId(windowId: windowId, uuid: uuid)
                 store.upsert(SessionRecord(uuid: uuid, path: directory, title: storedTitle,
-                                           launchConfig: cfg))
+                                           groupIDs: groupIDs, launchConfig: cfg))
             }
             // No uuid (registry never appeared): fall back to the old behavior:
             // reconcile binds it on the next launch, though the title is then
@@ -178,7 +185,8 @@ final class SessionEngine: ObservableObject {
         if case let .started(windowId, pid) = launch.result {
             let live = LiveSession(
                 record: SessionRecord(uuid: launch.uuid ?? "", path: directory,
-                                      title: storedTitle, launchConfig: cfg),
+                                      title: storedTitle, groupIDs: groupIDs,
+                                      launchConfig: cfg),
                 windowId: windowId,
                 ccornTag: launch.uuid,
                 pid: pid,

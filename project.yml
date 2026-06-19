@@ -91,6 +91,9 @@ targets:
       # routing decision); it needs only SessionState + Theme + CCornSettings,
       # all above. The rest of the UI layer stays out of the test target.
       - path: Sources/UI/SessionRow.swift
+      # The sidebar-nav enum rides along for its pure groupIDsForNewSession
+      # mapping (pinned by GroupsTests); Foundation-only, no view dependencies.
+      - path: Sources/UI/SidebarNav.swift
       # Tests build the engine sources in Debug, where store/session lifecycle
       # instrumentation references DebugLife (#if DEBUG).
       - path: Sources/Debug/DebugLifecycle.swift

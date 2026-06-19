@@ -68,6 +68,14 @@ final class AppModel: ObservableObject {
     @Published var sidebarNav: SidebarNav = .allSessions {
         didSet { if sidebarNav != oldValue { clearSelection() } }
     }
+    /// The group membership a brand-new session should be seeded with, derived
+    /// from the active sidebar view: a `.group(id)` view contributes `[id]` so
+    /// the session joins the group the user is looking at, every other view
+    /// contributes none. Read on the main actor and captured before the detached
+    /// start (the engine never reaches back into AppModel state). The popover
+    /// and status menu have no sidebar, so their New Session path simply never
+    /// consults this — they stay group-less for free.
+    var activeGroupIDsForNewSession: [String] { sidebarNav.groupIDsForNewSession }
     /// Main-window sidebar visibility, model-owned so the titlebar toggle,
     /// the View menu (⌘⌃S), and verification all drive the same state, and
     /// persisted so the choice survives relaunch. Recovery from a persisted
@@ -1180,8 +1188,14 @@ final class AppModel: ObservableObject {
     /// Claude's AI session title (it keeps updating); a typed name sticks.
     func startConfiguredSession(directory: String, title: String?, config: SessionLaunchConfig) {
         newSessionFlow = nil
+        // Capture the active view's group membership now, on the main actor,
+        // before the detached start: the engine seeds it onto the new record so
+        // the session joins the group the user is viewing (and the membership
+        // persists). The detached task must not read AppModel state itself.
+        let groupIDs = activeGroupIDsForNewSession
         Task {
-            let result = await engine.startNewSession(directory: directory, title: title, config: config)
+            let result = await engine.startNewSession(directory: directory, title: title,
+                                                      config: config, groupIDs: groupIDs)
             handleStartResult(result, verb: "start")
             await refreshAfterMutation()
         }

@@ -76,14 +76,6 @@ private extension View {
     }
 }
 
-/// Value-bearing so a user group can be the selected view; stays Hashable
-/// for the sidebar's List(selection:) binding.
-enum SidebarNav: Hashable {
-    case allSessions
-    case archived
-    case group(String)
-}
-
 /// Left sidebar: branded header (the lockup is where app identity lives;
 /// the title bar hides its text), New Session button, SESSIONS nav (All
 /// Sessions + indented Archived), pinned settings gear. Below the header,
