@@ -103,30 +103,44 @@ struct SessionListView: View {
     }
 
     private var list: some View {
-        ScrollView {
+        // Managed and discovered render from ONE ForEach over the combined,
+        // ordered set, with the DISCOVERED divider inserted inline before the
+        // first unmanaged row. A single ForEach is load-bearing: adopting a
+        // discovered session changes that row's kind (unmanaged → managed)
+        // while its listID (the session uuid) stays stable, so the row must
+        // update in place — cross the seam and re-render as managed — not be
+        // reused across two sibling ForEaches. Two ForEaches keyed on the same
+        // listID let SwiftUI keep the stale unmanaged subtree (the "Take over"
+        // tag, the muted style) for the adopted row even though the data is
+        // already managed. The uuid-stable listID still preserves the smooth
+        // managed↔record (Stop) in-place transition (a1fb8b1, b82e7cf).
+        let combined = managedRows + discoveredRows
+        // The seam: listID of the first discovered row, where the header goes.
+        // managedRows never holds an unmanaged kind, so this is the single
+        // managed→discovered boundary.
+        let firstDiscoveredID = discoveredRows.first?.listID
+        return ScrollView {
             LazyVStack(spacing: 0) {
                 if managedRows.isEmpty {
                     noManagedHint
-                } else {
-                    ForEach(managedRows, id: \.listID) { row in
+                }
+
+                ForEach(combined, id: \.listID) { row in
+                    let isDiscovered = row.kind == .unmanaged
+                    // Inline DISCOVERED header at the seam, kept inside this one
+                    // ForEach so it stays put as rows cross the boundary.
+                    if row.listID == firstDiscoveredID {
+                        discoveredHeader
+                    }
+                    // Collapsing hides the discovered rows but keeps the header.
+                    if !(isDiscovered && discoveredCollapsed) {
                         SessionRowView(row: row, model: model)
                         rowDivider
                     }
                 }
-
-                if !discoveredRows.isEmpty {
-                    discoveredHeader
-                    if !discoveredCollapsed {
-                        ForEach(discoveredRows, id: \.listID) { row in
-                            SessionRowView(row: row, model: model)
-                            rowDivider
-                        }
-                    }
-                }
             }
             .padding(.top, 4)
-            .animation(.easeInOut(duration: 0.2),
-                       value: (managedRows + discoveredRows).map(\.listID))
+            .animation(.easeInOut(duration: 0.2), value: combined.map(\.listID))
         }
         // Fresh identity per sidebar view (F2): a nav switch swaps the whole
         // row set, and without this the ids animation above plays it as a
