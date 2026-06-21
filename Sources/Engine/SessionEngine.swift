@@ -129,14 +129,21 @@ final class SessionEngine: ObservableObject {
             let uuid: String?
         }
 
-        let launch = await Task.detached { () -> Launch in
+        // Phase 1: create + tag the window and send the launch command. As in
+        // resumeSession, register the managed entry the moment the window exists
+        // rather than gating it on the child watch: a slow-but-successful start
+        // that misses the spawn window must still render a managed row, not
+        // resurface as an unmanaged/Stopped session once its transcript lands.
+        // The uuid is unknown here (claude generates it); register unbound and
+        // let bindUnknownIdentities backfill it once the pid is known.
+        let creation = await Task.detached { () -> WindowCreation in
             let session = tmux.ensureSession(mouseMode: mouse)
             guard session.ok else {
-                return Launch(result: .failed(Self.tmuxSessionFailureMessage(stderr: session.stderr)), uuid: nil)
+                return .failed(.failed(Self.tmuxSessionFailureMessage(stderr: session.stderr)))
             }
             let name = tmux.uniqueWindowName(from: label)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {
-                return Launch(result: .failed("could not create tmux window"), uuid: nil)
+                return .failed(.failed("could not create tmux window"))
             }
             // A freshly created session comes with a bare default window; kill
             // it now that a real window exists, or it lingers as a never-ran-
@@ -156,13 +163,34 @@ final class SessionEngine: ObservableObject {
                              Self.claudeCommand(base: Self.claudeBase(remoteControl: cfg.remoteControl,
                                                                       newTitle: label),
                                                 config: cfg))
+            return .created(windowId: windowId)
+        }.value
+
+        guard case let .created(windowId) = creation else {
+            if case let .failed(result) = creation { return result }
+            return .failed("could not create tmux window")
+        }
+
+        // Optimistic unbound managed entry (uuid "" / ccornTag nil), keyed by the
+        // window. bindUnknownIdentities backfills the uuid once a pid is known and
+        // detect backfills the pid + state on the next poll; a nil-pid .running
+        // entry is held (not marked dead) through the spawn-grace window.
+        let live = LiveSession(
+            record: SessionRecord(uuid: "", path: directory, title: storedTitle,
+                                  groupIDs: groupIDs, launchConfig: cfg),
+            windowId: windowId, ccornTag: nil, pid: nil, state: .running)
+        liveSessions[windowId] = live
+
+        // Phase 2: confirm the child and run the spawn-time identity bind (the
+        // registry file is written by claude itself at session start, F3, but can
+        // lag a few hundred ms). Persisting + tagging at spawn keeps the --rc
+        // title durable across relaunch; if the registry never appears in this
+        // window, bindUnknownIdentities binds it on a later tick.
+        let launch = await Task.detached { () -> Launch in
             let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
             guard case let .started(_, pid) = outcome else {
                 return Launch(result: outcome, uuid: nil)
             }
-            // Bind + persist now. The registry file is written by the claude
-            // process itself right at session start (verified, F3), but give it
-            // a moment to appear after the spawn.
             var uuid: String?
             for _ in 0..<10 {
                 if let info = ClaudeSessionRegistry.info(forPid: pid) {
@@ -178,23 +206,29 @@ final class SessionEngine: ObservableObject {
             } else {
                 Log.process.notice("session started (pid \(pid, privacy: .public)) but its UUID could not be bound from the registry; it runs unbound until the next-launch reconcile")
             }
-            // No uuid (registry never appeared): fall back to the old behavior:
-            // reconcile binds it on the next launch, though the title is then
-            // only as durable as this process.
             return Launch(result: outcome, uuid: uuid)
         }.value
 
-        if case let .started(windowId, pid) = launch.result {
-            let live = LiveSession(
-                record: SessionRecord(uuid: launch.uuid ?? "", path: directory,
-                                      title: storedTitle, groupIDs: groupIDs,
-                                      launchConfig: cfg),
-                windowId: windowId,
-                ccornTag: launch.uuid,
-                pid: pid,
-                state: .running
-            )
-            liveSessions[windowId] = live
+        switch Self.liveSessionMutation(for: launch.result, windowId: windowId) {
+        case .backfillPid(let pid):
+            // Backfill the confirmed pid (and, when the spawn-time bind landed,
+            // the uuid) onto the SAME entry; never create a duplicate. When the
+            // registry lagged, ccornTag stays nil and bindUnknownIdentities binds
+            // it later — exactly the prior fall-back behavior.
+            if let existing = liveSessions[windowId] {
+                existing.pid = pid
+                if let uuid = launch.uuid, existing.sessionUUID.isEmpty {
+                    existing.ccornTag = uuid
+                    existing.record = SessionRecord(uuid: uuid, path: directory,
+                                                    title: storedTitle,
+                                                    groupIDs: groupIDs,
+                                                    launchConfig: cfg)
+                }
+            }
+        case .remove:
+            liveSessions[windowId] = nil
+        case .none:
+            break
         }
         return launch.result
     }
@@ -223,12 +257,22 @@ final class SessionEngine: ObservableObject {
                                  groupIDs: existing?.groupIDs ?? [],
                                  launchConfig: config ?? existing?.launchConfig)
         }.value
-        let result = await Task.detached { () -> StartResult in
+        // Phase 1: create + tag the window, send the resume command. This is the
+        // moment the @ccorn_id tag exists; do NOT gate the managed entry on the
+        // child watch below. A slow `claude --resume … --rc` (node start, RC
+        // handshake, trust/theme prompt) or a transient probe miss in the GUI
+        // exec environment can make awaitClaudeChild time out even when claude is
+        // genuinely alive, which previously left the live tagged window absent
+        // from liveSessions — so the row stayed .unmanaged ("Take over") for the
+        // whole session. Register on creation instead, then backfill the pid.
+        let creation = await Task.detached { () -> WindowCreation in
             let session = tmux.ensureSession(mouseMode: mouse)
-            guard session.ok else { return .failed(Self.tmuxSessionFailureMessage(stderr: session.stderr)) }
+            guard session.ok else {
+                return .failed(.failed(Self.tmuxSessionFailureMessage(stderr: session.stderr)))
+            }
             let name = tmux.uniqueWindowName(from: windowName)
             guard let windowId = tmux.newWindow(name: name, cwd: directory) else {
-                return .failed("could not create tmux window")
+                return .failed(.failed("could not create tmux window"))
             }
             if let stray = session.strayDefaultWindowId {
                 tmux.killWindow(windowId: stray)
@@ -242,24 +286,81 @@ final class SessionEngine: ObservableObject {
                              Self.claudeCommand(base: Self.claudeBase(remoteControl: config?.remoteControl ?? true,
                                                                       resumeUUID: uuid),
                                                 config: config))
-            let outcome = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
-            if case .started = outcome {
-                store.upsert(record)
-            }
-            return outcome
+            return .created(windowId: windowId)
         }.value
 
-        if case let .started(windowId, pid) = result {
-            let live = LiveSession(
-                record: record,
-                windowId: windowId,
-                ccornTag: uuid,
-                pid: pid,
-                state: .running
-            )
-            liveSessions[windowId] = live
+        guard case let .created(windowId) = creation else {
+            if case let .failed(result) = creation { return result }
+            return .failed("could not create tmux window")
         }
-        return result
+
+        // Optimistic managed entry, keyed by the just-tagged window. pid nil +
+        // baseline .running matches a freshly-adopted/created window (reconcile
+        // and startNewSession both use .running); the @ccorn_id tag (== uuid) is
+        // the durable identity. The poll's bindUnknownIdentities backfills the
+        // pid for nil-pid entries and the detector flips state on the next tick;
+        // a nil-pid .running entry is HELD (not marked dead) through the
+        // spawn-grace window by StateDetector.detect, so it never flashes crashed.
+        let live = LiveSession(record: record, windowId: windowId,
+                               ccornTag: uuid, pid: nil, state: .running)
+        liveSessions[windowId] = live
+
+        // Phase 2: confirm the child. The store upsert and the killWindow orphan
+        // cleanup stay inside awaitClaudeChild's failure path; here we only apply
+        // the resulting liveSessions mutation. A genuine no-process result removes
+        // the optimistic entry (the window was already killed by awaitClaudeChild),
+        // so a dead window never lingers as a managed row.
+        let outcome = await Task.detached { () -> StartResult in
+            let o = await Self.awaitClaudeChild(windowId: windowId, tmux: tmux)
+            if case .started = o { store.upsert(record) }
+            return o
+        }.value
+
+        switch Self.liveSessionMutation(for: outcome, windowId: windowId) {
+        case .backfillPid(let pid):
+            // Only touch the entry we registered for this window: an interleaved
+            // poll or terminate may have replaced/removed it, and the pid must
+            // never create a second/duplicate entry for the same window.
+            liveSessions[windowId]?.pid = pid
+        case .remove:
+            liveSessions[windowId] = nil
+        case .none:
+            break
+        }
+        return outcome
+    }
+
+    /// Outcome of phase-1 window creation: the created window id, or an early
+    /// `StartResult` failure (tmux session / new-window failure) to return as-is.
+    private enum WindowCreation: Sendable {
+        case created(windowId: String)
+        case failed(StartResult)
+    }
+
+    /// The mutation to apply to the optimistic `liveSessions` entry registered at
+    /// window creation, given the `awaitClaudeChild` outcome. Pure (no tmux /
+    /// process / disk I/O) so the failure-branch logic is unit-testable:
+    /// - `.started` for THIS window backfills the confirmed pid onto the existing
+    ///   entry (never creates a second/duplicate entry).
+    /// - any non-started result (window-created-no-process / failed) removes the
+    ///   entry; awaitClaudeChild has already killed the orphan window, so leaving
+    ///   the managed entry would render a dead window as a managed row.
+    /// A `.started` carrying a different windowId (it never should) is ignored, so
+    /// a stale outcome can't backfill the wrong window.
+    enum LiveSessionMutation: Equatable, Sendable {
+        case backfillPid(Int32)
+        case remove
+        case none
+    }
+
+    nonisolated static func liveSessionMutation(for outcome: StartResult,
+                                                windowId: String) -> LiveSessionMutation {
+        switch outcome {
+        case let .started(startedWindowId, pid):
+            return startedWindowId == windowId ? .backfillPid(pid) : .none
+        case .windowCreatedNoProcess, .failed:
+            return .remove
+        }
     }
 
     /// The base `claude` invocation (before the config's flag tokens) for a new
