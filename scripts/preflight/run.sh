@@ -160,6 +160,10 @@ fixtures_selftest() {
     check_fx needs-auth-login.txt needsAuth
     check_fx needs-auth-fresh-login-2172.txt needsAuth
     check_fx needs-auth-invalid-key-2172.txt needsAuth
+    # An auth-error phrase ("Invalid API key") lingering in scrollback after a
+    # SUCCESSFUL turn (a `⏺` response bullet follows it) must NOT keep the
+    # session flagged needsAuth: it recovered, so it reads running.
+    check_fx recovered-auth-in-scrollback-2181.txt running
     check_fx waiting-trust-2172.txt waiting
     # dead-exited reads running from pane text alone. T2: Dead is decided by
     # PID liveness, never pane content. The pane-only result is pinned here so

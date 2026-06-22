@@ -252,23 +252,52 @@ struct StateDetector: Sendable {
         "to use this session only",
     ]
 
-    /// Login-prompt phrases (docs/CCORN_SPEC.md section 8, "User not
-    /// authenticated"). Anchored to whole UI/error renders (the login picker,
-    /// the OAuth flow, and the invalid-credential errors), never a bare
-    /// "/login", which could appear in ordinary conversation text. A session
-    /// matching one of these is blocked on sign-in, which is a different
-    /// problem than Waiting (needs input): it gets its own state so the row
-    /// and the notification say "sign in", not "Claude needs your input".
-    static let authPhrases = [
+    /// Auth signals come in two tiers because they live in the pane differently
+    /// (docs/CCORN_SPEC.md section 8, "User not authenticated").
+    ///
+    /// `authLoginChrome` is the live login UI: the picker, the OAuth/browser
+    /// flow, the paste-code prompt. These render ONLY while sign-in is actively
+    /// blocking — they replace the input box, they don't scroll up into history
+    /// as a finished turn — so a match anywhere in the pane is a genuine block,
+    /// no supersession check needed.
+    static let authLoginChrome = [
         "Select login method",
-        "Please run /login",
-        "Invalid API key",
-        "OAuth token expired",
-        "OAuth token revoked",
         "Paste code here if prompted",
         "use the url below to sign in",
         "Press Enter to open your browser and sign in",
     ]
+
+    /// `authErrorResult` is the OTHER kind: an error printed as a *tool result*
+    /// for a turn (the `⎿ Invalid API key` result line, an OAuth-token failure,
+    /// a "Please run /login" nudge). Unlike the login chrome, an error result
+    /// scrolls up into history once the turn is done and lingers there. So a
+    /// match alone is NOT proof the session is still blocked: a session that
+    /// errored, then ran a SUCCESSFUL turn, keeps the stale phrase in
+    /// scrollback (the `recovered-auth-in-scrollback-2181` fixture).
+    ///
+    /// The distinguishing signal (validated against both poles, the recovered
+    /// and the genuinely-blocked fixtures): an error-result phrase forces
+    /// needsAuth only when it is NOT superseded — i.e. no `⏺` assistant-response
+    /// bullet line (`authResponseBullet`) appears at a line index AFTER the last
+    /// error-result line. A successful turn always emits a `⏺` response, so
+    /// `⏺` after the error means the session recovered; no `⏺` after it (the
+    /// turn errored without producing a response) means it is still blocked.
+    /// A re-errored turn keeps reading blocked: the newest error becomes the
+    /// last error line and its turn's `⏺` sits above it, not after it. The
+    /// `✻ <verb>ed for Ns` glyph renders after an *errored* turn too, so it is
+    /// NOT a usable supersession signal; only `⏺` is.
+    static let authErrorResult = [
+        "Invalid API key",
+        "OAuth token expired",
+        "OAuth token revoked",
+        "Please run /login",
+    ]
+
+    /// The assistant-response bullet (U+23FA), printed at the head of a
+    /// completed assistant turn's output. Its presence on a line AFTER the last
+    /// error-result line is what marks an auth error as superseded (see
+    /// `authErrorResult`).
+    static let authResponseBullet: Character = "⏺"
 
     /// Fatal launch errors that make `claude` exit immediately, leaving no child
     /// process; so the spawn watch times out and would otherwise report the
@@ -408,19 +437,56 @@ struct StateDetector: Sendable {
         return Self.waitingPhrases.contains { region.localizedCaseInsensitiveContains($0) }
     }
 
-    /// The CLI's auth-error/login line if the pane shows a login prompt, nil
-    /// otherwise. Returns the matched line (trimmed of TUI box-drawing and
-    /// whitespace) so the alert can surface Claude Code's own words.
+    /// The CLI's auth-error/login line if the pane shows a GENUINE sign-in
+    /// block, nil otherwise. Returns the matched line (trimmed of TUI
+    /// box-drawing and whitespace) so the alert can surface Claude Code's own
+    /// words (the return contract the alert/tooltip relies on is preserved).
+    ///
+    /// Two tiers, scanned over the WHOLE pane (an error result is in scrollback
+    /// by definition, so live-region scoping would miss it):
+    ///   * `authLoginChrome` — a live login screen; a match anywhere is a block.
+    ///   * `authErrorResult` — an error tool-result; a match blocks ONLY when
+    ///     it is not superseded by a later `⏺` assistant-response bullet (a
+    ///     successful turn ran after the error, so the session recovered).
+    ///
+    /// Login chrome wins outright. Otherwise the last error-result line is
+    /// compared against the last `⏺` line: a `⏺` at a strictly greater index
+    /// means recovered (nil); no later `⏺` means still blocked (the error line).
+    /// `classifyPane`/`detect` precedence is unchanged — live activity still
+    /// preempts this — so a phrase streamed mid-turn never reaches here.
     func authNotice(pane: String) -> String? {
-        for line in pane.split(whereSeparator: \.isNewline) {
-            if let phrase = Self.authPhrases.first(where: {
+        let lines = pane.split(separator: "\n", omittingEmptySubsequences: false)
+
+        // Live login chrome: a match anywhere is a genuine block, full stop.
+        for line in lines {
+            if let phrase = Self.authLoginChrome.first(where: {
                 line.localizedCaseInsensitiveContains($0)
             }) {
                 let cleaned = Self.cleanTUILine(line)
                 return cleaned.isEmpty ? phrase : cleaned
             }
         }
-        return nil
+
+        // Error-result: find the LAST line carrying one, then check whether an
+        // `⏺` assistant-response bullet appears on any LATER line (the turn
+        // recovered). Track both in one pass over the pane.
+        var lastErrorLine: (index: Int, text: Substring, phrase: String)?
+        var lastBulletIndex: Int?
+        for (index, line) in lines.enumerated() {
+            if line.contains(Self.authResponseBullet) {
+                lastBulletIndex = index
+            }
+            if let phrase = Self.authErrorResult.first(where: {
+                line.localizedCaseInsensitiveContains($0)
+            }) {
+                lastErrorLine = (index, line, phrase)
+            }
+        }
+        guard let error = lastErrorLine else { return nil }
+        // Superseded: a response bullet sits AFTER the last error line.
+        if let bullet = lastBulletIndex, bullet > error.index { return nil }
+        let cleaned = Self.cleanTUILine(error.text)
+        return cleaned.isEmpty ? error.phrase : cleaned
     }
 
     /// The CLI's remote-control failure line plus its kind, if the pane's *live

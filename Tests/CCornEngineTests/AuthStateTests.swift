@@ -90,6 +90,20 @@ import Testing
         #expect(classifyFresh(pane) == .running)
     }
 
+    /// THE "false Sign-in after recovery" bug: a session emitted an auth-error
+    /// phrase ("Invalid API key", here typed into the conversation), then ran a
+    /// SUCCESSFUL turn whose `⏺ all good` response bullet appears AFTER the last
+    /// error-result line. The stale phrase lingers in scrollback, but the later
+    /// `⏺` supersedes it, so the session is recovered: it reads running, and
+    /// `authNotice` returns nil (no genuine block to surface). Real frame
+    /// captured on 2.1.181. Contrast `realInvalidKeyErrorFrameIsNeedsAuth`,
+    /// where no `⏺` follows the error so it stays needsAuth.
+    @Test func recoveredAuthInScrollbackIsRunning() {
+        let pane = Fixtures.paneText("recovered-auth-in-scrollback-2181.txt")
+        #expect(detector.authNotice(pane: pane) == nil)
+        #expect(classifyFresh(pane) == .running)
+    }
+
     /// detect() end to end: alive pid + login screen -> NeedsAuth, with the
     /// CLI's line carried on the result for the alert/tooltip.
     @Test func detectCarriesAuthNotice() {
