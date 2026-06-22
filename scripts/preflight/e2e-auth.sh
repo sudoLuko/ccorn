@@ -36,10 +36,32 @@ TMUX new-session -d -s "$SESSION" -x 220 -y 50
 TMUX set-environment -t "$SESSION" CLAUDE_CONFIG_DIR "$FRESH_CONFIG"
 
 launch_app
-cmd onboard "$PROJ_A" > /dev/null   # complete onboarding so flows are live
+cmd onboard "$PROJ_A" "$PROJ_B" > /dev/null   # complete onboarding so flows are live
 
-# --- scenario A: login screen inside the grace window -> modal -----------------
-log "scenario A: new session lands on login screen within grace"
+# The section-8 alert is an NSAlert that sheets onto a visible "CCorn" window
+# and falls back to a blocking runModal otherwise (Alerts.sheetOrModal). Show
+# the main window first so the alert is always the countable sheet, never a
+# runModal that would stall the debug channel.
+cmd show main > /dev/null
+sleep 1
+
+# Why this test forces detection passes instead of trusting the poll:
+# the 2.1.181 onboarding reaches the login picker fast (theme picker ~2s after
+# spawn, then a single Enter -> "Select login method" ~1s later, well inside the
+# 30s grace). The classifier flags that frame needsAuth on first sight (the
+# preflight contract test pins it). The flake is NOT detection or onboarding: in
+# the headless e2e app no window ever counts as on-screen, so the state poll
+# parks at its 30s idle cadence, and the login pane is first re-observed on a
+# tick that lands right on the session's own 30s activation grace boundary. The
+# modal gate (`!rcGraceExpired`) is then decided by sub-second poll-vs-grace
+# alignment: A (wants the modal) and B (wants none) were testing that same knife
+# edge from opposite sides, so each failed about as often as it passed. The fix
+# is to observe the transition at a CONTROLLED time relative to the grace via an
+# explicit `force_refresh` (same engine refresh the poll runs), not to wait on a
+# tick whose phase is unknowable.
+
+# --- scenario A: login screen INSIDE the grace -> one-shot modal ---------------
+log "scenario A: session reaches the login screen well inside the 30s grace"
 cmd new "$PROJ_A" > /dev/null
 WIN=$(row_window "$PROJ_A")
 if wait_pane "$WIN" "Choose the text style" 25; then
@@ -53,7 +75,12 @@ else
     fail "A: login screen never rendered"
 fi
 
-assert_row_state "$PROJ_A" needsAuth 10 "A: row flipped within poll ticks"
+# Observe the running->needsAuth transition NOW, while the session is still
+# deep inside its 30s grace (login rendered ~6-8s after spawn): the modal must
+# fire. force_refresh runs the real engine refresh + rebuildRows, which is where
+# presentAuthAlertIfNeeded fires the one-shot alert.
+force_refresh "$PROJ_A" "auth-A"
+assert_row_state "$PROJ_A" needsAuth 10 "A: row flipped within grace"
 
 NOTICE=$(row_notice "$PROJ_A")
 if [[ -n "$NOTICE" && "$NOTICE" != "null" ]]; then
@@ -63,8 +90,6 @@ else
 fi
 
 sleep 2   # the alert presents a turn after the rows publish
-cmd show main > /dev/null
-sleep 1
 shot main auth-modal.png
 DISMISSED=$(cmd dismisssheet)
 if [[ "$DISMISSED" == "dismissed 1" ]]; then
@@ -73,21 +98,27 @@ else
     fail "A: expected exactly one sheet, got '$DISMISSED'"
 fi
 
-# --- scenario B: login screen after grace expiry -> notification, NO modal -----
-log "scenario B: session drifts to login after the 30s grace (no modal)"
+# --- scenario B: login screen AFTER grace expiry -> notification, NO modal -----
+# The grace is measured from session start, so hold B on the theme picker (a
+# benign "running" frame) until the 30s grace has unambiguously expired, THEN
+# advance to login. Because the FIRST time B's pane shows login is past the
+# grace, no observation of it can fire the modal. Forcing the refresh after the
+# advance gives the verdict immediately, without depending on a slow poll tick.
+log "scenario B: session drifts to login AFTER the 30s grace (no modal)"
 cmd new "$PROJ_B" > /dev/null
 WIN=$(row_window "$PROJ_B")
 wait_pane "$WIN" "Choose the text style" 25 || log "WARN: no theme picker in B"
-log "B: sitting out the 30s activation grace before driving to the login screen"
-sleep 35
+log "B: holding on the theme picker through the 30s activation grace"
+sleep 35   # > 30s grace; B's pane shows only the (running) theme picker until now
 TMUX send-keys -t "$WIN" Enter
 if wait_pane "$WIN" "Select login method" 20; then
     pass "B: login screen rendered after grace expiry"
 else
     fail "B: login screen never rendered"
 fi
+force_refresh "$PROJ_B" "auth-B"
 assert_row_state "$PROJ_B" needsAuth 10 "B: row flipped after grace"
-sleep 3
+sleep 2
 DISMISSED=$(cmd dismisssheet)
 if [[ "$DISMISSED" == "dismissed 0" ]]; then
     pass "B: no modal for a drift-into-auth session (notification path)"

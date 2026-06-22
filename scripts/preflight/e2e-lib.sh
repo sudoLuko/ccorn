@@ -39,6 +39,22 @@ row_state()  { cmd dump | jq -r --arg p "$1" '.[] | select(.path == $p) | .state
 row_notice() { cmd dump | jq -r --arg p "$1" '.[] | select(.path == $p) | .authNotice'; }
 row_window() { cmd dump | jq -r --arg p "$1" '.[] | select(.path == $p) | .windowId'; }
 
+# Force one synchronous detection pass, decoupled from the adaptive poll timer.
+# The headless e2e app never registers a window as on-screen (occlusion stays
+# .visible == false when nothing has front focus on a Space), so `nextPollNanos`
+# parks the poll at its 30s idle cadence and a freshly rendered login pane is not
+# re-observed until that tick — which collides with the session's own 30s
+# activation grace and makes the modal-vs-grace edge a race (the bug this test
+# exercises). A benign `rename` runs the SAME `engine.refreshAll()` +
+# `rebuildRows()` the poll runs (it ends in `debugRefresh`), so it lets a caller
+# observe the auth transition at a controlled time RELATIVE to the grace —
+# deep inside it (scenario A) or unambiguously after it (scenario B) — instead
+# of whenever the 30s tick happens to fall. The title it sets is display-only;
+# rows are matched by path, so the rename never disturbs identity.
+force_refresh() { # <path>
+    cmd rename "$1" "$2" > /dev/null
+}
+
 wait_row_state() { # <path> <state> <timeout-seconds>
     local deadline=$((SECONDS + $3))
     while ((SECONDS < deadline)); do
