@@ -840,11 +840,15 @@ final class SessionEngine: ObservableObject {
         guard !jobs.isEmpty else { return }
 
         let tmux = self.tmux
+        // Read the registry off-main WITHOUT tagging the window: the @ccorn_id
+        // tmux tag is a durable identity the next launch's reconcile trusts, so
+        // it must not be written until the cwd incarnation guard below accepts
+        // the bind. (A recycled pid paired with a stale registry file would
+        // otherwise leave the window tagged with the wrong session's UUID.)
         let found = await Task.detached { () -> [String: ClaudeSessionRegistry.Info] in
             var out: [String: ClaudeSessionRegistry.Info] = [:]
             for job in jobs {
                 if let info = ClaudeSessionRegistry.info(forPid: job.pid) {
-                    tmux.setCcornId(windowId: job.windowId, uuid: info.sessionId)
                     out[job.windowId] = info
                 }
             }
@@ -863,6 +867,10 @@ final class SessionEngine: ObservableObject {
                SessionDiscovery.canonicalize(cwd) != live.record.path {
                 continue
             }
+            // Accepted bind: only now is it safe to tag the window. Mirror the
+            // reconcile path, which sets the tag only when it accepts the
+            // registry identity; keep the tmux I/O off the main actor.
+            Task.detached { tmux.setCcornId(windowId: windowId, uuid: info.sessionId) }
             live.ccornTag = info.sessionId
             let path = live.record.path.isEmpty
                 ? info.cwd.map(SessionDiscovery.canonicalize) ?? ""
@@ -1115,8 +1123,12 @@ final class SessionEngine: ObservableObject {
         if candidates.count == 1 { return candidates[0] }
         let live = candidates.filter(\.hasLiveClaude)
         if live.count == 1 { return live[0] }
-        // No single live claude (zero, or the pathological multiple): newest wins.
-        return candidates.max {
+        // No single live claude: newest wins, but never pick a dead window over a
+        // live one. With two+ live (the pathological multiple), restrict
+        // newest-wins to the live subset so a newer DEAD window can't win and
+        // orphan the live ones; with zero live, fall back to all candidates.
+        let pool = live.isEmpty ? candidates : live
+        return pool.max {
             ($0.order, $0.windowId) < ($1.order, $1.windowId)
         }
     }

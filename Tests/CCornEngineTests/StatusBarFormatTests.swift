@@ -139,12 +139,44 @@ import Testing
     /// A gone process is recoverable, not a terminal alarm: the dead state now
     /// reads as an amber "ended" chip (mirroring the GUI's `.ended` mark), never
     /// the red danger chip. Red is reserved for active BYPASS.
+    ///
+    /// Crucially, `rcActive: false` here (production always passes false for a
+    /// dead session, since remote control cannot be up for a process that no
+    /// longer exists): the dead bar must read as `ended` alone, never with a
+    /// `no remote` chip alongside it (BUG 1). The GUI mirrors this — its
+    /// `StatusPresentation.resolve` returns `.ended` early, before any no-remote
+    /// check — so the terminal bar must not contradict it.
     @Test func deadReadsEndedAmber() {
-        let out = bar(state: .dead)
+        let out = bar(state: .dead, rcActive: false)
         #expect(out.contains(amberBg))
         #expect(out.contains("ended"))
         #expect(!out.contains(dangerBg))
         #expect(!out.contains("crashed"))
+    }
+
+    /// BUG 1: a dead *remote* session whose remote control has not come up past
+    /// the grace must NOT show a "no remote" chip. The process is gone, so the
+    /// remote claim is meaningless; the bar shows only the `ended` chip, exactly
+    /// as the GUI shows only the `.ended` mark (its resolve returns early).
+    @Test func deadRemoteSuppressesNoRemoteShowsOnlyEnded() {
+        let out = bar(state: .dead,
+                      rcRequested: true, rcActive: false, graceExpired: true)
+        #expect(out.contains("ended"))
+        #expect(!out.contains("no remote"))
+        // Nor any other remote-slot word: the process is gone.
+        #expect(!out.contains("remote"))
+        #expect(!out.contains("local"))
+    }
+
+    /// BUG 2: a session launched in bypass that has DIED still carries
+    /// `isBypass == true` (AppModel folds the launch posture in), but a dead
+    /// process is not bypassing anything. The bar must not raise the loud red
+    /// BYPASS alarm for it; the `ended` chip is the whole story.
+    @Test func deadBypassSuppressesBypassChip() {
+        let out = bar(state: .dead, mode: .bypass, bypass: true, rcActive: false)
+        #expect(!out.contains("BYPASS"))
+        #expect(!out.contains(dangerBg))
+        #expect(out.contains("ended"))
     }
 
     @Test func idleSurfacesForRunningAndStale() {

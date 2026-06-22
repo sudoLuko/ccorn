@@ -95,11 +95,13 @@ enum StatusBarFormat {
     ///
     /// - `isBypass`: permissions are bypassed *right now* (runtime pane signal
     ///   OR a `.bypass` launch posture), the same fold the GUI row uses; it wins
-    ///   the mode slot with a loud red chip.
+    ///   the mode slot with a loud red chip — but only for an alive state, since
+    ///   a process that has died is no longer bypassing anything.
     /// - The remote slot is suppressed entirely while a session is blocked on
-    ///   sign-in: remote control can't be up before authentication, so the
-    ///   sign-in chip is the whole story (the GUI's "sign-in is the root cause"
-    ///   precedence).
+    ///   sign-in (remote control can't be up before authentication, so the
+    ///   sign-in chip is the whole story) or once the process is gone (a dead
+    ///   session resolves to `ended`, with no separate remote claim), mirroring
+    ///   the GUI's "sign-in is the root cause" / early `.ended` precedence.
     static func windowStatus(title: String,
                              state: SessionState,
                              permissionMode: CCPermissionMode?,
@@ -118,15 +120,24 @@ enum StatusBarFormat {
             : name
         segments.append(escape(elided))
 
-        // 2. Permission mode / bypass.
-        if isBypass {
+        // 2. Permission mode / bypass. The loud BYPASS chip means "permissions
+        //    are bypassed *right now*", which is only true while the process is
+        //    executing: a dead bypass session is no longer running anything, so
+        //    it shows no mode chip (the `ended` state chip carries it). Gating on
+        //    `isAliveState` keeps the red alarm from outliving the process.
+        if isBypass, state.isAliveState {
             segments.append(dangerChip("BYPASS"))
         } else if let mode = permissionMode, let label = modeLabel(mode) {
             segments.append(label)
         }
 
-        // 3. Remote control (moot while blocked on sign-in).
-        if state != .needsAuth {
+        // 3. Remote control (moot while blocked on sign-in, and moot once the
+        //    process is gone). For `.dead`, mirror `StatusPresentation.resolve`,
+        //    which returns `.ended` early before any no-remote check: a no-remote
+        //    chip on a process that no longer exists asserts remote-control-not-up
+        //    for nothing, contradicting the GUI's single `ended` mark. So the
+        //    `ended` state chip is the whole story for a dead session too.
+        if state != .needsAuth && state != .dead {
             if !remoteControlRequested {
                 segments.append("local")
             } else if remoteControlActive || !rcGraceExpired {

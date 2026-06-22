@@ -73,9 +73,46 @@ final class CommandRunner: @unchecked Sendable {
         proc.standardError = Pipe()
         var shellPath = ""
         do {
+            // Bound the probe the same way run() bounds its waits. resolvePath is
+            // computed under queue.sync, so an unbounded waitUntilExit() on a
+            // login shell that blocks (a .zprofile that prompts, waits on a
+            // network mount, or deadlocks) would hang not just this probe but
+            // EVERY later resolvedPath caller behind the same serial queue. A
+            // GUI-launched app — the documented reason this probe exists — is
+            // exactly where login-shell behavior is least predictable. The exit
+            // and the EOF-blocking stdout drain both leave one group; on timeout
+            // we SIGTERM then SIGKILL (closing the write end EOFs the drain and
+            // fires the handler, so the group always balances), drop the
+            // partial/empty output, and fall back to the same extraBins PATH the
+            // catch branch uses on a launch error.
+            var data = Data()
+            let group = DispatchGroup()
+
+            // Arm the terminationHandler before run(): a process that exits
+            // immediately could otherwise fire before it is registered and the
+            // group would never balance.
+            group.enter()
+            proc.terminationHandler = { _ in group.leave() }
             try proc.run()
-            proc.waitUntilExit()
-            let data = out.fileHandleForReading.readDataToEndOfFile()
+
+            group.enter()
+            ioQueue.async {
+                data = out.fileHandleForReading.readDataToEndOfFile()
+                group.leave()
+            }
+
+            if group.wait(timeout: .now() + defaultTimeout) == .timedOut {
+                kill(proc.processIdentifier, SIGTERM)
+                if group.wait(timeout: .now() + 2) == .timedOut {
+                    kill(proc.processIdentifier, SIGKILL)
+                    group.wait()
+                }
+                // The login shell did not return in time; treat it like a probe
+                // that could not produce a PATH and degrade to the well-known
+                // bins, same as the launch-error path below.
+                Log.process.notice("login-shell PATH probe timed out, using fallback PATH")
+                return fallback
+            }
             shellPath = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             // The login-shell PATH probe could not run; we fall back to the

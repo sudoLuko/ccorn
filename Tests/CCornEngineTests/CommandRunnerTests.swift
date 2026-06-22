@@ -131,4 +131,36 @@ import Testing
         let elapsed = Date().timeIntervalSince(start)
         #expect(elapsed < 3.0)
     }
+
+    // MARK: - PATH probe (resolvePath, now bounded)
+
+    @Test func resolvedPathBoundedAndContainsWellKnownBins() {
+        // The login-shell PATH probe is the most failure-prone command CommandRunner
+        // runs (a GUI app inherits no PATH, login-shell behavior is unpredictable),
+        // and it gates every other command through a serial queue, so it must be
+        // both bounded and well-formed. A login-shell hang cannot be staged
+        // hermetically, so this exercises the success path: the probe returns
+        // promptly, and whatever the shell yields, the well-known bins are always
+        // present (they are unconditionally prepended), so name resolution never
+        // depends on a perfectly configured login shell.
+        let start = Date()
+        let path = runner.resolvedPath
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed < CommandRunner.defaultTimeout)   // bounded, not hung
+        let bins = Set(path.split(separator: ":").map(String.init))
+        #expect(bins.contains("/usr/bin"))
+        #expect(bins.contains("/bin"))
+        #expect(bins.contains("/usr/sbin"))
+        #expect(bins.contains("/sbin"))
+    }
+
+    @Test func resolvedPathIsMemoizedAndStable() {
+        // Computed once and reused: the probe runs at most once, and every later
+        // read returns the identical cached string (the property contract every
+        // run() call relies on for a stable PATH).
+        let first = runner.resolvedPath
+        let second = runner.resolvedPath
+        #expect(first == second)
+        #expect(!first.isEmpty)
+    }
 }

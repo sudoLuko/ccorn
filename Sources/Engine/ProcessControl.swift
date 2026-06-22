@@ -191,16 +191,33 @@ enum ProcessControl {
     /// Canonical termination: SIGTERM, wait up to 5s, SIGKILL if still alive.
     /// Caller is responsible for killing the tmux window first (see SessionEngine).
     /// Suspends between liveness checks, so it is safe to await from anywhere.
-    // TODO(M3): PID-reuse race: between an isAlive() check and the kill() the
-    // pid could in principle be recycled by an unrelated process (low-probability
-    // TOCTOU). Revisit with a start-time identity check when polishing.
+    ///
+    /// PID-reuse guard (closes the former M3 TODO TOCTOU): the caller kills the
+    /// tmux window first (SIGHUP), so `claude` can exit during the up-to-5s wait,
+    /// and the kernel can recycle that pid onto an unrelated process. We capture
+    /// the original process's start time on entry and re-check it before EACH
+    /// signal: if `startTime(pid:)` is now nil (process gone) or differs from the
+    /// captured value (pid recycled to a *different* process), we send nothing —
+    /// the process we meant to kill is already gone. `kill(pid, 0)` liveness alone
+    /// cannot tell the two apart; the (pid, start time) pair is a stable identity.
+    /// The same-process happy path (SIGTERM → wait → SIGKILL) is unchanged.
+    ///
+    /// Residual race (out of scope, would need a call-site change): the pid is
+    /// learned at the call site (SessionEngine.terminate) before this runs, so a
+    /// recycle in that gap is not caught here. Handing the call-site start time
+    /// into terminate() would close it; left as follow-up.
     static func terminate(pid: Int32) async {
-        guard isAlive(pid) else { return }
+        guard let startedAt = startTime(pid: pid) else { return }
+
+        // True only while pid still maps to the same process we captured on entry.
+        func isSameProcess() -> Bool { startTime(pid: pid) == startedAt }
+
+        guard isSameProcess() else { return }
         kill(pid, SIGTERM)
         for _ in 0..<50 {            // 50 * 100ms = 5s
-            if !isAlive(pid) { return }
+            if !isSameProcess() { return }   // exited (gone) or recycled: done
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        if isAlive(pid) { kill(pid, SIGKILL) }
+        if isSameProcess() { kill(pid, SIGKILL) }
     }
 }

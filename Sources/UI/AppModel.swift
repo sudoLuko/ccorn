@@ -381,6 +381,16 @@ final class AppModel: ObservableObject {
         visibleRows().filter { selectedIDs.contains($0.listID) }
     }
 
+    /// When the selection anchor's row disappears in a rebuild, pick a *stable*
+    /// replacement: the topmost still-selected listID in display order. `surviving`
+    /// is a Set, so its own `.first` is arbitrary; walking `displayOrder` makes the
+    /// next ⇧-click range from a predictable origin. Returns nil when nothing
+    /// selected survives in the visible order (the caller then has no anchor, the
+    /// same as before). Pure — no @MainActor or AppModel state.
+    static func replacementAnchor(displayOrder: [String], surviving: Set<String>) -> String? {
+        displayOrder.first { surviving.contains($0) }
+    }
+
     var onboardingNeeded: Bool { !engine.settings.onboardingComplete }
 
     // MARK: - Lifecycle
@@ -870,7 +880,11 @@ final class AppModel: ObservableObject {
             selectedIDs.formIntersection(liveListIDs)
         }
         if let anchor = selectionAnchor, !liveListIDs.contains(anchor) {
-            selectionAnchor = selectedIDs.first
+            // The anchor's row vanished. Re-anchor to the topmost still-selected
+            // row in display order (not `selectedIDs.first`, which is a Set and so
+            // arbitrary), so the next ⇧-click ranges from a predictable origin.
+            selectionAnchor = Self.replacementAnchor(displayOrder: visibleRows().map(\.listID),
+                                                     surviving: selectedIDs)
         }
         if selectedIDs.isEmpty { isMultiSelecting = false }
         if let renamingRowId,
@@ -1543,7 +1557,17 @@ final class AppModel: ObservableObject {
                     primary: "Wait for Idle",
                     secondary: "Take Over Anyway")
                 if wait {
-                    while await engine.isExternalSessionWorking(uuid: uuid, directory: path) {
+                    // Poll every ~10s while the session is genuinely working, but
+                    // cap the total wait: `isExternalSessionWorking` stays true as
+                    // long as a live external claude keeps writing the transcript,
+                    // so a session that never goes quiet would otherwise loop here
+                    // forever — and while it loops the `importingUUIDs` guard holds
+                    // this uuid, silently disabling every later Take Over on the row.
+                    // On the deadline we fall through to the takeover (the same path
+                    // "Take Over Anyway" takes); the defer still releases the guard.
+                    let deadline = Date().addingTimeInterval(300) // 5 min hard cap
+                    while Date() < deadline,
+                          await engine.isExternalSessionWorking(uuid: uuid, directory: path) {
                         try? await Task.sleep(nanoseconds: 10_000_000_000) // 10s
                     }
                 }

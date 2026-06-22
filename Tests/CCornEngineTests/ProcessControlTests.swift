@@ -85,4 +85,35 @@ import Testing
         #expect(ProcessControl.startTime(pid: p.processIdentifier) == nil)
         #expect(ProcessControl.startTime(pid: -1) == nil)
     }
+
+    // MARK: terminate (PID-reuse guard)
+
+    /// terminate() on a pid that never existed is a clean no-op: `startTime` is
+    /// nil on entry, so the guard returns before any signal and the call does not
+    /// hang on the 5s wait loop. (`-1` and a 0 pid also exercise the `pid > 0`
+    /// rejection inside `startTime`.)
+    @Test func terminateOnNonexistentPidIsNoOp() async {
+        await ProcessControl.terminate(pid: -1)
+        await ProcessControl.terminate(pid: 0)
+    }
+
+    /// terminate() on an already-reaped child returns promptly without signalling
+    /// anything: by the time we call it the child is gone, so the entry-point
+    /// `startTime` lookup is nil and the routine returns immediately. A 5s wait
+    /// would only happen for a genuinely-alive same-identity process, so a slow
+    /// return here would surface a broken guard. We can't *force* a same-pid
+    /// recycle deterministically, so the recycle branch (start time differs ->
+    /// skip) is covered by reasoning, not a spawned victim.
+    @Test func terminateOnReapedChildReturnsWithoutSignalling() async {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try? p.run()
+        p.waitUntilExit()
+        let pid = p.processIdentifier
+        #expect(ProcessControl.startTime(pid: pid) == nil)   // genuinely gone
+
+        let start = Date()
+        await ProcessControl.terminate(pid: pid)             // must not enter the wait loop
+        #expect(Date().timeIntervalSince(start) < 1.0)
+    }
 }
