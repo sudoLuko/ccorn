@@ -194,13 +194,30 @@ struct StateDetector: Sendable {
     static let spinnerChars = Set("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
     /// Structural prompt affordances that only the live confirmation UI renders:
-    /// the option picker (`❯ 1.`, a numbered `1. Yes` choice), an explicit y/n
-    /// affordance, or the `Enter to confirm` hint. These are the chrome of the
-    /// trust dialog, tool-permission, and plan-mode prompts (see the
-    /// `waiting-*`/`needs-auth-*` fixtures); every real prompt renders at least
-    /// one of them alongside its question.
+    /// the affirmative option of an approval picker (`1. Yes …`) or the
+    /// `Enter to confirm` hint. These are the chrome of the trust dialog,
+    /// tool-permission, and plan-mode prompts (see the `waiting-*`/`needs-auth-*`
+    /// fixtures); every real approval prompt renders at least one of them
+    /// alongside its question.
     ///
-    /// Deliberately NOT here: natural-language phrasings like "Do you want…",
+    /// Deliberately NOT here: the bare cursor glyph + index `❯ 1.`. It is not an
+    /// approval affordance, only "the cursor is on the first list item", and it
+    /// renders identically in a *settings* picker like `/model` when the user
+    /// arrows up to item 1 ("❯ 1. Default …"), which is a configuration menu, not
+    /// a prompt for input. Matching it false-flagged the `/model` picker as
+    /// Waiting (the `slash-model-picker-item1-2181` fixture). A real approval
+    /// prompt always also carries an explicit affordance ("1. Yes" / "Enter to
+    /// confirm"), so dropping the bare glyph costs no real detection while
+    /// removing the settings-picker collision. `isWaiting` additionally refuses
+    /// any region that carries a settings-commit footer (see `settingsMenuPhrases`).
+    ///
+    /// Also deliberately NOT here: the synthetic `(y/n)` / `[y/N]` tokens. No real
+    /// captured 2.1.x frame renders either in a *live* approval region — every
+    /// real prompt uses the numbered `1. Yes` picker — so they only ever matched
+    /// prose that the user (or Claude) typed into scrollback, pure false-positive
+    /// risk with no true-positive coverage to back them.
+    ///
+    /// Deliberately NOT here either: natural-language phrasings like "Do you want…",
     /// "Would you like…", or "Approve …". They read identically in ordinary
     /// assistant prose that lingers in an idle scrollback frame ("Do you want to
     /// rename a session to …?"), so matching them as bare substrings false-flagged
@@ -209,7 +226,20 @@ struct StateDetector: Sendable {
     /// above, dropping the prose costs no real detection. The persistent `>`
     /// input box is likewise not a signal; it is present even when idle.
     static let waitingPhrases = [
-        "❯ 1.", "1. Yes", "(y/n)", "[y/N]", "Enter to confirm",
+        "1. Yes", "Enter to confirm",
+    ]
+
+    /// Settings-commit footers that mark the live region as a *settings* menu (a
+    /// configuration picker the user opened, e.g. `/model`), not a prompt Claude
+    /// is blocked on. A genuine approval prompt commits with `Enter to confirm`
+    /// or a numbered choice; a settings menu commits a default with this chrome.
+    /// When the live region carries one of these, `isWaiting` is suppressed even
+    /// if some affordance phrase incidentally matches, so arrowing the `/model`
+    /// cursor onto an item that happens to read "1. …" never reads as needs-input
+    /// (the `slash-model-picker-item1-2181` fixture).
+    static let settingsMenuPhrases = [
+        "Enter to set as default",
+        "to use this session only",
     ]
 
     /// Login-prompt phrases (docs/CCORN_SPEC.md section 8, "User not
@@ -358,6 +388,13 @@ struct StateDetector: Sendable {
 
     func isWaiting(pane: String) -> Bool {
         let region = Self.livePromptRegion(pane)
+        // A settings picker (e.g. `/model`) renders its option list inside the
+        // live region with a settings-commit footer; it is a configuration menu
+        // the user opened, not a prompt Claude is blocked on. Never read one as
+        // needs-input, even if an option line happens to read like an affordance.
+        if Self.settingsMenuPhrases.contains(where: { region.localizedCaseInsensitiveContains($0) }) {
+            return false
+        }
         return Self.waitingPhrases.contains { region.localizedCaseInsensitiveContains($0) }
     }
 
@@ -451,6 +488,79 @@ struct StateDetector: Sendable {
         return panes.first { contains($0.shellPID, claudePID) }?.paneId
     }
 
+    // MARK: - Re-derivation
+
+    /// The outcome of re-deriving the live claude pid for a window whose tracked
+    /// pid is gone, decided from the shells of ALL its panes (a split may run
+    /// claude in a pane other than the active one). `.undetermined` is the
+    /// tool-failure-hardening hold (any probe could not answer); `.stillSpawning`
+    /// is a determined-absent-within-grace hold; `.dead` is the determined crash.
+    enum Rederivation: Equatable {
+        case found(Int32)
+        case undetermined
+        case stillSpawning
+        case dead
+    }
+
+    /// Re-derive the live claude pid across a window's panes. Enumerate panes with
+    /// `listPanes` and probe EACH pane's shell with the SAME argv-based
+    /// `claudeBelowShell` walk the alive path uses, so a split where claude runs
+    /// in a non-active pane is not mis-declared Dead. Resolution order, matching
+    /// the tool-failure-hardening invariant ("a tool that could not answer holds
+    /// non-dead, never crashes"):
+    ///
+    ///   * any pane shell hosts a claude child            -> `.found` (alive)
+    ///   * else any probe is `.unknown`                   -> `.undetermined` (hold)
+    ///   * else (every probe determined-absent) any pane
+    ///     shell is younger than the spawn grace          -> `.stillSpawning` (hold)
+    ///   * else                                           -> `.dead`
+    ///
+    /// When `listPanes` returns no panes (enumeration failed, or — as the existing
+    /// single-pane suites model it — the pre-following codepath), fall back to the
+    /// active-pane `panePIDProbe`: a single-pane window's only pane IS the window
+    /// target, so the active-pane probe is exactly the right (and unchanged)
+    /// answer, and a genuinely failed `panePIDProbe` itself reports `.unknown`,
+    /// which maps to `.undetermined` here.
+    private func rederiveLivePID(windowId: String,
+                                 panes: PaneSource,
+                                 now: Date,
+                                 spawnGrace: TimeInterval,
+                                 claudeBelowShell: (Int32) -> ProcessControl.ClaudeScan)
+                                 -> Rederivation {
+        let paneShells: [Int32]
+        let listed = panes.listPanes(windowId: windowId)
+        if listed.isEmpty {
+            // No enumeration: fall back to the active-pane shell probe (preserves
+            // single-pane behavior exactly). A tool-failure here is `.unknown`.
+            guard case .pid(let shellPID) = panes.panePIDProbe(windowId: windowId) else {
+                return .undetermined
+            }
+            paneShells = [shellPID]
+        } else {
+            paneShells = listed.map(\.shellPID)
+        }
+
+        var sawUnknown = false
+        for shellPID in paneShells {
+            switch claudeBelowShell(shellPID) {
+            case .found(let pid): return .found(pid)
+            case .unknown:        sawUnknown = true
+            case .absent:         continue
+            }
+        }
+        if sawUnknown { return .undetermined }   // a probe couldn't answer: hold
+
+        // Every pane's shell is determined-absent. Hold only while a pane shell is
+        // still inside the spawn grace window (claude may be exec'ing).
+        let stillSpawning = paneShells.contains { shellPID in
+            if let start = ProcessControl.startTime(pid: shellPID) {
+                return now.timeIntervalSince(start) < spawnGrace
+            }
+            return false
+        }
+        return stillSpawning ? .stillSpawning : .dead
+    }
+
     // MARK: - Detection
 
     /// One detection pass. Pure with respect to shared state: reads tmux/process
@@ -513,35 +623,39 @@ struct StateDetector: Sendable {
             // match among the shell's descendants only, never a global scan).
             // Only a DETERMINED absence (the tools answered) may become Dead; a
             // tool that could not answer holds the session non-dead for this poll.
-            guard case .pid(let shellPID) = panes.panePIDProbe(windowId: windowId) else {
-                // tmux could not give us the pane shell (no server, killed
-                // window, launch failure, timeout kill): UNDETERMINED, not Dead.
-                // Hold Running and let the next poll re-derive. (Previously this
-                // branch fell straight through to Dead, the launch-reconcile
-                // false-crash edge.)
-                result.state = .running
-                result.pid = nil
-                return result
-            }
-            switch claudeBelowShell(shellPID) {
+            //
+            // A SPLIT window matters here: pane 0 may be a bare shell while claude
+            // runs in a later pane (verified: the alive-path pane-following walk
+            // below targets exactly that case). The active-pane probe alone would
+            // report `.absent` for the bare pane and, past the spawn grace, declare
+            // a session Dead while claude is alive elsewhere — auto-restart then
+            // tearing down a live session. So when tmux can enumerate the window's
+            // panes, walk EACH pane's shell with the SAME argv-based
+            // `claudeBelowShell` the alive path uses, and only conclude the
+            // determined absence (Dead-eligible) when NO pane hosts a claude child.
+            switch rederiveLivePID(windowId: windowId, panes: panes,
+                                   now: now, spawnGrace: spawnGrace,
+                                   claudeBelowShell: claudeBelowShell) {
             case .found(let pid):
                 livePID = pid
-            case .unknown:
-                // pgrep could not enumerate the shell's descendants: liveness is
-                // UNDETERMINED, not Dead. Hold Running; the next poll retries.
+            case .undetermined:
+                // A tool could not answer (tmux server down / killed window /
+                // launch failure / timeout, or pgrep could not enumerate, or the
+                // pane enumeration failed): liveness is UNDETERMINED, not Dead.
+                // Hold Running and let the next poll re-derive.
                 result.state = .running
                 result.pid = nil
                 return result
-            case .absent:
-                // Determined: the shell is alive but has no claude child. Dead,
-                // unless the shell is younger than the spawn grace window (claude
-                // may still be spawning; node installs can take several seconds).
-                if let shellStart = ProcessControl.startTime(pid: shellPID),
-                   now.timeIntervalSince(shellStart) < spawnGrace {
-                    result.state = .running
-                    result.pid = nil
-                    return result
-                }
+            case .stillSpawning:
+                // Determined absence, but a pane shell is younger than the spawn
+                // grace window: claude may still be exec'ing (node installs can
+                // take several seconds). Hold Running.
+                result.state = .running
+                result.pid = nil
+                return result
+            case .dead:
+                // Determined: a live pane shell with no claude child in ANY pane,
+                // past the grace window. A genuine crash.
                 result.state = .dead
                 result.pid = nil
                 return result

@@ -35,6 +35,7 @@ build() {
     swiftc -O -swift-version 5 \
         scripts/preflight/pane-classify.swift \
         Sources/Engine/StateDetector.swift \
+        Sources/Engine/Log.swift \
         Sources/Engine/SessionDiscovery.swift \
         Sources/Engine/ProcessControl.swift \
         Sources/Engine/TmuxController.swift \

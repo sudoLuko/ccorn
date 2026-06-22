@@ -200,7 +200,6 @@ extension StubPanes {
         #expect(!detector.isWaiting(pane: "Waiting on approval from CI."))
         // The same question rendered with the real prompt chrome -> Waiting.
         #expect(detector.isWaiting(pane: "Do you want to proceed?\n ❯ 1. Yes\n   2. No\n Enter to confirm · Esc to cancel"))
-        #expect(detector.isWaiting(pane: "Continue? (y/n)"))
     }
 
     /// An idle frame containing approval-ish words stays Running end to end.
@@ -228,7 +227,7 @@ extension StubPanes {
     /// Every KEPT marker independently means Waiting, both as a raw signal and
     /// end to end through the classifier (embedded in an otherwise-idle frame so
     /// only the marker can be the cause).
-    @Test(arguments: ["❯ 1.", "1. Yes", "(y/n)", "[y/N]", "Enter to confirm"])
+    @Test(arguments: ["1. Yes", "Enter to confirm"])
     func eachStructuralMarkerFlagsWaiting(marker: String) {
         let pane = "⏺ Ran the command.\n \(marker)\n"
         #expect(detector.isWaiting(pane: pane))
@@ -255,7 +254,7 @@ extension StubPanes {
     /// Markers match case-insensitively (the matcher is
     /// `localizedCaseInsensitiveContains`), so a lowercased render still counts.
     @Test func structuralMarkersAreCaseInsensitive() {
-        #expect(detector.isWaiting(pane: "Continue? (Y/N)"))
+        #expect(detector.isWaiting(pane: "proceed?  1. yes"))
         #expect(detector.isWaiting(pane: "press enter to confirm"))
     }
 
@@ -334,6 +333,51 @@ extension StubPanes {
         #expect(pane.contains("❯ 5. Opus"))       // a picker is on screen…
         #expect(!detector.isWaiting(pane: pane))   // …but a settings menu, not an approval
         #expect(classifyFresh(pane) == .running)
+    }
+
+    /// THE item-1 false-positive (FIX 10), on a REAL 2.1.181 capture: arrowing
+    /// the `/model` cursor onto the first item renders `❯ 1. Default …` inside the
+    /// live region. The old waiting set matched the bare cursor glyph `❯ 1.`, so
+    /// this settings menu false-flagged Waiting purely because of cursor position.
+    /// It must read Running: a settings picker (it carries the settings-commit
+    /// footer "Enter to set as default · s to use this session only"), not an
+    /// approval. The fix both drops the bare-glyph token and suppresses Waiting
+    /// when the live region is a settings menu.
+    @Test func slashModelPickerCursorOnItem1IsNotWaiting() {
+        let pane = Fixtures.paneText("slash-model-picker-item1-2181.txt")
+        // The cursor really is on item 1 in the live region — the exact shape the
+        // old bare "❯ 1." token matched.
+        #expect(StateDetector.livePromptRegion(pane).contains("❯ 1."))
+        #expect(StateDetector.livePromptRegion(pane).contains("Enter to set as default"))
+        #expect(!detector.isWaiting(pane: pane))   // settings menu, not approval
+        #expect(classifyFresh(pane) == .running)
+    }
+
+    /// The settings-menu guard is independent of cursor position: even if an
+    /// option line incidentally reads like an affordance ("1. Yes …"), a live
+    /// region carrying a settings-commit footer is a configuration menu, never a
+    /// prompt Claude is blocked on. (Synthetic, to isolate the guard; the real
+    /// `/model` fixture above never renders "1. Yes".)
+    @Test func settingsCommitFooterSuppressesWaiting() {
+        let rule = String(repeating: "─", count: 60)
+        let settingsMenu = rule + "\n  Select option\n  ❯ 1. Yes, the default\n"
+            + "  Enter to set as default · s to use this session only · Esc to cancel\n"
+        #expect(!detector.isWaiting(pane: settingsMenu))
+        // Control: the SAME affordance without the settings footer IS Waiting.
+        let approval = rule + "\n Do you want to proceed?\n ❯ 1. Yes\n Esc to cancel\n"
+        #expect(detector.isWaiting(pane: approval))
+    }
+
+    /// The dropped synthetic tokens: a bare "(y/n)" / "[y/N]" in the live region no
+    /// longer flags Waiting on its own (no real captured frame ever rendered one
+    /// as a genuine approval; every real prompt uses the numbered "1. Yes" picker,
+    /// which still matches).
+    @Test func bareYesNoTokenAloneIsNotWaiting() {
+        let rule = String(repeating: "─", count: 60)
+        let yn = rule + "\n Answer (y/n) below:\n ❯ \n"
+        #expect(!detector.isWaiting(pane: yn))
+        let yN = rule + "\n Proceed? [y/N]\n ❯ \n"
+        #expect(!detector.isWaiting(pane: yN))
     }
 
     /// THE Layer-2 win, on a REAL capture: Claude echoed `1. Yes … (y/n)` in its
