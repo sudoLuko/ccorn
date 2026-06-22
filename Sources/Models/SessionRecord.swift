@@ -105,6 +105,16 @@ final class LiveSession: ObservableObject {
     /// indicates remote control is live. Drives the row's warning indicator.
     @Published var remoteControlActive: Bool
 
+    /// The "fresh" remote-control-active signal: the live footer/chip OR the
+    /// registry bridge handle, WITHOUT the sticky transcript `bridge-session`
+    /// leg of `remoteControlActive` (which is positive-for-the-whole-run because
+    /// transcript records never disappear). Read ONLY by
+    /// `AppModel.reconcileRCAccountCapability`, which must react to RC being up
+    /// *right now* rather than to a stale sticky positive; the no-remote
+    /// presentation path keeps reading `remoteControlActive`. Not UI-facing, so
+    /// not published. See `DetectionResult.remoteControlActiveFresh`.
+    var remoteControlActiveFresh = false
+
     // Detection bookkeeping (not UI-facing, so not published).
     var lastPaneHash: String?
     var lastHashChange: Date?
@@ -192,6 +202,7 @@ final class LiveSession: ObservableObject {
         state = result.state
         pid = result.pid
         remoteControlActive = result.remoteControlActive
+        remoteControlActiveFresh = result.remoteControlActiveFresh
         lastPaneHash = result.lastPaneHash
         lastHashChange = result.lastHashChange
         lastShowedLiveActivity = result.wasShowingLiveActivity

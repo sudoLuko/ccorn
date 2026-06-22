@@ -988,7 +988,15 @@ final class AppModel: ObservableObject {
         let sessions = engine.liveSessions.values
         let now = Date()
 
-        if sessions.contains(where: { $0.remoteControlActive }) {
+        // Both legs key on the FRESH RC signal (live footer/chip OR registry
+        // bridge), NOT the sticky `remoteControlActive`. The sticky value carries
+        // a transcript `bridge-session` leg that is positive-for-the-whole-run
+        // (records never disappear); reading it here would let a stale sticky
+        // positive wrongly clear a learned "account can't do RC" verdict — the
+        // worst consequence, because that verdict persists across relaunch. The
+        // fresh signal proves RC is up *right now*, which is what reversing the
+        // verdict actually requires.
+        if sessions.contains(where: { $0.remoteControlActiveFresh }) {
             if engine.settings.rcKnownUnavailable {
                 var updated = engine.settings
                 updated.rcKnownUnavailable = false
@@ -1000,7 +1008,7 @@ final class AppModel: ObservableObject {
         guard !engine.settings.rcKnownUnavailable,
               let failed = sessions.first(where: {
                   $0.rcFailureKind == .definitive
-                      && !$0.remoteControlActive
+                      && !$0.remoteControlActiveFresh
                       && now.timeIntervalSince($0.startedAt) <= 30
               })
         else { return }

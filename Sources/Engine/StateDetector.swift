@@ -77,6 +77,16 @@ struct DetectionResult: Sendable {
     var state: SessionState
     var pid: Int32?
     var remoteControlActive: Bool
+    /// The "fresh" remote-control-active signal: the live footer/chip OR the
+    /// registry bridge handle, WITHOUT the sticky transcript `bridge-session`
+    /// leg of `remoteControlActive`. The transcript leg is sticky-positive for
+    /// the whole run (records never disappear), which is correct for keeping a
+    /// healthy idle session off the No-remote path but wrong for the
+    /// account-capability verdict, which must react to RC being up *right now*.
+    /// `reconcileRCAccountCapability` reads this; the no-remote presentation
+    /// path keeps reading the sticky `remoteControlActive` above. Defaults false
+    /// so a `DetectionResult` built without it behaves as "not freshly up".
+    var remoteControlActiveFresh: Bool = false
     var lastPaneHash: String?
     var lastHashChange: Date?
     /// Whether this pass saw the live-activity marker, carried back so the next
@@ -697,15 +707,37 @@ struct StateDetector: Sendable {
         // transcript `bridge-session` record are version-independent positives
         // that cover a footer that hasn't repainted yet. `||` short-circuits, so
         // an engaged footer or a present registry handle skips the transcript I/O.
-        result.remoteControlActive = showsRemoteControlEngaged(pane: pane)
+        // The "fresh" RC-active signal: the live footer/chip plus the registry
+        // bridge handle, WITHOUT the sticky transcript `bridge-session` leg. A
+        // transcript record is append-only, so the cache's positive is sticky
+        // for the whole run (it never disappears, by design, so an idle TUI that
+        // stops repainting its `/rc active` chip still reads as connected). That
+        // stickiness is what the full `remoteControlActive` OR below relies on to
+        // keep a healthy session off the No-remote path — but it is exactly wrong
+        // for the account-capability verdict, which must react to RC actually
+        // being up *right now*. So compute the fresh OR separately and carry it
+        // out for `reconcileRCAccountCapability`; it is NOT used for the
+        // StatusPresentation/StatusBar no-remote decision (that stays on the
+        // sticky `remoteControlActive`).
+        result.remoteControlActiveFresh = showsRemoteControlEngaged(pane: pane)
             || registryBridge != nil
+        // Remote-control-active is the OR of three positive signals (the fresh
+        // pair above PLUS the sticky transcript leg); absence of all three is
+        // "not up", never asserted from any one miss. `||` short-circuits, so an
+        // engaged footer or a present registry handle skips the transcript I/O.
+        result.remoteControlActive = result.remoteControlActiveFresh
             || result.rcCache.hasBridgeSession(path: transcript?.transcriptPath,
                                                mtime: transcript?.modified)
-        // Only read a failure line when remote control is NOT currently up: a
-        // line that lingers after RC reconnected must never re-assert a verdict
-        // (the account-verdict gate in AppModel relies on this, and `rcFailure`
-        // additionally scopes to the live region against stale scrollback).
-        if !result.remoteControlActive, let failure = rcFailure(pane: pane) {
+        // Read a failure line whenever the pane's LIVE region carries one. The
+        // read is scoped to `livePromptRegion`, so a stale failure scrolled up
+        // into history is already excluded; a failure present in the live region
+        // is current and must be surfaced even while `remoteControlActive` is
+        // sticky-true from a prior `bridge-session` record (the bug this fixes: a
+        // genuine current `/rc failed` / plan-limit line was never read once the
+        // sticky leg latched). The account-verdict gate in AppModel keys on the
+        // FRESH signal, not on this read, so a lingering line cannot re-assert a
+        // verdict on its own.
+        if let failure = rcFailure(pane: pane) {
             result.rcPlanNotice = failure.message
             result.rcFailureKind = failure.kind
         }

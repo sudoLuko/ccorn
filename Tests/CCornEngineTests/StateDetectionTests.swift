@@ -685,4 +685,83 @@ extension StubPanes {
         #expect(result.remoteControlActive) // bridge-session record in the real fixture transcript
         #expect(result.state == .waiting)
     }
+
+    // MARK: Fresh vs. sticky remote-control signal (the "stuck active" fix)
+
+    /// Sticky-only RC: the transcript carries a `bridge-session` record (so the
+    /// full `remoteControlActive` OR latches true for the run), but the pane has
+    /// no `/rc` footer/chip and the registry returns no bridge handle. The fresh
+    /// signal must read FALSE while the sticky one reads true — the distinction
+    /// `reconcileRCAccountCapability` keys on so a stale sticky positive can't
+    /// clear a learned account verdict.
+    @Test func stickyOnlyRCIsFreshFalseButActiveTrue() {
+        let transcript = DiscoveredSession(uuid: Fixtures.transcriptUUID,
+                                           transcriptPath: Fixtures.transcriptPath,
+                                           modified: Date(timeIntervalSince1970: 1))
+        let input = DetectionInput(windowId: "@1", pid: getpid())
+        // No RC footer in this fixture; no registry bridge handle injected.
+        let panes = StubPanes(pane: Fixtures.paneText("waiting-permission.txt"), shellPID: nil)
+        let result = detector.detect(input: input, panes: panes, transcript: transcript,
+                                     staleThreshold: 600, now: t0, bridgeForPid: { _ in nil })
+        #expect(result.remoteControlActive)        // sticky transcript leg latched
+        #expect(!result.remoteControlActiveFresh)  // …but nothing is freshly up
+    }
+
+    /// A live `/rc active` chip is a FRESH positive: both signals read active.
+    @Test func liveChipIsFreshTrue() {
+        let input = DetectionInput(windowId: "@1", pid: getpid())
+        // running-idle carries the live RC footer/marker.
+        let panes = StubPanes(pane: Fixtures.paneText("running-idle.txt"), shellPID: nil)
+        let result = detector.detect(input: input, panes: panes, transcript: nil,
+                                     staleThreshold: 600, now: t0, bridgeForPid: { _ in nil })
+        #expect(result.remoteControlActive)
+        #expect(result.remoteControlActiveFresh)
+    }
+
+    /// The registry bridge handle is a FRESH positive even with no footer/chip
+    /// and no transcript: the fresh OR is footer-or-registry.
+    @Test func registryBridgeIsFreshTrue() {
+        let input = DetectionInput(windowId: "@1", pid: getpid())
+        let panes = StubPanes(pane: Fixtures.paneText("waiting-permission.txt"), shellPID: nil)
+        let result = detector.detect(input: input, panes: panes, transcript: nil,
+                                     staleThreshold: 600, now: t0,
+                                     bridgeForPid: { _ in "session_abc" })
+        #expect(result.remoteControlActive)
+        #expect(result.remoteControlActiveFresh)
+    }
+
+    /// FIX A end to end: a definitive plan-limit line is present in the pane's
+    /// LIVE region AND the sticky RC leg is latched true (transcript
+    /// `bridge-session` record). The failure read must fire anyway — the bug was
+    /// that the sticky positive suppressed it — so `rcFailureKind`/`rcPlanNotice`
+    /// are populated. Meanwhile `remoteControlActive` stays true and the row's
+    /// presentation stays routine (NOT `.noRemote`): the no-remote path is
+    /// untouched and a healthy connected session never flashes the warning.
+    @Test func definitiveFailureInLiveRegionIsReadEvenWithStickyRCActive() {
+        // running-idle's footer renders inside its bottom rule-delimited region,
+        // so appending the failure line keeps it in the live region (no new rule
+        // line follows). The transcript supplies the sticky bridge-session leg.
+        let pane = Fixtures.paneText("running-idle.txt")
+            + "\n Remote Control is not available on your plan. Upgrade to enable it.\n"
+        let transcript = DiscoveredSession(uuid: Fixtures.transcriptUUID,
+                                           transcriptPath: Fixtures.transcriptPath,
+                                           modified: Date(timeIntervalSince1970: 1))
+        let input = DetectionInput(windowId: "@1", pid: getpid())
+        let panes = StubPanes(pane: pane, shellPID: nil)
+        let result = detector.detect(input: input, panes: panes, transcript: transcript,
+                                     staleThreshold: 600, now: t0, bridgeForPid: { _ in nil })
+
+        // The current failure line is read despite the sticky positive (FIX A).
+        #expect(result.rcFailureKind == .definitive)
+        #expect(result.rcPlanNotice?.contains("not available on your plan") == true)
+        // Preserve: the sticky OR still reports RC active…
+        #expect(result.remoteControlActive)
+        // …so the row resolves to its routine mark, never `.noRemote`, even past
+        // the activation grace (the no-remote path is the sticky value, untouched).
+        let presentation = StatusPresentation.resolve(state: result.state,
+                                                      remoteControlActive: result.remoteControlActive,
+                                                      rcGraceExpired: true,
+                                                      remoteControlRequested: true)
+        #expect(presentation != .noRemote)
+    }
 }

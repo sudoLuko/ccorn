@@ -163,11 +163,14 @@ import Testing
         #expect(detector.rcFailure(pane: inLiveRegion)?.kind == .definitive)
     }
 
-    /// detect() only reads a failure line when remote control is NOT up: the
-    /// same definitive line, with RC active (here via the registry bridge),
-    /// yields no notice and no kind; a line lingering after RC reconnected can
-    /// never re-assert the account verdict.
-    @Test func detectSuppressesFailureLineWhenRemoteControlActive() {
+    /// detect() reads a definitive failure line present in the LIVE region
+    /// regardless of the remote-control-active value (FIX A): the read is scoped
+    /// to `livePromptRegion`, which already excludes stale scrollback, so a
+    /// failure that is current must surface even when RC reads active. What keeps
+    /// a stale/lingering signal from re-asserting the account verdict is no
+    /// longer the read gate — it is `reconcileRCAccountCapability` keying on the
+    /// FRESH RC signal (`remoteControlActiveFresh`), exercised below.
+    @Test func detectReadsLiveFailureLineEvenWhenRemoteControlActive() {
         let pane = "claude\n? for shortcuts\n Remote Control requires a Pro or Max plan.\n"
         let input = DetectionInput(windowId: "@1", pid: getpid())   // alive
         let panes = StubPanes(pane: pane)
@@ -175,14 +178,19 @@ import Testing
         let down = detector.detect(input: input, panes: panes, transcript: nil,
                                    staleThreshold: 600, now: t0, bridgeForPid: { _ in nil })
         #expect(!down.remoteControlActive)
+        #expect(!down.remoteControlActiveFresh)
         #expect(down.rcFailureKind == .definitive)
         #expect(down.rcPlanNotice?.contains("requires a Pro or Max plan") == true)
 
+        // RC active via the registry bridge: BOTH the sticky and the fresh
+        // signals read active, yet the live failure line is still read (FIX A),
+        // because it is current, not lingering scrollback.
         let up = detector.detect(input: input, panes: panes, transcript: nil,
                                  staleThreshold: 600, now: t0, bridgeForPid: { _ in "session_x" })
         #expect(up.remoteControlActive)
-        #expect(up.rcFailureKind == nil)
-        #expect(up.rcPlanNotice == nil)
+        #expect(up.remoteControlActiveFresh)
+        #expect(up.rcFailureKind == .definitive)
+        #expect(up.rcPlanNotice?.contains("requires a Pro or Max plan") == true)
     }
 
     // MARK: Aggregate severity
