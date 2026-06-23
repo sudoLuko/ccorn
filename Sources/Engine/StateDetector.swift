@@ -1,14 +1,25 @@
 import Foundation
 import CryptoKit
 
-/// A pane-pid lookup either ANSWERS with the shell pid or FAILS TO ANSWER (the
-/// tmux query could not run: no server, a killed window, a 127 launch failure,
-/// or a timeout kill). The latter is `.unknown`: detection must not read it as
-/// "no shell" and flip the session to crashed; it holds non-dead and lets the
-/// next poll retry. (A genuine claude crash leaves the pane SHELL alive, so it
-/// surfaces as `.pid` + a determined-empty `pgrep`, never as a tmux `.unknown`.)
+/// A pane-pid lookup resolves three ways: it ANSWERS with the shell pid, it
+/// answers that the window is GONE (a determined absence), or it FAILS TO ANSWER.
+///
+///   * `.pid`     - tmux ran and reported the pane shell.
+///   * `.absent`  - tmux ran and the target is gone: the window was killed out
+///     from under CCorn, or the whole server died. A DETERMINED absence, so the
+///     session is Dead. (tmux exits 1 for "can't find window"/"no server".)
+///   * `.unknown` - tmux could NOT answer (a 127 launch failure, a timeout kill,
+///     or a server hiccup): liveness is undetermined. Detection must not read it
+///     as "no shell" and flip the session to crashed; it holds non-dead and lets
+///     the next poll retry.
+///
+/// The `.absent`/`.unknown` split is load-bearing: it is what lets a vanished
+/// window flip to Dead while a transient tool failure still holds Running (a
+/// genuine claude crash, by contrast, leaves the pane SHELL alive, so it
+/// surfaces as `.pid` + a determined-empty `pgrep`, never as a tmux probe here).
 enum PanePIDProbe: Sendable, Equatable {
     case pid(Int32)
+    case absent
     case unknown
 }
 
@@ -607,11 +618,23 @@ struct StateDetector: Sendable {
         let listed = panes.listPanes(windowId: windowId)
         if listed.isEmpty {
             // No enumeration: fall back to the active-pane shell probe (preserves
-            // single-pane behavior exactly). A tool-failure here is `.unknown`.
-            guard case .pid(let shellPID) = panes.panePIDProbe(windowId: windowId) else {
+            // single-pane behavior exactly), reading its determinacy.
+            switch panes.panePIDProbe(windowId: windowId) {
+            case .pid(let shellPID):
+                paneShells = [shellPID]
+            case .absent:
+                // The window itself is gone: killed out from under CCorn, or the
+                // whole tmux server died. A DETERMINED absence (tmux ran and said
+                // so), so the session is Dead. A gone window cannot be mid-spawn,
+                // so this bypasses the grace window. This is the case the poll
+                // missed before: panePIDProbe lumped a killed window in with a
+                // tool failure, so a vanished session held Running forever.
+                return .dead
+            case .unknown:
+                // A tool-failure (127 / timeout / hiccup): absence is unproven, so
+                // hold non-dead and let the next poll re-derive.
                 return .undetermined
             }
-            paneShells = [shellPID]
         } else {
             paneShells = listed.map(\.shellPID)
         }

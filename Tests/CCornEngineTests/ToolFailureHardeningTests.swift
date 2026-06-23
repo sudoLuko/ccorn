@@ -67,16 +67,31 @@ import Testing
 
     // MARK: 2. TmuxController: panePIDProbe classifier
 
-    /// `list-panes` exit 0 with a pid -> `.pid`; any failure -> `.unknown`. The
-    /// `exitCode == 1` case is the one that matters: tmux reports BOTH "can't
-    /// find window" AND "no server running" as exit 1, and a transient
-    /// server-down must read as `.unknown`, never a false determined absence.
-    @Test func panePIDProbeClassifiesToolFailureAsUnknown() {
+    /// `list-panes` classifies three ways. exit 0 with a pid -> `.pid`. exit 1 ->
+    /// `.absent`: tmux RAN and reported the target gone (it returns 1 for BOTH
+    /// "can't find window" — a window killed out from under CCorn — AND "no server
+    /// running" — the whole server died), a DETERMINED absence the poll surfaces
+    /// as Dead. Any OTHER non-zero (127 launch failure, a timeout-kill signal)
+    /// means tmux could not run at all -> `.unknown`, held non-dead.
+    ///
+    /// The exit-1 -> `.absent` boundary intentionally treats a steady-state
+    /// server death as Dead (it is: the window is gone). The false-dead this used
+    /// to guard against was at LAUNCH, where auto-restart could tear down a live
+    /// session — but launch reconcile rebuilds from `listWindows`/`hasSession`,
+    /// never this probe, and a steady-state Dead never auto-restarts, so the
+    /// guarantee holds while a vanished window now correctly reads Dead.
+    @Test func panePIDProbeClassifiesWindowGoneAbsentToolFailureUnknown() {
         #expect(TmuxController.panePIDProbe(from: CommandResult(stdout: "54321\n", stderr: "", exitCode: 0))
                 == .pid(54321))
+        // exit 1: tmux ran and the window/server is gone -> determined absence.
+        #expect(TmuxController.panePIDProbe(from: CommandResult(stdout: "", stderr: "can't find window @7", exitCode: 1))
+                == .absent)
         #expect(TmuxController.panePIDProbe(from: CommandResult(stdout: "", stderr: "no server running", exitCode: 1))
-                == .unknown)
+                == .absent)
+        // 127 / signal: tmux could not run -> undetermined, held non-dead.
         #expect(TmuxController.panePIDProbe(from: CommandResult(stdout: "", stderr: "failed to launch tmux", exitCode: 127))
+                == .unknown)
+        #expect(TmuxController.panePIDProbe(from: CommandResult(stdout: "", stderr: "killed", exitCode: 137))
                 == .unknown)
         // Succeeded but no parseable pid -> undetermined, not a false absence.
         #expect(TmuxController.panePIDProbe(from: CommandResult(stdout: "\n", stderr: "", exitCode: 0))
@@ -123,6 +138,23 @@ import Testing
         let result = detector.detect(input: input, panes: panes, transcript: nil,
                                      staleThreshold: 600, now: t0,
                                      claudeBelowShell: { _ in .absent })
+        #expect(result.state == .dead)
+        #expect(result.pid == nil)
+    }
+
+    /// The WINDOW itself is gone (`shellProbe == .absent`): an external
+    /// `kill-window`, or the whole tmux server died (`kill-server`). tmux ran and
+    /// said the target does not exist, a DETERMINED absence, so the session is
+    /// Dead, NOT held Running. This is the regression preflight's chaos suite
+    /// caught (scenarios C and E): a vanished window had been lumped in with a
+    /// transient tool failure and stayed green. A gone window cannot be
+    /// mid-spawn, so the grace window is bypassed; `claudeBelowShell` is never
+    /// reached (there is no shell to walk).
+    @Test func vanishedWindowFlipsToDead() {
+        let input = DetectionInput(windowId: "@1", pid: reapedPID())   // tracked pid dead
+        let panes = StubPanes(pane: "", shellProbe: .absent)           // window/server gone
+        let result = detector.detect(input: input, panes: panes, transcript: nil,
+                                     staleThreshold: 600, now: t0)
         #expect(result.state == .dead)
         #expect(result.pid == nil)
     }

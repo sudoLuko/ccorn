@@ -422,29 +422,42 @@ struct TmuxController: Sendable {
     }
 
     /// The pane's shell pid (the parent under which the `claude` child lives),
-    /// distinguishing a determined answer from a tmux that could not answer.
-    /// `list-panes` exits 0 with `#{pane_pid}` when the window exists; ANY
-    /// non-zero exit (no server running, a killed window, a 127 launch failure,
-    /// or a `CommandRunner` timeout kill) means tmux could not tell us, so the
-    /// result is `.unknown` rather than a false "no shell". `StateDetector` must
-    /// never read `.unknown` as a crashed session. Pure classifier split out so
-    /// the exit-code contract is unit-tested without a tmux server.
+    /// classified three ways so detection can tell a vanished window from a tmux
+    /// that merely could not answer:
+    ///
+    ///   * exit 0 with a `#{pane_pid}`       -> `.pid` (the window exists)
+    ///   * exit 1                            -> `.absent` (tmux ran and the target
+    ///     is gone: a killed window, or "no server running" after a server death)
+    ///   * any other non-zero (127 launch failure, a `CommandRunner` timeout kill,
+    ///     a transient server hiccup)        -> `.unknown` (could not answer)
+    ///
+    /// The exit-1 / other-code split is the determined-absence boundary: tmux
+    /// returns 1 when it ran and the window or server is genuinely gone, so that
+    /// is Dead-eligible; a 127 or signal status is a tool that could not run, so
+    /// detection holds the session non-dead. `StateDetector` must never read
+    /// `.unknown` as a crashed session. Pure classifier split out so the
+    /// exit-code contract is unit-tested without a tmux server.
     static func panePIDProbe(from r: CommandResult) -> PanePIDProbe {
-        guard r.ok else {
-            // Expected when tmux could not answer (no server, killed window,
-            // timeout kill); detection holds the session non-dead and retries.
-            // .notice, not .error, and only on a genuine non-zero exit so the
-            // 3s poll never logs on a healthy window.
-            Log.tmux.notice("list-panes (pane pid) failed (exit \(r.exitCode, privacy: .public))")
-            return .unknown
+        if r.ok {
+            if let pid = r.stdout
+                .split(whereSeparator: { $0 == "\n" })
+                .first
+                .flatMap({ Int32($0.trimmingCharacters(in: .whitespaces)) }) {
+                return .pid(pid)
+            }
+            return .unknown                      // succeeded but no pid: treat as undetermined
         }
-        if let pid = r.stdout
-            .split(whereSeparator: { $0 == "\n" })
-            .first
-            .flatMap({ Int32($0.trimmingCharacters(in: .whitespaces)) }) {
-            return .pid(pid)
+        if r.exitCode == 1 {
+            // tmux ran and reported the window/server gone: a DETERMINED absence.
+            // .notice, not .error: a window killed out from under CCorn (or a
+            // server death) is an expected operational event the poll reports as
+            // Dead, not an internal failure.
+            Log.tmux.notice("list-panes (pane pid): window/server gone (exit 1)")
+            return .absent
         }
-        return .unknown                          // succeeded but no pid: treat as undetermined
+        // 127 / signal: tmux could not answer; hold non-dead and retry next poll.
+        Log.tmux.notice("list-panes (pane pid) could not answer (exit \(r.exitCode, privacy: .public))")
+        return .unknown
     }
 
     func panePIDProbe(windowId: String) -> PanePIDProbe {
