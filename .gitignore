@@ -16,6 +16,10 @@ CCorn.xcodeproj/
 Sources/Info.plist
 build-release/
 
+# Release packaging output: the signed/notarized CCorn.app + zip that
+# scripts/release.sh produces. The shipped artifact lives on GitHub Releases.
+dist/
+
 # Local Claude Code state (settings.local.json, worktrees); never commit
 .claude/
 
