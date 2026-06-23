@@ -16,7 +16,7 @@ settings:
     Debug:
       ENABLE_HARDENED_RUNTIME: NO   # keeps lldb attach + debug seams working
     Release:
-      ENABLE_HARDENED_RUNTIME: YES  # required for notarization (see RELEASING.md)
+      ENABLE_HARDENED_RUNTIME: YES  # required for notarization
 targets:
   CCorn:
     type: application

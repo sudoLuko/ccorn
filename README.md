@@ -117,7 +117,6 @@ CCorn runs entirely on your Mac. It reads session metadata from `~/.claude/`, st
 ## More
 
 - [Full build spec](docs/CCORN_SPEC.md): architecture, design language, every screen and flow.
-- [Releasing](RELEASING.md): how maintainers cut a signed, notarized build.
 
 ## License
 

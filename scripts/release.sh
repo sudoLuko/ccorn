@@ -5,7 +5,7 @@
 #   CCORN_SIGN_IDENTITY   Developer ID Application identity, e.g.
 #                         "Developer ID Application: Jane Doe (TEAM123456)"
 #   CCORN_NOTARY_PROFILE  notarytool keychain profile name (one-time setup:
-#                         see RELEASING.md)
+#                         `xcrun notarytool store-credentials`)
 #
 # Output: dist/CCorn-v<version>.zip, a stapled, notarized app ready for a
 # GitHub release, plus dist/CCorn.app for local validation.

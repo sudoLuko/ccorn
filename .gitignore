@@ -20,6 +20,11 @@ build-release/
 # scripts/release.sh produces. The shipped artifact lives on GitHub Releases.
 dist/
 
+# Maintainer-only release runbook: kept on the maintainer's machine, not
+# published in the public repo. The release-process summary lives in CLAUDE.md;
+# the full procedure stays here, untracked. (Still present in git history.)
+RELEASING.md
+
 # Local Claude Code state (settings.local.json, worktrees); never commit
 .claude/
 
