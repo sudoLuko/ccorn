@@ -17,7 +17,8 @@ struct CommandResult {
 /// the Homebrew prefixes. A GUI app launched from Finder/Xcode does NOT inherit
 /// the shell PATH (it gets roughly `/usr/bin:/bin:/usr/sbin:/sbin`), so `tmux`,
 /// `claude`, and `brew` in `/opt/homebrew/bin` are invisible unless we resolve
-/// it. We source the login shell once, cache the result, and run every command
+/// it. We source an interactive login shell once (so PATH that version managers
+/// like nvm/fnm/asdf set up in ~/.zshrc is included), cache the result, and run every command
 /// via `/usr/bin/env <binary> <args...>` with that PATH so binaries resolve by
 /// name and arguments are passed as an array (no shell-quoting hazards).
 ///
@@ -67,7 +68,14 @@ final class CommandRunner: @unchecked Sendable {
         let fallback = extraBins.joined(separator: ":")
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "printf '%s' \"$PATH\""]
+        // -ilc = interactive + login. Many developers configure PATH (nvm, fnm,
+        // asdf, volta, …) only in ~/.zshrc, which a NON-interactive -lc shell does
+        // not source — so a -lc probe misses node/claude/tmux for anyone using a
+        // version manager (a very common setup). -ilc sources ~/.zshrc too. The
+        // PATH is wrapped in sentinels because an interactive .zshrc may print
+        // banners/prompt output to stdout; we extract only the delimited value,
+        // immune to that noise.
+        proc.arguments = ["-ilc", "printf '__CCORN_PATH_BEGIN__%s__CCORN_PATH_END__' \"$PATH\""]
         let out = Pipe()
         proc.standardOutput = out
         proc.standardError = Pipe()
@@ -113,7 +121,16 @@ final class CommandRunner: @unchecked Sendable {
                 Log.process.notice("login-shell PATH probe timed out, using fallback PATH")
                 return fallback
             }
-            shellPath = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            let full = String(decoding: data, as: UTF8.self)
+            // Pull out only the sentinel-delimited PATH, ignoring anything an
+            // interactive .zshrc printed before it. Markers absent (the shell
+            // produced nothing usable) -> shellPath stays "" and the extraBins
+            // prepend below degrades us to the well-known bins, same as a probe
+            // failure.
+            if let b = full.range(of: "__CCORN_PATH_BEGIN__"),
+               let e = full.range(of: "__CCORN_PATH_END__", range: b.upperBound..<full.endIndex) {
+                shellPath = String(full[b.upperBound..<e.lowerBound])
+            }
         } catch {
             // The login-shell PATH probe could not run; we fall back to the
             // well-known bins. Logged because a wrong PATH is the usual cause of
