@@ -8,7 +8,7 @@
 
 [![license MIT](https://img.shields.io/badge/license-MIT-71717A?style=flat-square)](LICENSE)
 &nbsp;![macOS 13+](https://img.shields.io/badge/macOS-13%2B-71717A?style=flat-square&logo=apple&logoColor=white)
-&nbsp;[![latest release](https://img.shields.io/github/v/release/sudoLuko/ccorn?style=flat-square&color=71717A&label=release&cacheSeconds=3600)](https://github.com/sudoLuko/ccorn/releases)
+&nbsp;[![latest release](https://img.shields.io/github/v/release/sudoLuko/ccorn?style=flat-square&color=16a34a&label=release&cacheSeconds=3600)](https://github.com/sudoLuko/ccorn/releases)
 
 </div>
 
