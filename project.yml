@@ -6,8 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"            # match the installed Xcode; bump if needed
-    MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.1.2"
+    CURRENT_PROJECT_VERSION: "3"
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"         # ad-hoc for local builds; releases are re-signed
                                     # with a Developer ID by scripts/release.sh
