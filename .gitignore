@@ -38,6 +38,9 @@ docs/ANIMATION_AUDIT_VERIFICATION.md
 # Landing-page feature inventory; generated input for the marketing site, not shipped source
 features.md
 
+# Marketing/landing site: work-in-progress, kept out of the public app repo while in review
+website/
+
 # Code-anchored visual reference captured for the web mockup (screenshots +
 # REFERENCE.md); internal mockup ground-truth, not shipped source
 docs/demo-reference/
