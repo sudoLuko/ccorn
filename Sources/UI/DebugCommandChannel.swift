@@ -382,8 +382,10 @@ final class DebugCommandChannel {
             return "unwatch \(settings.watchDirectories)"
 
         case "settingswindow":
-            let opened = NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            return "settingswindow \(opened)"
+            // Exercise the production path (AppDelegate.openSettings) so this
+            // verifies exactly what the status-menu "Settings…" item does.
+            model.openSettings?()
+            return "settingswindow invoked"
 
         case "settingspreview":
             // Renders SettingsView in a plain window so the form can be

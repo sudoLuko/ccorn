@@ -2,8 +2,13 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
+    /// Retains the status-item menu for the duration of a right-click so its
+    /// closure-based items (ActionMenuItem, target == the item) are not
+    /// deallocated by menuDidClose before their action fires; a plain item like
+    /// Quit survives anyway (it targets NSApp via the responder chain).
+    private var statusMenu: NSMenu?
     /// Lazy: the model must exist first, and the panel is only needed once
     /// the status item is clicked (or a debug hook shows it).
     private lazy var popoverPanel = PopoverPanelController(model: model)
@@ -34,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.applyAppearance()
 
         model.openMainWindow = { [weak self] in self?.openMainWindow() }
+        model.openSettings = { [weak self] in self?.openSettings() }
         model.closePopover = { [weak self] in self?.popoverPanel.close() }
         model.closeOnboarding = { [weak self] in self?.onboarding.close() }
         model.applyWindowLevel = { [weak self] in self?.windowController.applyWindowLevel() }
@@ -157,8 +163,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = CornIcon.menuBarImage // template: macOS tints it
             button.action = #selector(statusItemClicked)
             button.target = self
-            // Left click toggles the popover; right click opens the main window
-            // (docs/CCORN_SPEC.md section 5.1).
+            // Left click toggles the popover; right click (or control-click)
+            // opens a native menu (Open CCorn, Settings…, Quit).
+            // docs/CCORN_SPEC.md section 5.1.
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         statusItem = item
@@ -166,11 +173,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func statusItemClicked() {
         // Right-click OR control-click (the system-wide secondary-click alias)
-        // opens the main window; plain left click toggles the popover.
+        // opens the native menu; plain left click toggles the popover.
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp
             || (event?.type == .leftMouseUp && event?.modifierFlags.contains(.control) == true) {
-            openMainWindow()
+            showStatusMenu()
             return
         }
         if popoverPanel.isVisible {
@@ -185,6 +192,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popoverPanel.show(relativeTo: button)
     }
 
+    /// The native menu shown on a right/control-click of the status item:
+    /// Open CCorn, Settings…, and Quit. Quitting only closes the manager; the
+    /// tmux sessions keep running (spec §5.1, "App quit with sessions running").
+    /// Built fresh per presentation, like the row menus in SessionMenu.
+    private func makeStatusMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(ActionMenuItem(title: "Open CCorn") { [weak self] in
+            self?.openMainWindow()
+        })
+        menu.addItem(ActionMenuItem(title: "Settings…") { [weak self] in
+            self?.openSettings()
+        })
+        menu.addItem(.separator())
+        // Plain NSMenuItem (not ActionMenuItem) so the ⌘Q shortcut renders and
+        // the standard terminate: travels the responder chain to NSApp.
+        menu.addItem(NSMenuItem(title: "Quit CCorn",
+                                action: #selector(NSApplication.terminate(_:)),
+                                keyEquivalent: "q"))
+        return menu
+    }
+
+    /// Open the SwiftUI Settings scene from the status menu. `sendAction(
+    /// showSettingsWindow:, to: nil)` returns true but no longer presents the
+    /// window on macOS 14+ (verified a no-op on macOS 26); performing the real
+    /// "Settings…" item the Settings scene installs in the app menu DOES open it.
+    /// Go .regular + activate first so the menu bar exists and the window can
+    /// come forward, then perform the item on the next runloop tick (after the
+    /// policy change lands). The window key/close observer in MainWindowController
+    /// keeps the policy correct and restores .accessory when Settings closes.
+    private func openSettings() {
+        popoverPanel.close()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.async {
+            // The app menu is NSApp.mainMenu's first submenu. Match the Settings
+            // item by its showSettingsWindow: action (fall back to title), and
+            // performActionForItem invokes it exactly as a click would.
+            guard let appMenu = NSApp.mainMenu?.items.first?.submenu else { return }
+            appMenu.update()
+            let idx = appMenu.items.firstIndex { $0.action == Selector(("showSettingsWindow:")) }
+                ?? appMenu.items.firstIndex { $0.title.contains("Settings") }
+            if let idx { appMenu.performActionForItem(at: idx) }
+        }
+    }
+
+    /// Attach the menu to the status item and click it programmatically so it
+    /// drops under the icon with the native pressed-state highlight; menuDidClose
+    /// detaches it again. The menu is set only for the duration of this click: a
+    /// permanently-assigned statusItem.menu would hijack the left button too,
+    /// swallowing the popover toggle.
+    private func showStatusMenu() {
+        guard let item = statusItem, let button = item.button else { return }
+        let menu = makeStatusMenu()
+        menu.delegate = self
+        statusMenu = menu       // keep items alive past menuDidClose (see property)
+        item.menu = menu
+        button.performClick(nil)
+    }
+
     /// Before onboarding completes there is no usable main window. Route every
     /// "open" request to the onboarding card instead (it is the required flow).
     private func openMainWindow() {
@@ -194,5 +260,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         windowController.show(model: model)
+    }
+
+    // MARK: - NSMenuDelegate
+
+    /// Detach the status-item menu once it closes, so the next left click toggles
+    /// the popover instead of reopening this menu (see showStatusMenu).
+    func menuDidClose(_ menu: NSMenu) {
+        statusItem?.menu = nil
     }
 }

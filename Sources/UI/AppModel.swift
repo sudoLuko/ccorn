@@ -179,6 +179,7 @@ final class AppModel: ObservableObject {
     /// Set by the AppDelegate so popover/empty-state actions can reach the
     /// window layer without the model importing it.
     var openMainWindow: (() -> Void)?
+    var openSettings: (() -> Void)?
     var closePopover: (() -> Void)?
     var closeOnboarding: (() -> Void)?
     /// Re-applies the "keep window in front" preference to the live main

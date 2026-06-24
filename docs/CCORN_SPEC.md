@@ -382,7 +382,7 @@ only-color rules. See 5.5 (New Session Defaults) and 6.3 (New Session).
 
 ### 5.1 Main App Window
 
-The primary interface. Opens from “Open CCorn” in the popover or by right-clicking the menu bar icon.
+The primary interface. Opens from “Open CCorn” in the popover or from the same item in the menu bar icon’s right-click (or control-click) menu (which also offers Settings… and Quit CCorn).
 
 **Activation policy:**
 CCorn uses `NSApplicationActivationPolicyAccessory` (in Swift, `.accessory`) by default: no Dock icon, no Cmd+Tab. When any regular window opens (main window, Settings, or onboarding), switch to `NSApplicationActivationPolicyRegular` (`.regular`) so the window can take focus and appear in Cmd+Tab. Switch back to `.accessory` only when no regular windows remain open, not unconditionally on main-window close (otherwise an open Settings or onboarding window is left under a deactivated app). Do NOT use `LSUIElement = YES`: that prevents the dynamic switching needed for proper window focus.
