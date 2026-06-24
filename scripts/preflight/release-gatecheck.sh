@@ -54,8 +54,16 @@ SIGNATURE=$(codesign -dv "$APP" 2>&1 | grep -E "Signature|TeamIdentifier|flags" 
 log "built-app signature: $SIGNATURE"
 
 # Launch smoke in a throwaway world (real HOME / real tmux server untouched).
+# CRITICAL: unset TMUX. The Release binary has no -L socket isolation (the debug
+# seams are compiled out), so it relies on TMUX_TMPDIR to land its tmux on a
+# throwaway server. But when this gatecheck runs from INSIDE a tmux session (a
+# CCorn-managed session, or release.sh backgrounded inside one), $TMUX is set,
+# and a bare `tmux` invocation honors $TMUX OVER TMUX_TMPDIR, so the smoke app
+# and the teardown kill-server below, would operate on and then KILL the user's
+# REAL server, taking down the managed session this is running in. `env -u TMUX`
+# drops it so TMUX_TMPDIR is authoritative and the isolation actually holds.
 log "launch smoke of the built Release app (isolated HOME/TMUX_TMPDIR)"
-HOME="$STAGE/home" TMUX_TMPDIR="$STAGE/tmux" \
+env -u TMUX HOME="$STAGE/home" TMUX_TMPDIR="$STAGE/tmux" \
     "$BIN" > "$STAGE/app.log" 2>&1 &
 APP_PID=$!
 disown   # keep bash from reporting our own SIGTERM as a job failure
@@ -66,7 +74,7 @@ else
     fail "release app did not survive launch (see $STAGE/app.log)"
 fi
 kill "$APP_PID" 2>/dev/null || true
-TMUX_TMPDIR="$STAGE/tmux" tmux kill-server 2>/dev/null || true
+env -u TMUX TMUX_TMPDIR="$STAGE/tmux" tmux kill-server 2>/dev/null || true
 
 # --- notarized-artifact validation ----------------------------------------------
 NVERDICT="(no artifact)"
