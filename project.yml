@@ -40,6 +40,11 @@ targets:
         # plist, so hand-edits there do not survive).
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Shown as the copyright line in the standard About panel (the blank
+        # space under the version). Plain text only — the panel does not render
+        # links. Carries the OpenMoji CC BY-SA 4.0 attribution into the About
+        # box too; the linked form lives in Settings ▸ About (see ICON_CREDITS).
+        NSHumanReadableCopyright: "© 2026 Luke Olson. Corn glyph: OpenMoji, CC BY-SA 4.0."
         LSMinimumSystemVersion: "13.0"
         # NSAppleEventsUsageDescription is the TCC string shown the first time the
         # app automates Terminal. Keep it even in the shell.
