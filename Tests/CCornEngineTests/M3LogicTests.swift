@@ -127,6 +127,26 @@ import Testing
         #expect(noPath.openAction(clickAction: .terminal) == .browser)
     }
 
+    /// The main list keys its ForEach on `listIdentity`. Adopting a session
+    /// (unmanaged → managed) must CHANGE that identity so SwiftUI rebuilds the
+    /// row subtree instead of reusing the stale "Take over" view — the bulk-import
+    /// cousin of the two-ForEach bug (commit 272ac96), where every discovered row
+    /// flips with the same listID in the same order. The Stop transition
+    /// (managed → record) must NOT change it, so the row still updates in place.
+    @Test func listIdentityReKeysOnAdoptButNotOnStop() {
+        // Same session uuid throughout (sampleRow uses "u").
+        let managed = sampleRow(kind: .managed(windowId: "@1"), state: .running)
+        let record = sampleRow(kind: .record, state: .stopped)
+        let unmanaged = sampleRow(kind: .unmanaged, state: .unmanaged)
+        #expect(managed.listIdentity == managed.listID)
+        #expect(record.listIdentity == record.listID)
+        // Stop stays in place: managed and record share one identity.
+        #expect(managed.listIdentity == record.listIdentity)
+        // Adopt re-keys: the unmanaged row differs from the managed it becomes.
+        #expect(unmanaged.listIdentity != managed.listIdentity)
+        #expect(unmanaged.listIdentity == "unmanaged:" + unmanaged.listID)
+    }
+
     /// Browser mode never adopts: an unmanaged row opens the session list, the
     /// same as every other row in browser mode.
     @Test func browserModeUnmanagedOpensBrowser() {

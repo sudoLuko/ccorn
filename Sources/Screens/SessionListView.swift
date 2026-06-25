@@ -125,7 +125,7 @@ struct SessionListView: View {
                     noManagedHint
                 }
 
-                ForEach(combined, id: \.listID) { row in
+                ForEach(combined, id: \.listIdentity) { row in
                     let isDiscovered = row.kind == .unmanaged
                     // Inline DISCOVERED header at the seam, kept inside this one
                     // ForEach so it stays put as rows cross the boundary.

@@ -114,6 +114,22 @@ struct SessionRow: Identifiable, Equatable {
     /// `AppModel.emitStateTransitions`). This is display identity only.
     var listID: String { uuid.isEmpty ? id : uuid }
 
+    /// Identity for the main list's ForEach. Equal to `listID` for managed and
+    /// record rows so a Stop (managed→record) stays put and updates in place,
+    /// but DISTINCT for an unmanaged row so adopting it (unmanaged→managed)
+    /// changes the row's structural identity and rebuilds its subtree instead
+    /// of reusing the stale "Take over" view. Keying on `listID` alone re-renders
+    /// a SINGLE adopt (the row changes order, forcing a diff) but not a BULK
+    /// import: every discovered row flips with the same listID in the same
+    /// order, so SwiftUI reuses each cached unmanaged subtree and the rows stay
+    /// "Take over" until the list gets fresh identity (a nav switch). Prefixing
+    /// the unmanaged case fixes the bulk cousin of the two-ForEach bug (commit
+    /// 272ac96): the kind flip now always re-keys the adopted row.
+    var listIdentity: String {
+        if case .unmanaged = kind { return "unmanaged:" + listID }
+        return listID
+    }
+
     /// The one status mark this row shows (review item 1: one mark per row).
     /// Folds the remote-control condition (alive but RC inactive past the
     /// 30s activation grace, the old warning-overlay rule) into the mark as
