@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// First-run import sheet (docs/CCORN_SPEC.md 5.4): native macOS sheet, 480px
-/// wide, four states: discovery (checkboxes + Working/Idle badges),
+/// wide, four states: discovery (checkboxes + an "Active" tag on live rows),
 /// importing progress (locked list, per-row phase), the active-session
 /// warning (an NSAlert raised by the flow model), and complete.
 struct ImportSheetView: View {
@@ -29,7 +29,7 @@ struct ImportSheetView: View {
         VStack(alignment: .leading, spacing: 4) {
             switch flow.stage {
             case .discovery, .importing:
-                Text("Found \(flow.items.count) active session\(flow.items.count == 1 ? "" : "s")")
+                Text("Found \(flow.items.count) session\(flow.items.count == 1 ? "" : "s")")
                     .font(.title3.weight(.medium))
                     .foregroundColor(.primary)
                 Text("Import them into CCorn to manage them here")
@@ -97,9 +97,11 @@ struct ImportSheetView: View {
     }
 }
 
-/// One 36px import row. Discovery: checkbox + dot + name + path + badge.
-/// Importing: phase icon replaces the dot, the current row highlights, done
-/// rows dim to 60%.
+/// One 36px import row. Discovery: checkbox + neutral unmanaged ring + name +
+/// path + an "Active" tag on live rows only (an unmanaged session's activity
+/// state is unknowable without a pane; the row claims liveness, not Working/
+/// Idle — see `ImportRowLiveness`). Importing: phase icon replaces the ring,
+/// the current row highlights, done rows dim to 60%.
 private struct ImportRowView: View {
     @Binding var item: ImportFlowModel.Item
     let stage: ImportFlowModel.Stage
@@ -147,14 +149,20 @@ private struct ImportRowView: View {
         }
     }
 
-    /// Discovery: status dot (green idle / blue working). Importing: grey dot
-    /// while waiting (5.4 State 2), then spinner / checkmark / xmark by phase.
+    /// Discovery: the neutral unmanaged ring, the same hollow mark a discovered
+    /// row carries everywhere (we can't read an unmanaged session's state, so
+    /// the dot claims nothing; liveness rides the "Active" tag instead).
+    /// Importing: grey dot while waiting (5.4 State 2), then spinner / checkmark
+    /// / xmark by phase.
     @ViewBuilder
     private var phaseIndicator: some View {
         switch (stage, item.phase) {
         case (.discovery, _):
+            // 1px ring (not the 0.5px chrome hairline): a 0.5px ring is
+            // sub-pixel at 7px and the dot vanishes. Matches `StatusMark`'s
+            // unmanaged branch.
             Circle()
-                .fill(item.working ? StatusPalette.working : StatusPalette.running)
+                .strokeBorder(StatusPalette.unmanagedOutline, lineWidth: 1)
                 .frame(width: 7, height: 7)
         case (_, .pending):
             Circle()
@@ -175,13 +183,20 @@ private struct ImportRowView: View {
         }
     }
 
+    /// The trailing slot. During import, the live "Waiting for idle" pill (5.4
+    /// State 3). During discovery, a quiet "Active" caption on live rows only,
+    /// the same greyscale metadata idiom as the row's "Local"/"Take over" tags;
+    /// dormant rows make no claim. No "Working"/"Idle" pill: CCorn cannot read
+    /// an unmanaged session's pane, so it never claims an activity state.
     @ViewBuilder
     private var badge: some View {
         if item.phase == .waitingForIdle {
             pill(text: "Waiting for idle", fill: StatusPalette.attention)
-        } else {
-            pill(text: item.working ? "Working" : "Idle",
-                 fill: item.working ? StatusPalette.working : StatusPalette.running)
+        } else if stage == .discovery, let tag = item.liveness.tagText {
+            Text(tag)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .help("A live Claude process is running in this session")
         }
     }
 

@@ -550,13 +550,13 @@ final class AppModel: ObservableObject {
 
     /// First-run import sheet (5.4): only when the scan surfaced unmanaged
     /// sessions. Probes each candidate off-main for a live external process
-    /// and recent transcript activity (the Working/Idle badge).
+    /// (the "Active" liveness tag; an unmanaged session's activity state is
+    /// unknowable without a pane).
     func presentImportSheetIfNeeded() {
         let candidates = rows.filter { $0.state == .unmanaged && !$0.uuid.isEmpty }
         guard !candidates.isEmpty else { return }
         Task {
-            let probed = await ImportFlowModel.probe(candidates: candidates,
-                                                     transcriptIndex: transcriptIndex)
+            let probed = await ImportFlowModel.probe(candidates: candidates)
             guard !probed.isEmpty else { return }
             importFlow = ImportFlowModel(items: probed, model: self)
         }

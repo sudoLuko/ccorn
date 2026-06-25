@@ -103,6 +103,9 @@ targets:
       # The sidebar-nav enum rides along for its pure groupIDsForNewSession
       # mapping (pinned by GroupsTests); Foundation-only, no view dependencies.
       - path: Sources/UI/SidebarNav.swift
+      # The import-sheet liveness label (pinned by ImportLivenessTests); a pure
+      # Foundation-only enum, no view dependencies.
+      - path: Sources/UI/ImportRowLiveness.swift
       # Tests build the engine sources in Debug, where store/session lifecycle
       # instrumentation references DebugLife (#if DEBUG).
       - path: Sources/Debug/DebugLifecycle.swift

@@ -553,17 +553,17 @@ Appears immediately after onboarding scan if unmanaged sessions are found. Slide
 
 Header:
 
-- “Found [X] active sessions”, `.title3` medium `Color.primary`
+- “Found [X] sessions”, `.title3` medium `Color.primary`
 - “Import them into CCorn to manage them here”, `.subheadline` regular `Color.secondary`
 - `Color(.separatorColor)` divider below
 
 Session list, each row 36px:
 
 - Checkbox left, checked by default
-- Status dot, green if idle, blue if actively working (matches main state model: green = healthy, blue = working)
+- The neutral unmanaged ring (`#71717A`, 1px, 7px), the same hollow mark a discovered row carries everywhere. The dot claims **no** state: CCorn does not own an unmanaged session's tmux window, so it has no pane to read, and working vs waiting vs idle is unknowable before adoption. (The old green/blue "idle vs working" dot keyed on a 120s transcript-mtime timer, so it labeled a session paused at a permission prompt "Working" or "Idle" purely by how recently it was reached, claiming a state CCorn never had.)
 - Session name, `.subheadline` medium `Color.primary`
 - Directory path, `.caption` monospaced `Color.secondary`
-- “Working” or “Idle” pill badge far right, `.caption` medium, blue fill for Working, green fill for Idle, 4px corner radius
+- “Active” tag far right, `.caption` `Color.secondary`, on rows with a live external `claude` process only (the one knowable fact pre-adoption). Greyscale metadata, the same idiom as the row's "Local"/"Take over" tags, so the status-is-the-only-color rule holds. A dormant row (transcript on disk, no process) shows nothing here.
 
 Footer:
 
@@ -856,7 +856,7 @@ verification with the list's existing tap/right-click stack.
 
 1. Import sheet slides down from main window title bar
 1. All discovered unmanaged sessions listed with checkboxes, all checked by default
-1. Each row shows idle/active badge
+1. Each row shows an “Active” tag when a live external `claude` process is running; it claims liveness only, never an activity state (CCorn has no pane on an unmanaged session, so working vs waiting vs idle is unknowable pre-adoption)
 1. User reviews, unchecks any they don’t want to import
 1. Clicks “Import Selected ([X])”
 1. CCorn processes sequentially, one at a time:

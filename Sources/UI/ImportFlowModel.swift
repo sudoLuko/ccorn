@@ -15,8 +15,11 @@ final class ImportFlowModel: ObservableObject, Identifiable {
         let title: String
         let path: String
         var selected = true
-        /// Live external process + recent transcript writes at probe time.
-        var working: Bool
+        /// Whether a live external `claude` process exists for this session at
+        /// probe time, the one thing knowable about an unmanaged session without
+        /// a pane (see `ImportRowLiveness`). Drives the row's "Active" tag; it is
+        /// never an activity state (working vs waiting is unknowable here).
+        var liveness: ImportRowLiveness
         var phase: Phase = .pending
     }
 
@@ -34,27 +37,25 @@ final class ImportFlowModel: ObservableObject, Identifiable {
     var selectedCount: Int { items.filter(\.selected).count }
     var importedCount: Int { items.filter { $0.phase == .done }.count }
 
-    /// Build items off-main: each candidate is probed for a live external
-    /// claude (registry/cwd match) and recent transcript activity, the
-    /// Working/Idle badge. A session with no live process imports trivially
-    /// (no kill step), so it is always "Idle".
-    static func probe(candidates: [SessionRow],
-                      transcriptIndex: [String: DiscoveredSession]) async -> [Item] {
+    /// Build items off-main: each candidate is probed only for a *live* external
+    /// claude process (registry/cwd match). That liveness is the one thing
+    /// knowable about an unmanaged session without a pane; working vs waiting vs
+    /// idle is not, so the row claims liveness only (the "Active" tag), never an
+    /// activity state (see `ImportRowLiveness`). A session with no live process
+    /// imports trivially (no kill step) and shows as dormant.
+    static func probe(candidates: [SessionRow]) async -> [Item] {
         struct Probe: Sendable {
             let uuid: String, title: String, path: String
-            let mtime: Date?
         }
         let snapshot = candidates.map {
-            Probe(uuid: $0.uuid, title: $0.title, path: $0.path,
-                  mtime: transcriptIndex[$0.uuid]?.modified)
+            Probe(uuid: $0.uuid, title: $0.title, path: $0.path)
         }
         return await Task.detached {
             snapshot.map { probe in
                 let live = UnmanagedClaudeFinder.find(inDirectory: probe.path,
                                                       sessionId: probe.uuid) != nil
-                let recent = probe.mtime.map { Date().timeIntervalSince($0) < 120 } ?? false
                 return Item(id: probe.uuid, title: probe.title, path: probe.path,
-                            working: live && recent)
+                            liveness: ImportRowLiveness(isLive: live))
             }
         }.value
     }
