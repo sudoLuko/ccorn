@@ -717,8 +717,14 @@ final class AppModel: ObservableObject {
                 managedPaths.insert(SessionDiscovery.canonicalize(path))
             }
             // Prefer the transcript mtime (real Claude activity) over the pane
-            // hash-change time; fall back for sessions with no transcript yet.
-            let lastActive = transcriptIndex[uuid]?.modified ?? live.lastHashChange
+            // hash-change time; fall back to the session's start time so a
+            // brand-new session sorts as recent (top) from its very first
+            // rebuild. Without the `startedAt` fallback a just-created session
+            // has no transcript (empty uuid) and no `lastHashChange` yet (the
+            // first poll hasn't run), so `lastActive` is nil and it renders at
+            // the bottom for a frame, then visibly slides up once a time lands.
+            let lastActive: Date? = transcriptIndex[uuid]?.modified
+                ?? live.lastHashChange ?? live.startedAt
             let row = SessionRow(
                 id: windowId,
                 kind: .managed(windowId: windowId),
