@@ -857,6 +857,12 @@ final class SessionEngine: ObservableObject {
         guard !found.isEmpty else { return }
 
         let store = self.store
+        // UUIDs a live window already holds; a registry bind must not assign one
+        // of these to a second window (see canBindRegistryUUID). Claimed as we go
+        // so two unbound windows resolving to the same id in one pass cannot both
+        // take it. The current window's uuid is empty (guarded below), so it is
+        // never in this set when its own bind is considered.
+        var claimed = Set(liveSessions.values.map(\.sessionUUID).filter { !$0.isEmpty })
         for (windowId, info) in found {
             guard let live = liveSessions[windowId], live.sessionUUID.isEmpty else { continue }
             // Registry files linger for dead pids; a recycled pid could pair
@@ -867,6 +873,22 @@ final class SessionEngine: ObservableObject {
                SessionDiscovery.canonicalize(cwd) != live.record.path {
                 continue
             }
+            // Never tag a window with a UUID another live window already owns: the
+            // registry is not authoritative (a recycled pid, or a stale file for
+            // one of several sessions sharing a directory, returns a sibling's id),
+            // and the cwd guard above cannot tell same-directory sessions apart.
+            // A duplicate @ccorn_id breaks one-window-per-session and the
+            // one-terminal-per-session raise. Leave it unbound; a later tick (or a
+            // correct registry write) rebinds it.
+            guard Self.canBindRegistryUUID(info.sessionId, claimed: claimed) else {
+                Log.tmux.error("""
+                    refused registry bind of window \(windowId, privacy: .public): \
+                    its @ccorn_id is already held by another live window \
+                    (stale/duplicate registry id); leaving it unbound this tick
+                    """)
+                continue
+            }
+            claimed.insert(info.sessionId)
             // Accepted bind: only now is it safe to tag the window. Mirror the
             // reconcile path, which sets the tag only when it accepts the
             // registry identity; keep the tmux I/O off the main actor.
@@ -990,7 +1012,15 @@ final class SessionEngine: ObservableObject {
             guard tmux.hasSession() else { return [] }
             let persisted = store.loadRecords()
             let index = discovery.transcriptIndex()
-            return tmux.listWindows().compactMap { window -> Reconciled? in
+            let windows = tmux.listWindows()
+            // UUIDs already carried by a tagged window: a registry-driven bind
+            // below must not assign one to a second (untagged) window
+            // (canBindRegistryUUID). Claimed as we go so two untagged windows that
+            // resolve to the same registry id in one pass cannot both take it; the
+            // dedup below reaps a dead twin but never a live one, so this guard is
+            // what keeps two live same-directory sessions from colliding.
+            var claimed = Set(windows.compactMap(\.ccornId).filter { !$0.isEmpty })
+            return windows.compactMap { window -> Reconciled? in
                 var uuid = window.ccornId ?? ""
                 var claudePID: Int32?
                 var registryCwd: String?
@@ -1006,9 +1036,11 @@ final class SessionEngine: ObservableObject {
                     if case .found(let pid) = liveness { claudePID = pid }
                 }
                 if uuid.isEmpty, let pid = claudePID,
-                   let info = ClaudeSessionRegistry.info(forPid: pid) {
+                   let info = ClaudeSessionRegistry.info(forPid: pid),
+                   Self.canBindRegistryUUID(info.sessionId, claimed: claimed) {
                     uuid = info.sessionId
                     registryCwd = info.cwd
+                    claimed.insert(uuid)
                     tmux.setCcornId(windowId: window.windowId, uuid: uuid)
                 }
 
@@ -1102,6 +1134,21 @@ final class SessionEngine: ObservableObject {
         let windowId: String
         let hasLiveClaude: Bool
         let order: Int
+    }
+
+    /// Whether a registry-proposed `@ccorn_id` may be bound to a window. False for
+    /// an empty id, or one already in `claimed`: the UUIDs other live windows hold
+    /// (plus any bound earlier in the same pass). Refusing an already-claimed id is
+    /// what prevents the duplicate-`@ccorn_id` window state — the session registry
+    /// is not authoritative (a recycled pid, or a stale file for one of several
+    /// sessions sharing a directory, hands back a sibling's id), and the cwd
+    /// incarnation guard cannot tell same-directory sessions apart. A duplicate tag
+    /// breaks one-window-per-session and the one-terminal-per-session raise (the
+    /// row's window stops matching the window an open terminal attached to). Pure
+    /// and `nonisolated` so both the main-actor bind loop and the detached
+    /// reconcile pass call it, and the guard is unit-tested.
+    nonisolated static func canBindRegistryUUID(_ uuid: String, claimed: Set<String>) -> Bool {
+        !uuid.isEmpty && !claimed.contains(uuid)
     }
 
     /// The tmux window-id ordinal (`@12` -> 12). tmux assigns these in creation
